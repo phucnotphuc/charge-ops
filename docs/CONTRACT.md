@@ -70,7 +70,7 @@ Cùng idempotency key và payload trả lại command cũ; cùng key khác paylo
 
 ## 4. Local và Datadog
 
-Gate tích hợp đầu tiên phải thực hiện trong 17–18/10: một connector tổng hợp đi qua ingest → MongoDB → aggregation → dashboard/monitor Datadog thật → webhook → đúng một incident có source Datadog. Lưu log tương quan và timestamps để đo độ trễ; kiểm chứng phép tính cửa sổ bằng chuỗi mẫu có kết quả mong đợi, cả khi thiếu dữ liệu. Xác minh mapping payload thực sang schema dưới đây, không giả định template đã đúng. Gate này chưa thay cho nghiệm thu toàn bộ; không chờ UI đầy đủ hoặc dataset công khai mới kiểm tra Datadog.
+Gate tích hợp đầu tiên được ưu tiên ngay khi nền tảng sẵn sàng trong khung build chính thức, trước khi mở rộng: một connector tổng hợp đi qua ingest → MongoDB → aggregation → dashboard/monitor Datadog thật → webhook → đúng một incident có source Datadog. Lưu log tương quan và timestamps để đo độ trễ; kiểm chứng phép tính cửa sổ bằng chuỗi mẫu có kết quả mong đợi, cả khi thiếu dữ liệu. Xác minh mapping payload thực sang schema dưới đây, không giả định template đã đúng. Gate này chưa thay cho nghiệm thu toàn bộ; không chờ UI đầy đủ hoặc dataset công khai mới kiểm tra Datadog.
 
 Mode là cấu hình bất biến của run: `local` hoặc `datadog`. Local tạo alert event từ detector. Datadog xuất tổng residual/số mẫu của block 15 giây không chồng lặp, freshness và quality; monitor tính duy nhất mean 60 giây theo mục 3. Quality gate là điều kiện đồng thời của monitor và được worker kiểm tra lại trước xử lý webhook; thiếu block hoặc dữ liệu không đạt chặn alert/recovery, không nội suy lỗ trống. Datadog recovery không đóng incident.
 

@@ -13,6 +13,7 @@ Hệ thống demo cảnh báo sớm bất thường nhiệt connector: telemetry
 
 ## Tài liệu
 
+- [tasks.md](tasks.md): checklist theo thể lệ cuộc thi, ưu tiên, phụ thuộc và bằng chứng nghiệm thu.
 - [PLAN.md](PLAN.md): phạm vi, triển khai và nghiệm thu đã duyệt.
 - [Dependencies](docs/DEPENDENCIES.md): công cụ và package dự kiến, cách khóa phiên bản khi build.
 - [Contract](docs/CONTRACT.md): hợp đồng cho frontend/backend/simulator.

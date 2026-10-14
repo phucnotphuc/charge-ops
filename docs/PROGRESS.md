@@ -34,7 +34,7 @@ Plan: PLAN.md. Phạm vi hiện tại: chuẩn bị; phần cốt lõi từ 17/1
 Đã cập nhật thiết kế và tiêu chí nghiệm thu; chưa triển khai hoặc đo kết quả:
 
 - Giảm tải xét cả giới hạn gốc và dòng tham chiếu thực tế; ACK không thay bằng chứng dòng giảm. CONTRACT.md quy định mục tiêu, cửa sổ kiểm chứng và xử lý không hiệu quả/thiếu dữ liệu.
-- Đưa gate một connector → MongoDB → Datadog alert/webhook thật → incident vào 17–18/10, trước khi mở rộng UI và tính năng; đồng bộ lịch và thứ tự triển khai trong PLAN.md/IMPLEMENTATION.md.
+- Ưu tiên gate một connector → MongoDB → Datadog alert/webhook thật → incident ngay khi nền tảng sẵn sàng trong khung build chính thức, trước khi mở rộng UI và tính năng; đồng bộ thứ tự triển khai trong PLAN.md/IMPLEMENTATION.md.
 - Bổ sung đối chứng ngưỡng nhiệt cố định, giữ phương án không can thiệp và ChargeOps đầy đủ; DATA_CARD.md tách so sánh detector trên cùng telemetry với so sánh tác động vận hành.
 
 ### Các quyết định giữ nguyên

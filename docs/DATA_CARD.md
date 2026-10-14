@@ -26,7 +26,7 @@ Schema cần kiểm chứng trực tiếp trong file: `id`, `transaction_id`, `b
 5. Chọn phiên đủ dài và liên tục; ghi quy tắc loại dữ liệu, số hàng trước/sau và danh sách ID được chọn.
 6. Xuất báo cáo kiểm định cùng manifest và attribution. Không commit file thô lớn vào repo.
 
-Nếu không tải được hoặc dữ liệu không đạt kiểm định sau một ngày làm việc, dùng **100% dữ liệu tổng hợp**, ghi lý do và kết quả kiểm định. Không tiếp tục gọi dữ liệu đó là dữ liệu thực.
+Điều tra vấn đề tải/chất lượng đến khi có đủ bằng chứng quyết định sử dụng nguồn, không đặt giới hạn một ngày cố định. Nếu không tải được hoặc dữ liệu không đạt kiểm định, dùng **100% dữ liệu tổng hợp**, ghi lý do và kết quả kiểm định. Không tiếp tục gọi dữ liệu đó là dữ liệu thực.
 
 ## Provenance trong sản phẩm
 

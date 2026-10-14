@@ -23,7 +23,7 @@ Local mode hoàn chỉnh không cần cloud sau khi tải dependency/image. Data
 
 ## Dữ liệu và mô phỏng
 
-Hai trạm, sáu connector; mỗi 5 giây phát mẫu. Khảo sát Autosun–Hong Kong Polytechnic v3, kiểm tra tải file, schema, đơn vị, thiếu dữ liệu và timestamp. Dataset dùng làm mẫu tải, không dùng nhãn lỗi pin làm lỗi charger. Nếu không đạt kiểm định sau một ngày làm việc, dùng tổng hợp hoàn toàn và khai báo rõ.
+Hai trạm, sáu connector; mỗi 5 giây phát mẫu. Khảo sát Autosun–Hong Kong Polytechnic v3, kiểm tra tải file, schema, đơn vị, thiếu dữ liệu và timestamp. Dataset dùng làm mẫu tải, không dùng nhãn lỗi pin làm lỗi charger. Điều tra vấn đề chất lượng đến khi đủ bằng chứng quyết định sử dụng; nếu không tải được hoặc không đạt kiểm định, dùng tổng hợp hoàn toàn và khai báo rõ lý do.
 
 Simulator có quán tính nhiệt, đáp ứng với tải, fault injection có seed. Provenance phân biệt public/synthetic/derived. Ground truth tách biệt, detector không đọc. Datadog demo theo thời gian thực; đánh giá nhanh dùng đồng hồ riêng. Tình huống khỏe bao gồm tăng tải và giảm nhu cầu xe. Telemetry mất là ca tin cậy, không phải mở rộng bài toán chính.
 
@@ -55,17 +55,20 @@ Năm màn hình tiếng Việt: tổng quan, connector, incident, điều khiể
 
 Tạo repo độc lập; giữ nguyên repository cha. Xác minh repo remote đích và private trước push. Chỉ đẩy file thuộc dự án, không secrets/build/venv/raw data. Không bật dịch vụ trả phí. Cấp quyền giám khảo sau khi có tài khoản chính thức.
 
-Agent chính quản lý nền tảng/hợp đồng/Compose/integration và tích hợp Datadog tối thiểu ngay 17–18/10, không chờ hoàn thiện backend/UI. A: backend/ingest/state/commands/auth/tests. B: dataset/simulator/baseline/evaluation. C: frontend năm màn hình/tests. Sau gate Datadog đầu tiên mới mở rộng observability; reviewer độc lập ở lượt kiểm tra. Không sửa cùng file, không đổi API chung một phía; tất cả thay đổi qua điều phối.
+Agent chính quản lý nền tảng/hợp đồng/Compose/integration và ưu tiên tích hợp Datadog tối thiểu ngay khi nền tảng sẵn sàng trong khung build chính thức, không chờ hoàn thiện backend/UI. A: backend/ingest/state/commands/auth/tests. B: dataset/simulator/baseline/evaluation. C: frontend năm màn hình/tests. Sau gate Datadog đầu tiên mới mở rộng observability; reviewer độc lập ở lượt kiểm tra. Không sửa cùng file, không đổi API chung một phía; tất cả thay đổi qua điều phối.
 
-## Lịch
+## Cách triển khai theo ưu tiên và phụ thuộc
 
-- 14–16/10: plan, tài khoản, môi trường, repo tài liệu; chưa core.
-- 17–18/10: một connector tổng hợp → ingest/MongoDB → aggregation → Datadog dashboard/monitor thật → webhook → đúng một incident, có log tương quan và số đo độ trễ. Kiểm chứng cửa sổ monitor/payload; chưa cần UI đầy đủ hay dataset công khai. Nếu gate chưa đạt, ưu tiên xử lý tích hợp trước khi mở rộng.
-- 19–21/10: mở rộng simulator, kiểm định data; commands, maintenance/retest; demo trọn vòng xử lý đầu tiên.
-- 22–24/10: UI, điều tra incident, kiểm thử mất dữ liệu/restart/idempotency và hoàn thiện observability.
-- 25–27/10: evaluation đối chứng, review, sửa lỗi và khóa tính năng.
-- 28–30/10: diễn tập ba lần, slide/video/README, kiểm tra clone sạch.
-- 31/10: kiểm tra máy sạch, chốt commit/nộp trước 23:59 ICT.
+Không đặt ngày cố định cho từng giai đoạn. Hoàn thành công việc sớm nhất có thể; bắt đầu phần tiếp theo ngay khi đủ điều kiện, làm song song các việc độc lập có ownership rõ ràng. Theo dõi checklist và bằng chứng tại [tasks.md](tasks.md).
+
+1. Chuẩn bị tài liệu, tài khoản và môi trường; phần cốt lõi chỉ trong khung build 17–31/10/2026.
+2. Nền tảng → một connector tổng hợp → ingest/MongoDB → aggregation → Datadog dashboard/monitor thật → webhook → đúng một incident. Lưu log tương quan, đo độ trễ và kiểm chứng cửa sổ/payload trước khi mở rộng.
+3. Mở rộng simulator, kiểm định dữ liệu, commands và maintenance/retest; hoàn thành vòng xử lý có chứng cứ.
+4. Hoàn thiện UI, điều tra và observability; kiểm thử dữ liệu lỗi, restart và idempotency.
+5. Chạy evaluation đối chứng, review và sửa lỗi; khóa tính năng khi đủ bằng chứng nghiệm thu.
+6. Diễn tập ba lần, hoàn thiện slide/video/README và kiểm tra clone sạch ngay khi build đủ ổn định; chốt hồ sơ và nộp trước 31/10/2026, 23:59 ICT.
+
+Việc phức tạp cần phân tích sâu: ghi câu hỏi/giả thuyết, thu bằng chứng, chia thành phần kiểm chứng được và xử lý rủi ro lớn trước. Khi gặp vấn đề bất ngờ, tái hiện hoặc thu log, xác định nguyên nhân, sửa rồi kiểm chứng lại luồng bị ảnh hưởng. Cập nhật phụ thuộc và ưu tiên theo phát hiện mới; trong lúc gỡ blocker vẫn tiến hành việc độc lập. Không bỏ nghiệm thu để đạt một mốc nội bộ.
 
 ## Nghiệm thu
 
