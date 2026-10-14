@@ -45,7 +45,7 @@ Worker duy nhất chuyển incident state. Local detector tạo event trực ti�
 
 `open → acknowledged → mitigating → mitigated → verifying → resolved`.
 
-Operator giảm tải về 50% giới hạn trước can thiệp. Command ID/idempotency bảo đảm gửi lại không giảm thêm. ACK timeout 30 giây. Nhiệt ổn định 60 giây mới mitigated; bảo trì rồi retest khôi phục tải ổn định 120 giây mới resolved. Dữ liệu cũ >30 giây không được xác nhận phục hồi. Datadog OK không đóng incident. Webhook lặp/đến muộn không tạo trùng hoặc tác động run đã kết thúc. Dừng run không được giả vờ resolved.
+Operator giảm tải bằng giới hạn tuyệt đối `target_current_a = min(0.5 × original_limit_a, 0.5 × reference_current_a)`, với dòng tham chiếu đo trước can thiệp. Ví dụ giới hạn gốc 200 A, dòng thực tế 60 A thì mục tiêu là 30 A, không phải 100 A. Lưu mục tiêu một lần; command ID/idempotency bảo đảm gửi lại không giảm thêm. ACK timeout 30 giây; ACK chỉ xác nhận áp dụng lệnh. Chỉ chuyển mitigated khi telemetry chứng minh dòng thực tế giảm và residual phục hồi trong cùng cửa sổ 60 giây hợp lệ; quy tắc kiểm chứng và thời hạn tại CONTRACT.md. Bảo trì rồi retest khôi phục tải ổn định 120 giây mới resolved. Dữ liệu cũ >30 giây không được xác nhận phục hồi. Datadog OK không đóng incident. Webhook lặp/đến muộn không tạo trùng hoặc tác động run đã kết thúc. Dừng run không được giả vờ resolved.
 
 ## UI và bảo mật
 
@@ -55,16 +55,16 @@ Năm màn hình tiếng Việt: tổng quan, connector, incident, điều khiể
 
 Tạo repo độc lập; giữ nguyên repository cha. Xác minh repo remote đích và private trước push. Chỉ đẩy file thuộc dự án, không secrets/build/venv/raw data. Không bật dịch vụ trả phí. Cấp quyền giám khảo sau khi có tài khoản chính thức.
 
-Agent chính quản lý nền tảng/hợp đồng/Compose/integration. A: backend/ingest/state/commands/auth/tests. B: dataset/simulator/baseline/evaluation. C: frontend năm màn hình/tests. Khi có slot: observability và reviewer độc lập. Không sửa cùng file, không đổi API chung một phía; tất cả thay đổi qua điều phối.
+Agent chính quản lý nền tảng/hợp đồng/Compose/integration và tích hợp Datadog tối thiểu ngay 17–18/10, không chờ hoàn thiện backend/UI. A: backend/ingest/state/commands/auth/tests. B: dataset/simulator/baseline/evaluation. C: frontend năm màn hình/tests. Sau gate Datadog đầu tiên mới mở rộng observability; reviewer độc lập ở lượt kiểm tra. Không sửa cùng file, không đổi API chung một phía; tất cả thay đổi qua điều phối.
 
 ## Lịch
 
 - 14–16/10: plan, tài khoản, môi trường, repo tài liệu; chưa core.
-- 17–19/10: simulator/API/MongoDB, kiểm định data và aggregation/tests.
-- 20–22/10: detector/Datadog/webhook/incident xuyên suốt.
-- 23–25/10: UI, commands, maintenance/retest; demo đầu tiên.
-- 26–28/10: kiểm thử tin cậy, evaluation, khóa tính năng.
-- 29–30/10: diễn tập ba lần, slide/video/README.
+- 17–18/10: một connector tổng hợp → ingest/MongoDB → aggregation → Datadog dashboard/monitor thật → webhook → đúng một incident, có log tương quan và số đo độ trễ. Kiểm chứng cửa sổ monitor/payload; chưa cần UI đầy đủ hay dataset công khai. Nếu gate chưa đạt, ưu tiên xử lý tích hợp trước khi mở rộng.
+- 19–21/10: mở rộng simulator, kiểm định data; commands, maintenance/retest; demo trọn vòng xử lý đầu tiên.
+- 22–24/10: UI, điều tra incident, kiểm thử mất dữ liệu/restart/idempotency và hoàn thiện observability.
+- 25–27/10: evaluation đối chứng, review, sửa lỗi và khóa tính năng.
+- 28–30/10: diễn tập ba lần, slide/video/README, kiểm tra clone sạch.
 - 31/10: kiểm tra máy sạch, chốt commit/nộp trước 23:59 ICT.
 
 ## Nghiệm thu
@@ -72,6 +72,8 @@ Agent chính quản lý nền tảng/hợp đồng/Compose/integration. A: backe
 Ca kiểm thử: healthy/tăng tải/taper; fault tới recovery; webhook trùng/muộn; dữ liệu mất/trùng/muộn; timeout/duyệt lặp/giảm tải thất bại; restart giữ state; viewer không điều khiển; offline hoàn chỉnh; Datadog alert/webhook thật. Ba lượt demo liên tiếp thành công cùng bản build.
 
 20 seed lỗi chưa tuning +20 healthy tương ứng. Mục tiêu phát hiện trước trip ít nhất 18/20 fault, tối đa một incident giả/20 healthy, không command trùng. Báo cáo recall incident, false alerts/connector-hour, latency local/Datadog, lead time đối chứng cùng seed, thời gian giảm tác động/phục hồi, tác động công suất và phiên. Không suy lead time nếu đối chứng không trip. Báo kết quả thực, không sửa số đo để đạt mục tiêu.
+
+Mỗi kịch bản đánh giá chạy ba phương án: A — cảnh báo ngưỡng nhiệt tuyệt đối cố định và cùng quy trình can thiệp; B — detector theo tải nhưng không can thiệp; C — detector theo tải cùng quy trình ChargeOps đầy đủ. A/C dùng cùng chính sách giảm tải, độ trễ operator và lịch bảo trì để so sánh detector; B/C dùng để đo tác động can thiệp. Khóa ngưỡng cả hai detector trên tập tuning trước đánh giá. Giữ cùng seed, nhu cầu tải, ambient, thời điểm/cường độ fault, điều kiện đầu và thời lượng; nhiệt sau can thiệp do simulator tính lại, không replay nhiệt cố định. Báo thời gian phát hiện, cảnh báo giả, thời gian hành động có tác dụng, số trip/phút gián đoạn, kWh phục vụ và kWh chênh lệch trong cùng thời lượng. Chi tiết phương pháp tại DATA_CARD.md; không mặc định ChargeOps tốt hơn đối chứng.
 
 ## Bàn giao
 

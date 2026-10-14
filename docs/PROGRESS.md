@@ -29,6 +29,16 @@ Plan: PLAN.md. Phạm vi hiện tại: chuẩn bị; phần cốt lõi từ 17/1
 
 ## Quyết định kỹ thuật sau review
 
+### Cập nhật theo yêu cầu ba điểm — 14/10/2026
+
+Đã cập nhật thiết kế và tiêu chí nghiệm thu; chưa triển khai hoặc đo kết quả:
+
+- Giảm tải xét cả giới hạn gốc và dòng tham chiếu thực tế; ACK không thay bằng chứng dòng giảm. CONTRACT.md quy định mục tiêu, cửa sổ kiểm chứng và xử lý không hiệu quả/thiếu dữ liệu.
+- Đưa gate một connector → MongoDB → Datadog alert/webhook thật → incident vào 17–18/10, trước khi mở rộng UI và tính năng; đồng bộ lịch và thứ tự triển khai trong PLAN.md/IMPLEMENTATION.md.
+- Bổ sung đối chứng ngưỡng nhiệt cố định, giữ phương án không can thiệp và ChargeOps đầy đủ; DATA_CARD.md tách so sánh detector trên cùng telemetry với so sánh tác động vận hành.
+
+### Các quyết định giữ nguyên
+
 - Một cửa sổ 60 giây trên các block 15 giây tránh Datadog làm mượt hai lần; kiểm chứng latency khi tích hợp thật.
 - Đóng băng dòng tham chiếu trước giảm tải và yêu cầu tải/nhiệt hợp lệ suốt 120 giây retest; cần giữ simulator đủ nhu cầu tải để demo hoàn tất.
 - Tách composition run/mẫu khỏi provenance từng trường để không nhập nhằng nguồn dữ liệu.

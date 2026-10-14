@@ -37,3 +37,24 @@ ID station/charger/connector và ambient temperature do mô phỏng phải đư�
 ## Ground truth và đánh giá
 
 Ground truth gồm thời điểm fault injection, seed và cường độ lỗi, lưu riêng khỏi input detector. Tách seed tuning và seed đánh giá; chạy 20 lượt lỗi và 20 lượt khỏe đã chốt trong plan. Lưu cả kết quả không đạt, không lựa chọn lại seed để cải thiện điểm. So sánh can thiệp và không can thiệp trên cùng seed; chỉ tính lead time khi lượt đối chứng thực sự trip. Phân biệt số đo mô phỏng và bằng chứng tích hợp Datadog thật.
+
+### Đối chứng để chứng minh giá trị
+
+Mỗi kịch bản trong 20 seed lỗi và 20 seed khỏe chạy đủ ba phương án (120 lượt mô phỏng, không phải 120 lượt Datadog):
+
+| Phương án | Phát hiện | Can thiệp |
+|---|---|---|
+| A — cách đơn giản | Nhiệt tuyệt đối trung bình 60 giây vượt ngưỡng cố định | Cùng workflow giảm tải/bảo trì/retest như C |
+| B — không can thiệp | Residual theo tải như ChargeOps | Chỉ ghi cảnh báo; không giảm tải/bảo trì |
+| C — ChargeOps | Residual theo tải | Workflow đầy đủ theo CONTRACT.md |
+
+Ngưỡng nhiệt cố định của A được chọn trên tập tuning theo cùng mục tiêu hạn chế cảnh báo giả với C; ghi giá trị/lý do và khóa trước evaluation. Không chọn một ngưỡng yếu tùy ý để làm đẹp kết quả. Hai detector dùng cùng cửa sổ 60 giây và quality gate; ngưỡng A là cấu hình mô phỏng, không phải ngưỡng an toàn thiết bị thực.
+
+Giữ cùng seed, nhu cầu tải, ambient, noise đầu vào, fault, điều kiện đầu, thời lượng và quy tắc trip/khởi động lại. A/C dùng cùng độ trễ operator, chính sách giảm tải và lịch bảo trì tính tương đối từ alert; ghi rõ các giả định này. Lịch bảo trì ở đây mô phỏng thao tác operator, không bổ sung tự động bảo trì vào sản phẩm. Nhiệt/dòng sau hành động được simulator tính lại; không replay nhiệt cố định. KWh phục vụ là tích phân công suất đo trên cùng thời lượng, tính cả giai đoạn gián đoạn.
+
+Tách hai loại kết quả:
+
+- **Chất lượng detector:** chạy cả detector ngưỡng cố định và residual trên cùng telemetry chưa can thiệp của B; so sánh cảnh báo trước trip, latency và false alerts/connector-hour, gồm healthy/tăng tải/giảm nhu cầu. Không dùng hai đường nhiệt đã khác nhau sau can thiệp để kết luận detector nào tốt hơn.
+- **Giá trị vận hành:** so sánh các lượt A/B/C về thời gian hành động có tác dụng (từ alert đến cửa sổ xác nhận giảm dòng), số trip, phút gián đoạn, kWh phục vụ và chênh lệch kWh. B không có hành động nên thời gian tác dụng là không áp dụng. Ghi riêng phần năng lượng bị giảm trong giai đoạn giảm tải so với B; chênh lệch có thể âm nếu B đã trip, không gán mọi chênh lệch là lợi ích. Lead time dùng thời điểm trip của B, chỉ khi B thực sự trip.
+
+Evaluation nhanh dùng đồng hồ mô phỏng và cùng giả định độ trễ cho A/C; không suy latency Datadog từ đó. Đo latency Datadog riêng bằng luồng thật. Lưu version/cấu hình, seed, kết quả từng phương án và cả lượt không đạt; không mặc định ChargeOps tốt hơn đối chứng, không ngoại suy hiệu quả lên trạm thật.
