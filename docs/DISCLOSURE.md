@@ -8,7 +8,7 @@ Sau đó trong cùng ngày, người dùng yêu cầu bỏ qua bước kiểm tr
 
 ## AI
 
-Codex và sub-agents hỗ trợ khảo sát, soạn tài liệu và review chuẩn bị. Khi build, cập nhật khai báo các công cụ thực sự được dùng và phần mã/tài liệu được hỗ trợ. Nhóm chịu trách nhiệm hiểu và giải thích giải pháp.
+Codex và sub-agents hỗ trợ khảo sát, soạn tài liệu và review chuẩn bị. Ngày 17/10, Claude Code hỗ trợ review tài liệu theo thể lệ và soạn ARCHITECTURE.md (seams mở rộng, lộ trình sau thi). Khi build, cập nhật khai báo các công cụ thực sự được dùng và phần mã/tài liệu được hỗ trợ. Nhóm chịu trách nhiệm hiểu và giải thích giải pháp.
 
 Luồng tối thiểu ngày 14/10 do Codex hỗ trợ viết code, tests, cấu hình và runbook; không dùng sub-agent trong lượt triển khai này. Tests dùng mongomock, không phải bằng chứng MongoDB/Datadog thật. Dữ liệu runtime hiện hoàn toàn tổng hợp; chưa tải hoặc dùng dataset công khai.
 

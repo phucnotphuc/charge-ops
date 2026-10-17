@@ -53,6 +53,9 @@ Không viết core, Compose/Dockerfile, tests sản phẩm hoặc cài dependenc
 Owner: agent chính phối hợp A/B. Nguồn: [Contract §1–4](docs/CONTRACT.md), [Implementation lượt 0/0b](docs/IMPLEMENTATION.md).
 
 - [ ] Tạo monorepo/shared models/OpenAPI; sinh TypeScript types, lockfiles npm/uv và pin images sau build tương thích. *20/10: `uv.lock` và images pin (mongo 8.0.5, agent 7.66.1, caddy 2.9.1, cloudflared 2025.2.1) đã build/pull chạy được; OpenAPI có tại `/docs`; chưa có frontend/TypeScript/npm.*
+- [ ] Tạo interface seam theo [ARCHITECTURE §2](docs/ARCHITECTURE.md) với đúng một implementation mỗi seam; lõi miền không import simulator/Datadog. Module demo tách riêng.
+- [ ] MongoDB chạy replica set một node; worker nhận inbox/commands/events qua Change Streams có resume token.
+- [ ] `ddtrace` APM: trace ingest → aggregation → webhook → worker → command; log JSON có `trace_id` để Datadog nối log với trace.
 - [ ] Compose chạy MongoDB, API, worker, simulator, web; health/readiness hoạt động; MongoDB chỉ ở mạng nội bộ. *20/10: đạt cho mongo/api/worker/simulator (+ datadog/gateway/tunnel), `/api/v1/ready` = ready, MongoDB không publish port; còn thiếu web.*
 - [x] **Một connector tổng hợp → ingest → MongoDB Aggregation Pipeline → metric → dashboard/monitor Datadog thật → webhook → đúng một incident source Datadog.** *20/10: run `f738bf26…`, composite monitor `334614967` Triggered 02:49:08 UTC, webhook `8861753711242670672`, incident `c2405a30…` `source=datadog`; commit `ccb67d3`. Run healthy `640e418e…` không mở incident.*
 - [x] Bật Log Management thật; nối log với run/connector/incident để điều tra, lưu timestamps và đo latency end-to-end. Không coi template/ảnh minh họa là evidence. *20/10: 6 log webhook run `f738bf26…` trên Datadog (CSV trong `artifacts/`); log có `timestamp`, `component`, `run_id`, `connector_id`, `event_id`, `incident_id`; `@incident_id:c2405a30…` tìm được log. Webhook delivery 1,7 s (±2 s do đồng hồ VM), evidence → incident 10,6 s. Chi tiết MINIMAL_LOOP.*
@@ -117,5 +120,9 @@ Làm việc theo ưu tiên, phụ thuộc và bằng chứng nghiệm thu, khôn
 - [ ] Với mỗi việc phức tạp, ghi câu hỏi chưa rõ, giả thuyết và bằng chứng cần thu; chia thành phần có thể kiểm chứng, xử lý rủi ro lớn trước và kiểm tra tích hợp sớm.
 - [ ] Khi có vấn đề bất ngờ, ghi hiện tượng và ảnh hưởng, tái hiện hoặc thu log, tìm nguyên nhân, sửa và kiểm chứng lại luồng bị ảnh hưởng trước khi đóng việc.
 - [ ] Cập nhật checklist, phụ thuộc và ưu tiên sau mỗi phát hiện mới; tiếp tục việc độc lập khi có blocker, đưa blocker ảnh hưởng nghiệm thu lên ưu tiên cao nhất và ghi rõ bước gỡ tiếp theo.
+
+## 9. Sau cuộc thi — không làm trong khung build
+
+Repo đóng băng đến 22/11/2026. Sau đó làm trên nhánh mới theo [ARCHITECTURE §6](docs/ARCHITECTURE.md): ADR, giấy phép mã nguồn, README tiếng Anh, gỡ module demo khỏi đường mặc định, gateway OCPP, `org_id` thật. Kết quả thi không đổi lộ trình này.
 
 Thứ tự ưu tiên: tư cách dự thi → G1 MongoDB/Datadog thật → G2 xử lý có chứng cứ → G3 độ bền → G4 đối chứng → G5 trình bày. Chỉ đánh dấu gate khi evidence tồn tại. Không mở rộng thanh toán, app tài xế, OCPP/phần cứng, paid cloud hoặc AI để trang trí. Nếu thiếu thời gian, giảm phần đánh bóng trước; không bỏ điều kiện bắt buộc hoặc che kết quả không đạt.
