@@ -37,7 +37,7 @@ Phần lớn ~1 phút 55 giây từ lúc vượt ngưỡng đến alert là cử
 | Recovery không đóng incident | Inbox `8861763766285793385` → `recovery_recorded_not_resolved`; incident vẫn `open` | Webhook `Recovered` thật từ Datadog |
 | Alert sau khi run dừng | Inbox `8861764779028762423` → `inactive_or_wrong_mode`; không mở incident mới | Webhook thật từ Datadog |
 | Restart giữ dữ liệu | Sau `docker compose restart api worker` và `wsl --shutdown`: 2 incident, 3 inbox, budget giữ nguyên | MongoDB |
-| Healthy run không mở incident | Đang chờ — run `640e418e…` | Datadog thật |
+| Healthy run không mở incident | Run `640e418e…` (start 03:12:48, dừng thủ công sau ~7,5 phút): 0 incident, 0 webhook, residual 0,0, quality đạt 26/26 cửa sổ đầy đủ | Datadog thật |
 | Tunnel chỉ mở webhook | POST thiếu secret → 401; đường khác → 404 | curl qua tunnel |
 
 Live run đã dùng: 2/20.
@@ -45,7 +45,7 @@ Live run đã dùng: 2/20.
 **Sự cố gặp phải và cách xử lý:**
 
 - `setup_datadog.py` bị HTTP 400 ở `/dashboard`: widget formula thiếu `"response_format": "timeseries"`. Đã sửa; script giờ in nội dung lỗi Datadog với mọi API trừ webhook (body webhook có thể chứa secret).
-- Timer trong VM Docker Desktop chạy nhanh ~7% (`sleep(30)` ≈ 28 giây thật); wall clock được kéo lùi ~1,7–2 giây mỗi ~30 giây. Host Windows bình thường. Đổi clocksource sang `hyperv_clocksource_tsc_page` (runtime và qua `.wslconfig` khi boot) không khắc phục được. Simulator giờ ngủ đến mốc 5 giây wall-clock, cửa sổ trở về ~12 mẫu. Giới hạn còn lại: timestamp lệch tới ~2 giây, nên `webhook_delivery_seconds` (so đồng hồ Datadog với VM) chỉ gần đúng.
+- Timer trong VM Docker Desktop chạy nhanh ~7% (`sleep(30)` ≈ 28 giây thật); wall clock được kéo lùi ~1,7–2 giây mỗi ~30 giây. Host Windows bình thường. Đổi clocksource sang `hyperv_clocksource_tsc_page` (runtime và qua `.wslconfig` khi boot) không khắc phục được. Simulator giờ ngủ đến mốc 5 giây wall-clock; run healthy `640e418e…` có 23/26 cửa sổ đúng 12 mẫu (2 cửa sổ 13, 1 cửa sổ 11). Giới hạn còn lại: timestamp lệch tới ~2 giây, nên `webhook_delivery_seconds` (so đồng hồ Datadog với VM) chỉ gần đúng.
 - `wsl --shutdown`/restart Docker Desktop: chỉ api/worker/simulator có `restart: unless-stopped`; mongo/datadog/webhook-gateway/tunnel phải `docker compose --profile observability up -d` lại. Tunnel nhận URL mới → chạy lại `setup_datadog.py` với URL mới (lấy URL cuối cùng trong `docker compose logs tunnel`).
 - Lệnh CLI phải chạy trong container (`docker compose exec api python -m chargeops.cli …`); host không phân giải được `mongo:27017`.
 
@@ -124,7 +124,7 @@ Thiếu monitor ID thì worker từ chối start, không tiêu run budget. Tối
 
 ## 4. Checklist nghiệm thu thật (cập nhật 20/10)
 
-1. ✅ check_mongo đạt trên MongoDB thật. ⏳ Healthy run Datadog `640e418e…` đang chạy.
+1. ✅ check_mongo đạt trên MongoDB thật. ✅ Healthy run Datadog `640e418e…` không mở incident.
 2. ✅ Monitor Triggered, webhook vào inbox, đúng một incident `source=datadog` (run `f738bf26…`). Metrics thật có trên dashboard. ⏳ Chưa kiểm tra logs trên Datadog Log Management.
 3. ⏳ Chưa so sánh count/mean local với Datadog; chưa thử mất mẫu/residual âm.
 4. ✅ Retry cùng webhook trả `duplicate`; alert cho run đã dừng bị từ chối. Thứ tự sai chỉ có unit test.

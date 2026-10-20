@@ -10,7 +10,7 @@ Commit `ccb67d3` trên `main` (đã push). Chi tiết và timeline: MINIMAL_LOOP
 - Run local `90b92398…` (thermal_fault): đúng một incident `source=local`.
 - **Run Datadog `f738bf26…` (thermal_fault): composite monitor `334614967` Triggered → webhook qua tunnel → đúng một incident `source=datadog`.** Webhook delivery ~1,7 s; fault → incident ~2 phút 40 giây (chưa phải benchmark MTTD).
 - Reliability: replay cùng webhook trả `duplicate`; Datadog `Recovered` thật không đóng incident; alert sau khi run dừng bị từ chối; restart api/worker và `wsl --shutdown` giữ nguyên incident/inbox/budget.
-- Run Datadog healthy `640e418e…`: đang chờ kết quả (không mở incident là đạt).
+- Run Datadog healthy `640e418e…`: đạt — ~7,5 phút không incident/webhook, residual 0,0, quality 26/26 cửa sổ; 23/26 cửa sổ đúng 12 mẫu sau sửa simulator.
 - Ngân sách live run: 2/20 đã dùng (trial `hackathon-2026`). Datadog trial còn 9 ngày tính từ 20/10 (hết ~29/10, trước hạn nộp 31/10) → lưu evidence sớm.
 - Sửa trong lượt: dashboard widget thiếu `response_format` (HTTP 400); simulator ngủ theo mốc 5 giây wall-clock vì timer VM Docker Desktop chạy nhanh ~7% (`.wslconfig` clocksource không khắc phục được, đã gỡ); test missing-monitor bị `.env` thật ảnh hưởng.
 - Còn lại G1: kiểm tra Log Management (`run_id`, `webhook_received`/`webhook_processed`) trên Datadog; lưu ảnh dashboard/monitor/incident đã che URL tunnel vào `artifacts/`; đối chiếu số mẫu local và Datadog.
