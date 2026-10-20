@@ -1,0 +1,169 @@
+{
+  "id": "autosun-polyu-v3",
+  "title": "A dataset of EV battery charging from Autosun and Hong Kong Polytechnic University",
+  "doi": "10.17632/c7gg94tmvz.3",
+  "url": "https://data.mendeley.com/datasets/c7gg94tmvz/3",
+  "license": "CC BY 4.0",
+  "authors": [
+    "haosen yang",
+    "Jinpeng Tian",
+    "Weijie Mai",
+    "Chi-yung Chung"
+  ],
+  "files": [
+    {
+      "name": "Readme.txt",
+      "bytes": 2250,
+      "sha256": "0a535074de55e4d10592266fbbce588132d37f60ba5192b6b6812e0b128115b2",
+      "downloaded_at": "2026-10-20T04:42:43+00:00"
+    },
+    {
+      "name": "processed_data_longer_than_30.xlsx",
+      "bytes": 103137520,
+      "sha256": "8d7c676bbf2042a4cc8124d12aa5652b6a335bc43e3d4d984e819a0078e08c70",
+      "downloaded_at": "2026-10-20T04:43:10+00:00"
+    }
+  ],
+  "units_verified": {
+    "chargingv": "V",
+    "charginga": "A",
+    "out_power": "kW (= V*A/1000)",
+    "gun temperatures": "C (assumed)"
+  },
+  "timezone": "not stated by source; timestamps kept as published (likely China local time, UTC+8)",
+  "findings": {
+    "rows_raw": 1382319,
+    "rows_per_sheet": {
+      "Sheet1": 171496,
+      "Sheet2": 125268,
+      "Sheet3": 226774,
+      "Sheet4": 236500,
+      "Sheet5": 201635,
+      "Sheet6": 86610,
+      "Sheet7": 178148,
+      "Sheet8": 155888
+    },
+    "readme_claims": {
+      "sessions": 21175,
+      "sampling_points": 1547432,
+      "period": "2020-10 to 2023-10"
+    },
+    "cross_sheet_duplicate_rows": 240393,
+    "rows_after_dedup": 1141926,
+    "sessions_after_dedup": 18531,
+    "ids_reused_for_different_rows": 2857,
+    "duplicate_transaction_end_time": 0,
+    "missing_values": 0,
+    "share_steps_60s": 0.9895,
+    "sessions_with_gap_over_61s": 869,
+    "power_vs_v_times_a_rel_error_p99": 0.0011,
+    "gun_temperature_range_c": [
+      -49,
+      199
+    ],
+    "end_time_range": [
+      "2020-09-09 20:01:15",
+      "2024-03-13 02:50:01"
+    ],
+    "faulty_battery_sessions": 747
+  },
+  "selection": {
+    "dedup_key": "(transaction_id, end_time) after dropping cross-sheet full-row duplicates; `id` is not unique",
+    "rules": [
+      {
+        "rule": "label == 0 (no battery fault)",
+        "sessions_remaining": 17784
+      },
+      {
+        "rule": "no gap > 61 s",
+        "sessions_remaining": 17271
+      },
+      {
+        "rule": ">= 30 rows",
+        "sessions_remaining": 17070
+      },
+      {
+        "rule": "0 < current <= 250 A every row",
+        "sessions_remaining": 12756
+      },
+      {
+        "rule": "200 <= voltage <= 750 V",
+        "sessions_remaining": 12756
+      },
+      {
+        "rule": "gun temperatures within 0..120 C",
+        "sessions_remaining": 12740
+      }
+    ],
+    "eligible_rows": 780927,
+    "seed": 20261020,
+    "sample_size": 50,
+    "selected_transaction_ids": [
+      "44020100400000022110170200452510",
+      "44020100400000022208081201477210",
+      "44020100400000052012112300218810",
+      "44020100400000052304241903841310",
+      "44020100400000052305090603942410",
+      "44020100400000062111210600596710",
+      "44020100400000062201010300751610",
+      "44020100400000062302190402626810",
+      "44020100400000062304100702976410",
+      "44020100400000062306120604186110",
+      "44020100400000072103290800565910",
+      "44020100400000082108091800204110",
+      "44020100400000082201141600792310",
+      "44020100400000082206182201239810",
+      "44020100400000092210191801987010",
+      "44020100400000092303282003042610",
+      "44020100400000102202200000975810",
+      "44020100400000102210300202050110",
+      "44020100400000102311260004830510",
+      "44020100400000112205110701126410",
+      "44020100400000112208241001769610",
+      "44020100400000132201270800916510",
+      "44020100400000142201141600863510",
+      "44020100400000142305161303491710",
+      "44020100400000152101301500409810",
+      "44020100400000152307281104031610",
+      "44020100400000162010242000044010",
+      "44020100400000162206210501399710",
+      "44020100400000182310251204550210",
+      "44020100400000192110211500504810",
+      "44020100400000192111111400595310",
+      "44020100400000192309280304371410",
+      "44020100400000202110240100516810",
+      "44020100400000202303131802945610",
+      "44020100400000202309130004264210",
+      "44020100400000232108191800244610",
+      "44020100400000232304161702614410",
+      "44020100400000232307030703140710",
+      "44020100400000232310040603771210",
+      "44020100400000242104152100550910",
+      "44020100400000282103311800629610",
+      "44020100400000282212191702880110",
+      "44020100400000282306281704421910",
+      "44020100400000292107292000132910",
+      "44020100400000292111260700467110",
+      "44020100400000292301161201836710",
+      "44020100400000292303051502012010",
+      "44020100400000292311070703107510",
+      "44020100400000302011020400052910",
+      "44020100400000302103221600381610"
+    ]
+  },
+  "thermal_fit_eligible_sessions": {
+    "gun_temperature1": {
+      "k_c_per_a2": 0.001123,
+      "tau_min": 38.7,
+      "r2_dT": 0.168
+    },
+    "gun_temperature2": {
+      "k_c_per_a2": 0.001456,
+      "tau_min": 35.1,
+      "r2_dT": 0.217
+    },
+    "note": "1 C sensor resolution, no ambient; order-of-magnitude calibration only"
+  },
+  "use": "load profiles only (charginga/chargingv); battery `label` is not charger ground truth",
+  "generated_at": "2026-10-20T04:51:04+00:00"
+}

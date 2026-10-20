@@ -1,6 +1,6 @@
 # Data card — ChargeOps
 
-Trạng thái ngày 14/10/2026: đã kiểm tra mô tả công khai; **chưa tải, mở hoặc kiểm định các file dữ liệu**. Chưa tuyên bố dataset phù hợp huấn luyện hay đã được dùng trong demo.
+Trạng thái ngày 20/10/2026: **đã tải và kiểm định** `processed_data_longer_than_30.xlsx` (SHA-256 khớp nguồn). Kết luận: dùng được làm **mẫu đường tải** sau khi làm sạch; không dùng làm ground truth lỗi charger. Kết quả ở mục "Kết quả kiểm định 20/10/2026"; manifest `data/manifests/autosun-v3.json`; tái lập bằng `scripts/audit_autosun.py`. Simulator chưa replay đường tải (đã quyết định, chưa triển khai).
 
 ## Nguồn ứng viên
 
@@ -27,6 +27,56 @@ Schema cần kiểm chứng trực tiếp trong file: `id`, `transaction_id`, `b
 6. Xuất báo cáo kiểm định cùng manifest và attribution. Không commit file thô lớn vào repo.
 
 Điều tra vấn đề tải/chất lượng đến khi có đủ bằng chứng quyết định sử dụng nguồn, không đặt giới hạn một ngày cố định. Nếu không tải được hoặc dữ liệu không đạt kiểm định, dùng **100% dữ liệu tổng hợp**, ghi lý do và kết quả kiểm định. Không tiếp tục gọi dữ liệu đó là dữ liệu thực.
+
+## Kết quả kiểm định 20/10/2026
+
+Tái lập: `uv run --with pandas==2.2.3 --with openpyxl==3.1.5 python -I scripts/audit_autosun.py` (tải nếu chưa có, kiểm SHA-256, chuyển XLSX → CSV, phân tích, chọn phiên, ghi manifest). File thô ở `data/raw/autosun-v3/`, CSV ở `data/processed/` — cả hai bị Git ignore.
+
+**Nguồn và file:** API công khai Mendeley (version 3) liệt kê `processed_data_longer_than_30.xlsx` (103.137.520 byte), `processed_data.xlsx` (116.643.732 byte) và `Readme.txt`. Đã tải file thứ nhất và Readme ngày 20/10/2026 04:43 UTC; SHA-256 khớp giá trị nguồn công bố (`8d7c676b…`, `0a535074…`). Chưa tải `processed_data.xlsx` (gồm cả phiên ngắn, không cần cho mục đích này).
+
+**Cấu trúc:** 8 sheet (`Sheet1`–`Sheet8`, tương ứng 8 data owner), cùng 16 cột như Readme: `id`, `transaction_id`, `begin_time`, `end_time`, `total_charging_kwh`, `total_charging_min`, `current_soc`, `current_energy_meter_value`, `chargingv`, `charginga`, `out_power`, `charging_gun_temperature1`, `charging_gun_temperature2`, `types`, `class_judge`, `label`. Không có giá trị thiếu.
+
+| Kiểm tra | Kết quả |
+|---|---|
+| Số dòng | 1.382.319 trong file; Readme công bố 1.547.432 |
+| Trùng giữa sheet | 240.393 dòng là bản sao hoàn toàn (2.537 phiên ở cả Sheet1 và Sheet7, 194 ở Sheet7 và Sheet8). Sau loại trùng: **1.141.926 dòng, 18.531 phiên** (Readme: 21.175 phiên) |
+| Định danh | `id` **không** duy nhất: 2.857 `id` dùng lại cho dòng khác hẳn. Khóa dùng: `(transaction_id, end_time)` — không trùng |
+| Thời gian | Tăng dần trong phiên; 98,95 % bước đúng 60 s (còn lại ±1 s); 869 phiên có khoảng trống >61 s. `begin_time` cố định trong phiên; kWh và phút tích lũy không giảm. Dữ liệu 2020-09-09 → 2024-03-13 (Readme: 10/2020–10/2023) |
+| Múi giờ | Nguồn không ghi. Giữ nguyên timestamp; giờ bắt đầu phiên tập trung 0h và 12h, phù hợp giờ địa phương (UTC+8) hơn UTC nhưng chưa đủ kết luận |
+| Đơn vị | Readme không ghi. Kiểm chứng `out_power = chargingv × charginga / 1000` sai lệch ≤0,11 % ở 99 % dòng → V, A, kW. Nhiệt độ súng giả định °C (trung vị 33/41) |
+| Phạm vi | V 267–561 (0,1–99,9 %), A ≤250, P ≤166 kW, không âm; 4.785 dòng dòng điện bằng 0. Nhiệt súng có giá trị phi vật lý −49 °C và 199 °C (lỗi cảm biến) |
+| Nhãn | 747 phiên `label = 1` (lỗi pin, gồm cả trường hợp trạm tự ngắt vì quá nhiệt); nhãn nhất quán trong phiên |
+| Độ dài | Trung vị 56 phút; vẫn có phiên <30 dòng dù tên file là "longer than 30" |
+
+**Quy tắc chọn phiên** (sau loại trùng):
+
+| Quy tắc | Phiên còn lại |
+|---|---|
+| `label == 0` | 17.784 |
+| Không có khoảng trống >61 s | 17.271 |
+| ≥30 dòng | 17.070 |
+| 0 < dòng ≤250 A ở mọi dòng | 12.756 |
+| 200 ≤ điện áp ≤750 V | 12.756 |
+| Nhiệt súng trong 0–120 °C | **12.740 phiên, 780.927 dòng** |
+
+50 phiên chọn ngẫu nhiên với seed `20261020`; danh sách trong manifest (`selection.selected_transaction_ids`). Dòng trung bình của phiên đủ điều kiện: trung vị 94 A (5–95 %: 37–163 A). Loại pin: LFP 7.689, NMC 4.854, khác 197.
+
+**Ước lượng nhiệt (chỉ để hiệu chỉnh bậc độ lớn):** hồi quy tĩnh nhiệt độ theo I² cho hệ số âm vì quán tính nhiệt (dòng cao đầu phiên khi súng nguội, giảm dần khi súng đã nóng). Mô hình trễ bậc 1 theo bước 60 s, hiệu ứng cố định từng phiên, trên 12.740 phiên:
+
+| Cảm biến | k (°C/A²) | τ (phút) | R² (ΔT) | Tăng ổn định ở 100 A / 200 A |
+|---|---|---|---|---|
+| Súng 1 | 0,00112 | 38,7 | 0,17 | 11,2 / 44,9 °C |
+| Súng 2 | 0,00146 | 35,1 | 0,22 | 14,6 / 58,2 °C |
+
+Độ phân giải 1 °C và không có nhiệt môi trường nên R² thấp; đây không phải hiệu chỉnh chính xác. So với simulator hiện tại (k 0,004; τ 45 s): k cao khoảng 3 lần, τ nhanh khoảng 50 lần.
+
+**Quyết định (20/10/2026):**
+
+- Dùng dataset làm mẫu đường tải: simulator replay dòng điện của 50 phiên đã chọn, nội suy 1 phút → 5 giây (ghi rõ là nội suy, không phải tần suất gốc). Provenance `hybrid`: tải `public`, nhiệt và lỗi `synthetic`, residual `derived`.
+- Mô hình nhiệt: dùng k theo bậc độ lớn từ dữ liệu (~0,0013 °C/A²), giữ τ nén (~60 s) để một lượt demo khoảng 15 phút; ghi rõ là **thời gian nhiệt được nén khoảng 35 lần** so với súng sạc thật. Hệ số lỗi và ngưỡng 8/3 °C phải hiệu chỉnh lại trên tập tuning (G4) vì residual phụ thuộc k.
+- Nhãn pin, `types`, `class_judge` không dùng cho detector.
+
+**Attribution:** haosen yang, Jinpeng Tian, Weijie Mai, Chi-yung Chung. *A dataset of EV battery charging from Shenzhen Auto Electric Power Plant Co., Ltd (Autosun) and Hong Kong Polytechnic University*, Mendeley Data, V3, 2024. DOI [10.17632/c7gg94tmvz.3](https://doi.org/10.17632/c7gg94tmvz.3). CC BY 4.0. Biến đổi của ChargeOps: loại trùng giữa sheet, lọc phiên theo quy tắc trên, chỉ dùng dòng/điện áp, nội suy 1 phút → 5 giây.
 
 ## Provenance trong sản phẩm
 
