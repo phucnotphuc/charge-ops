@@ -1,0 +1,69 @@
+name: chargeops
+x-app: &app
+  build: .
+  environment:
+    MONGODB_URI: mongodb://mongo:27017
+    LOG_DIR: /logs
+    SIMULATOR_SECRET: ${SIMULATOR_SECRET:?Run scripts/init_env.py first}
+    WEBHOOK_SECRET: ${WEBHOOK_SECRET:?Run scripts/init_env.py first}
+    DD_MONITOR_ID: ${DD_MONITOR_ID:-}
+    DD_TRIAL_ID: ${DD_TRIAL_ID:-hackathon-2026}
+  volumes:
+    - app-logs:/logs
+  depends_on:
+    mongo:
+      condition: service_healthy
+  restart: unless-stopped
+services:
+  mongo:
+    image: mongo:8.0.5
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: [CMD, mongosh, --quiet, --eval, "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  api:
+    <<: *app
+    ports: ["127.0.0.1:8080:8000"]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/ready')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  worker:
+    <<: *app
+    command: [python, -m, chargeops.worker]
+  simulator:
+    <<: *app
+    command: [python, -m, chargeops.simulator]
+    depends_on:
+      api:
+        condition: service_healthy
+  datadog:
+    image: gcr.io/datadoghq/agent:7.66.1
+    profiles: [observability]
+    environment:
+      DD_API_KEY: ${DD_API_KEY:-}
+      DD_SITE: ${DD_SITE:-datadoghq.com}
+      DD_HOSTNAME: chargeops-local
+      DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
+      DD_LOGS_ENABLED: "true"
+      DD_APM_ENABLED: "false"
+    volumes:
+      - app-logs:/logs:ro
+      - ./infra/datadog-logs.yaml:/etc/datadog-agent/conf.d/chargeops.d/conf.yaml:ro
+  webhook-gateway:
+    image: caddy:2.9.1-alpine
+    profiles: [observability]
+    volumes:
+      - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
+  tunnel:
+    image: cloudflare/cloudflared:2025.2.1
+    profiles: [observability]
+    command: [tunnel, --no-autoupdate, --url, "http://webhook-gateway:8081"]
+    depends_on: [webhook-gateway]
+volumes:
+  mongo-data:
+  app-logs:

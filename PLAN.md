@@ -2,6 +2,8 @@
 
 ## Quyết định và trạng thái
 
+**Cập nhật quyết định 14/10/2026:** người dùng yêu cầu xây luồng tối thiểu ngay, thay quyết định chờ 17/10 cho phần này. Các mốc dưới đây vẫn là kế hoạch gốc; xem MINIMAL_LOOP.md trong docs và DISCLOSURE.md về code viết sớm, phạm vi đã triển khai và bằng chứng còn thiếu. Chưa nghiệm thu Datadog thật.
+
 Ngày chốt 14/10/2026, giờ Asia/Saigon. Nhóm yêu cầu **chuẩn bị trước, phần cốt lõi từ 17/10**. Tài liệu này ghi yêu cầu đã duyệt; không phải báo cáo hoàn thành. Không tự chạy công việc vào 17/10 nếu chưa có phiên thực thi mới hoặc automation được yêu cầu.
 
 - Dự án: `D:\devops\charge-ops`, Git repo độc lập với thư mục cha.

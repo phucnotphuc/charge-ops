@@ -1,0 +1,5 @@
+logs:
+  - type: file
+    path: /logs/*.log
+    service: chargeops
+    source: python

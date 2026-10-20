@@ -1,5 +1,7 @@
 # Dependencies — chuẩn bị trước ngày 17/10/2026
 
+**Cập nhật 14/10:** đã cài dependencies Python của luồng tối thiểu trong `.venv` và khóa tại `uv.lock` theo yêu cầu bắt đầu ngay. `pyproject.toml` là manifest thực tế; frontend, pandas/evaluation và APM chưa cài. Có Dockerfile/Compose với image tag cụ thể nhưng chưa build/pull kiểm chứng. Nội dung dưới đây giữ danh mục mục tiêu ban đầu, không phải trạng thái mới nhất.
+
 Đây là danh mục đã chọn, không phải bằng chứng đã cài đặt hoặc đã chạy thành công. Không có package manifest, lockfile hay cấu hình thực thi trong giai đoạn chuẩn bị. Phần cốt lõi bắt đầu từ 17/10 theo quyết định của nhóm.
 
 ## Công cụ và runtime

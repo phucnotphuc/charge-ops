@@ -4,7 +4,7 @@ Hệ thống demo cảnh báo sớm bất thường nhiệt connector: telemetry
 
 ## Trạng thái ngày 14/10/2026
 
-**Chỉ chuẩn bị tài liệu và repository. Chưa có ứng dụng, Docker Compose, dependencies cài cho dự án, hoặc kết quả kiểm thử sản phẩm.** Theo quyết định của nhóm, phần cốt lõi bắt đầu từ 17/10/2026. Không tuyên bố repo hiện chạy được.
+**Đã viết luồng tối thiểu theo yêu cầu bắt đầu ngay của người dùng ngày 14/10:** một connector tổng hợp → ingest FastAPI → MongoDB time series/aggregation → metrics Datadog → webhook → worker tạo incident. Có Compose, lockfile và kiểm thử logic/API. **Chưa kiểm chứng container/MongoDB/Datadog thật** vì Docker Engine chưa chạy và keys chưa được cấu hình trong môi trường dự án. Phần viết trước 17/10 được khai báo trong DISCLOSURE.md.
 
 - Local-first, mục tiêu chi phí dịch vụ 0 đồng; không EC2, Atlas, domain hay AI trả phí.
 - GitHub private; cấp quyền giám khảo khi BTC cung cấp tài khoản.
@@ -21,14 +21,20 @@ Hệ thống demo cảnh báo sớm bất thường nhiệt connector: telemetry
 - [Data card](docs/DATA_CARD.md): nguồn, giấy phép, giới hạn bằng chứng.
 - [Environment](docs/ENVIRONMENT.md): trạng thái môi trường đã kiểm tra.
 - [Disclosure](docs/DISCLOSURE.md): khai báo phần chuẩn bị trước thời gian build và AI.
+- [Runbook luồng tối thiểu](docs/MINIMAL_LOOP.md): cách chạy, thiết lập Datadog, kiểm chứng và giới hạn hiện tại.
 
-## Khởi chạy sau khi triển khai
+## Khởi chạy luồng tối thiểu
 
-Hai lệnh mục tiêu dưới đây **chưa khả dụng trong repo chuẩn bị**:
+Cần Docker Linux Engine đang chạy. Tạo `.env` nếu chưa có; script không ghi đè file cũ và không in secrets. Chạy local trước để kiểm tra hạ tầng:
 
 ```powershell
-docker compose up --build
-docker compose --profile observability up --build
+python scripts/init_env.py
+docker compose up --build -d
+docker compose exec api python -m chargeops.check_mongo
+docker compose exec api python -m chargeops.cli start --mode local
+docker compose exec api python -m chargeops.cli status
 ```
 
-Giao diện dự kiến `http://localhost:8080`. Sau khi build lần đầu tải đủ image/dependency, local mode phải chạy không cần Internet. Datadog mode cần Internet và trial còn hiệu lực. Video, slide, benchmark và ảnh demo chỉ được tạo từ hệ thống thực đã chạy; không có kết quả minh họa giả làm kết quả đo.
+API/OpenAPI tại `http://localhost:8080/docs`, chưa có frontend. Kịch bản fault bắt đầu tăng nhiệt sau 120 giây; mỗi run tự dừng sau 15 phút. Mode local không thay nghiệm thu Datadog; xem runbook để thiết lập dashboard/monitor/webhook và chạy mode datadog. Không có command giảm tải/bảo trì/retest trong bản đầu này.
+
+Kiểm thử: `uv sync --frozen`, `uv run pytest -q`, `uv run ruff check chargeops scripts tests`. Tests dùng MongoDB giả lập chỉ chứng minh logic; `chargeops.check_mongo` là kiểm tra riêng cần MongoDB thật. Image tags đã chọn nhưng chưa build/pull kiểm chứng. Video/benchmark chỉ được tạo từ hệ thống thực đã chạy, không thay kết quả thật bằng fixture.

@@ -2,6 +2,19 @@
 
 Plan: PLAN.md. Phạm vi hiện tại: chuẩn bị; phần cốt lõi từ 17/10 theo quyết định người dùng.
 
+## Trạng thái mới nhất trên máy hiện tại
+
+**Cập nhật triển khai 14/10:** theo yêu cầu mới, đã xây code luồng tối thiểu trước 17/10, cài dependencies/uv.lock và cấu hình Compose. Có tests logic/API; chưa chạy MongoDB/container/Datadog thật. Xem MINIMAL_LOOP.md và DISCLOSURE.md. Các ghi chú chưa code/chưa cài dependencies bên dưới là trạng thái trước yêu cầu này. Không commit/push trong lượt triển khai này theo yêu cầu bỏ qua bước đó.
+
+Kiểm tra thực tế: 13 tests logic/API qua, Ruff/Python compile/Compose config qua; chưa đạt gate Datadog live. Có script kiểm tra MongoDB thật dùng database tạm riêng, script khởi tạo secrets local và provision dashboard/monitors/webhook. `.env` được gitignore, chưa có Datadog keys; không ghi secrets vào tài liệu.
+
+- Workspace hiện tại: `C:\Users\thoai\Documents\charge-ops`; đường dẫn D:\devops trong ghi chú cũ là lịch sử môi trường trước.
+- Người dùng xác nhận đã hoàn tất đăng ký hackathon và bước kiểm tra Datadog trial.
+- Đã kiểm tra công cụ/RAM/ổ đĩa; xem ENVIRONMENT.md. Docker Engine chưa chạy/kết nối được kể cả ngoài sandbox; RAM trống khoảng 2 GiB. Cần mở Docker Desktop và kiểm tra lại trước build.
+- Người dùng chốt kịch bản một connector tổng hợp → MongoDB → Datadog alert/webhook thật → incident cho gate 17–18/10.
+- Năm tài liệu điều chỉnh đã commit/push main tại f642417; các ghi chú chờ commit/push bên dưới là lịch sử trước commit này.
+- Chưa triển khai phần cốt lõi hoặc chạy thử sản phẩm; xác nhận trial không đồng nghĩa đã tích hợp Datadog thật.
+
 ## Hoàn thành có bằng chứng
 
 - Khảo sát yêu cầu cuộc thi, dataset và kiến trúc local.
@@ -12,13 +25,13 @@ Plan: PLAN.md. Phạm vi hiện tại: chuẩn bị; phần cốt lõi từ 17/1
 - Sub-agent contract tạo CONTRACT.md và IMPLEMENTATION.md; cuối lượt agent gặp giới hạn usage, các file vẫn tồn tại và đã đọc lại.
 - Agent chính chuẩn bị PLAN.md, README.md, .gitignore, ENVIRONMENT.md và DISCLOSURE.md.
 
-## Chưa hoàn thành
+## Lịch sử bàn giao trước commit f642417
 
 - Đã chép 10 file vào D:\devops\charge-ops và kiểm tra SHA256 từng file. Hệ thống duyệt đã cho phép tiếp tục; đang hoàn tất commit/push tài liệu.
 - Review độc lập đã hoàn tất: năm phát hiện được sửa và re-review xác nhận; không còn mâu thuẫn quan trọng trong phạm vi sửa. Chín file Markdown đã kiểm tra link local, không có link thiếu.
 - Cài dependencies/lockfiles, Compose, code sản phẩm, Datadog thật, benchmark, slide/video: chưa làm; phần cốt lõi bắt đầu từ 17/10.
 
-## Tiếp tục an toàn
+## Quy trình bàn giao trước đây (commit/push tài liệu đã hoàn tất)
 
 1. Đọc tài liệu hiện tại và kết quả review; không lặp lại việc tạo repo.
 2. Khi approval hoạt động, kiểm tra thư mục đích và remote để tránh đè thay đổi người dùng.

@@ -1,5 +1,7 @@
 # ChargeOps — Hợp đồng triển khai v1
 
+**Phạm vi hiện thực ngày 14/10:** người dùng yêu cầu bắt đầu ngay. Bản tối thiểu mới triển khai một connector tải không đổi, ingest, worker, alert/inbox/incident và CLI local; xem MINIMAL_LOOP.md. Các mục auth/UI/commands/retest và baseline động dưới đây vẫn là thiết kế đích, chưa phải API đã có. Ngày triển khai sớm ghi tại DISCLOSURE.md.
+
 Tài liệu chuẩn bị ngày 14/10/2026; phần cốt lõi chỉ bắt đầu từ 17/10/2026 theo lựa chọn của nhóm. Đây là thiết kế, chưa phải API đã tồn tại. Agent chính sở hữu thay đổi hợp đồng; backend, frontend và simulator triển khai theo cùng phiên bản này.
 
 ## 1. Quy ước và dữ liệu

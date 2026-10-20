@@ -1,0 +1,15 @@
+:8081 {
+    @webhook {
+        method POST
+        path /api/v1/webhooks/datadog
+    }
+    handle @webhook {
+        request_body {
+            max_size 16KB
+        }
+        reverse_proxy api:8000
+    }
+    handle {
+        respond "Not found" 404
+    }
+}

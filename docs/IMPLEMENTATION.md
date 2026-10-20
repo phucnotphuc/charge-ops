@@ -2,6 +2,8 @@
 
 ## Ranh giới chuẩn bị
 
+**Quyết định mới 14/10:** người dùng yêu cầu xây luồng tối thiểu ngay. Quy tắc chờ 17/10 phía dưới là lịch sử đã được thay thế cho phần này; xem MINIMAL_LOOP.md/DISCLOSURE.md. Chưa có bằng chứng nghiệm thu gate Datadog thật.
+
 Theo lựa chọn của nhóm ngày 14/10: trước 17/10 chỉ tạo tài liệu, kiểm tra môi trường/tài khoản và chuẩn bị private repo. Chưa viết source ứng dụng, simulator, tests sản phẩm, Dockerfile hoặc Compose thực thi. Không tự đặt lịch chạy code. Khi nhóm tiếp tục từ 17/10, đọc PLAN.md và CONTRACT.md trước khi nhận phần việc.
 
 Đích dự án: `D:\devops\charge-ops`; remote `phucnotphuc/charge-ops` đã được tạo private trong lượt chuẩn bị, tài liệu chưa được push tại thời điểm cập nhật này. Xác minh trạng thái local/remote mới nhất và visibility trước mutation/push, không tạo lại hoặc ghi đè repo; giữ nguyên repo cha. Chỉ dùng máy local, MongoDB container, Datadog trial và tunnel miễn phí; không tạo EC2/Atlas/domain trả phí.
