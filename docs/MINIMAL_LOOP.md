@@ -97,6 +97,22 @@ Một connector, theo CONTRACT §3. Code: `chargeops/lifecycle.py` (state machin
 
 MongoDB: ref 60 A, giới hạn gốc 200 A, target 30 A; 4 command `applied`; `runs.sim` cuối = `{current_limit_a: 200, fault_cleared: true}`. Biên mitigated nhỏ (2,98 < 3): nếu thêm nhiễu ở G4 cần giảm `FAULT_FACTOR`.
 
+**Kết quả Datadog thật — run `39207f81…` (thermal_fault, lượt live 3/20, `chargeops.demo --delay 10`):**
+
+| t+ (s) | Sự kiện |
+|---|---|
+| 420 | Composite monitor `334614967` Triggered (event `8861851345541185795`) |
+| 425 | `opened`, `source=datadog`; `webhook_delivery_seconds` 4,5 (±2 s do đồng hồ VM) |
+| 434 / 449 | `acknowledge` → `reduce_load` |
+| 521 | `load_reduction_verified` |
+| 612 | `mitigated` (residual cửa sổ 2,99) |
+| 621 / 623 | `maintenance` dispatched / applied |
+| 637 / 639 | `verify_recovery` → `verifying` |
+| 720 | Webhook `Recovered` (event `8861856379913405135`) → `recovery_recorded_not_resolved`, không đóng incident |
+| 776 | `resolved` theo retest 120 s của worker |
+
+MongoDB: đúng 1 incident (`0dea5e17…`) cho run; ref 60 A, giới hạn gốc 200 A, target 30 A. Datadog báo chậm hơn detector local ~105 s (420 so với 315–319 s): cửa sổ `last_1m` cộng độ trễ đánh giá. Incident chỉ resolved khi bằng chứng retest của worker đạt, không theo recovery của Datadog. Live run đã dùng: 3/20.
+
 Tests (`tests/test_lifecycle.py`): trọn vòng có retest reset đủ 3 lý do; 200 A/60 A → 30 A; ACK không giảm dòng (ineffective và unverified) kèm timeout, kết quả muộn, retry không giảm thêm; idempotency/401/409/lệnh sai trạng thái; tái phát trong retest và alert cũ không mở lại.
 
 ## Những phần cố ý chưa triển khai
