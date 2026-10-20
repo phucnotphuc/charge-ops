@@ -4,7 +4,7 @@ from pymongo import MongoClient
 from pymongo.errors import CollectionInvalid
 
 from chargeops.config import settings
-from chargeops.domain import CONNECTOR, MANIFEST
+from chargeops.domain import BASELINE_VERSION, CONNECTOR, MANIFEST, with_residuals
 
 
 def database():
@@ -29,6 +29,8 @@ def initialize(db):
         partialFilterExpression={"unresolved": True},
     )
     db.inbox.create_index([("processed", 1), ("occurred_at", 1)])
+    db.commands.create_index("idempotency_key", unique=True)
+    db.commands.create_index([("incident_id", 1), ("type", 1), ("applied_at", -1)])
     db.windows.create_index([("run_id", 1), ("end", -1)])
     db.sources.update_one(
         {"_id": MANIFEST},
@@ -42,7 +44,7 @@ def initialize(db):
                     "ids": "synthetic",
                     "residual": "derived",
                 },
-                "baseline": "ambient + 0.004 * current_a^2; equilibrium, constant-load gate only",
+                "baseline": f"{BASELINE_VERSION}: first-order lag (tau 45 s) toward ambient + 0.004 * current_a^2",
             }
         },
         upsert=True,
@@ -50,25 +52,18 @@ def initialize(db):
 
 
 def telemetry_pipeline(run_id, end):
+    """Whole run history up to `end`, deduplicated by sample_id; the thermal baseline needs it from run start."""
     return [
-        {
-            "$match": {
-                "meta.run_id": run_id,
-                "meta.connector_id": CONNECTOR,
-                "measured_at": {"$gte": end - timedelta(seconds=60), "$lt": end},
-            }
-        },
+        {"$match": {"meta.run_id": run_id, "meta.connector_id": CONNECTOR, "measured_at": {"$lt": end}}},
         {"$sort": {"received_at": 1}},
         {"$group": {"_id": "$sample_id", "sample": {"$first": "$$ROOT"}}},
         {"$replaceRoot": {"newRoot": "$sample"}},
-        {
-            "$set": {
-                "expected_temperature_c": {
-                    "$add": ["$ambient_temperature_c", {"$multiply": [0.004, "$current_a", "$current_a"]}]
-                }
-            }
-        },
-        {"$set": {"residual": {"$subtract": ["$connector_temperature_c", "$expected_temperature_c"]}}},
         {"$project": {"_id": 0}},
         {"$sort": {"measured_at": 1}},
     ]
+
+
+def window_rows(db, run_id, end):
+    """Samples of the 60-second window ending at `end`, with lagged expected temperature and residual."""
+    rows = with_residuals(list(db.telemetry.aggregate(telemetry_pipeline(run_id, end))))
+    return [r for r in rows if r["measured_at"] >= end - timedelta(seconds=60)]

@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from pymongo.errors import DuplicateKeyError, PyMongoError
 
 from chargeops.config import settings
-from chargeops.domain import MANIFEST, Batch, normalize_webhook, now
+from chargeops.domain import MANIFEST, Batch, CommandRequest, CommandResult, normalize_webhook, now
 from chargeops.logging import event, logger
 from chargeops.storage import database, initialize
 
@@ -35,6 +35,12 @@ def simulator_auth(x_simulator_secret: str = Header(default="")):
         raise HTTPException(401, "Invalid simulator credentials")
 
 
+def operator_auth(x_operator_secret: str = Header(default="")):
+    # Temporary G2 guard; G3 replaces it with operator sessions (CONTRACT §2).
+    if not hmac.compare_digest(x_operator_secret, settings().operator_secret.get_secret_value()):
+        raise HTTPException(401, "Invalid operator credentials")
+
+
 @app.exception_handler(PyMongoError)
 async def mongo_error(request, exc):
     return JSONResponse(status_code=503, content={"error": "Database unavailable"})
@@ -54,6 +60,13 @@ def ready(store=Depends(db)):
 @app.get("/api/v1/simulator/run", dependencies=[Depends(simulator_auth)])
 def active_run(store=Depends(db)):
     run = store.runs.find_one({"status": "active"})
+    if run:
+        # Lets a restarted simulator resume its thermal state instead of jumping to equilibrium.
+        run["last_sample"] = store.telemetry.find_one(
+            {"meta.run_id": run["_id"]},
+            {"_id": 0, "measured_at": 1, "connector_temperature_c": 1},
+            sort=[("measured_at", -1)],
+        )
     return jsonable_encoder(run)
 
 
@@ -118,6 +131,97 @@ def incidents(store=Depends(db)):
     return jsonable_encoder(
         {"items": list(store.incidents.find().sort("opened_at", -1).limit(100)), "next_cursor": None}
     )
+
+
+@app.get("/api/v1/incidents/{incident_id}")
+def incident(incident_id: str, store=Depends(db)):
+    found = store.incidents.find_one({"_id": incident_id})
+    if not found:
+        raise HTTPException(404, "Incident not found")
+    found["commands"] = list(store.commands.find({"incident_id": incident_id}).sort("created_at", 1))
+    return jsonable_encoder(found)
+
+
+@app.post("/api/v1/incidents/{incident_id}/commands", status_code=202, dependencies=[Depends(operator_auth)])
+def create_command(
+    incident_id: str,
+    body: CommandRequest,
+    idempotency_key: str = Header(min_length=1, max_length=200),
+    store=Depends(db),
+):
+    found = store.incidents.find_one({"_id": incident_id}, {"run_id": 1})
+    if not found:
+        raise HTTPException(404, "Incident not found")
+    command = {
+        "_id": str(uuid4()),
+        "idempotency_key": idempotency_key,
+        "incident_id": incident_id,
+        "run_id": found["run_id"],
+        "type": body.type,
+        "status": "pending",
+        "validated": False,
+        "created_at": now(),
+    }
+    try:
+        store.commands.insert_one(command)
+    except DuplicateKeyError:
+        command = store.commands.find_one({"idempotency_key": idempotency_key})
+        if (command["incident_id"], command["type"]) != (incident_id, body.type):
+            raise HTTPException(409, "Idempotency-Key reused with a different request") from None
+    event(
+        logger("api"), "command_requested", incident_id=incident_id, command_id=command["_id"], type=body.type
+    )
+    # Accepted is not "load reduced": the worker validates, the simulator applies, telemetry verifies.
+    return {"command_id": command["_id"], "status": command["status"]}
+
+
+@app.get("/api/v1/commands/{command_id}")
+def command(command_id: str, store=Depends(db)):
+    found = store.commands.find_one({"_id": command_id})
+    if not found:
+        raise HTTPException(404, "Command not found")
+    return jsonable_encoder(found)
+
+
+@app.get("/api/v1/simulator/commands", dependencies=[Depends(simulator_auth)])
+def simulator_commands(store=Depends(db)):
+    run = store.runs.find_one({"status": "active"}, {"_id": 1})
+    if not run:
+        return []
+    query = {"run_id": run["_id"], "status": {"$in": ["pending", "claimed"]}, "dispatched_at": {"$ne": None}}
+    items = list(store.commands.find(query, {"type": 1, "sim": 1}))
+    store.commands.update_many(
+        {"_id": {"$in": [c["_id"] for c in items]}, "status": "pending"},
+        {"$set": {"status": "claimed", "claimed_at": now()}},
+    )
+    return items
+
+
+@app.post(
+    "/api/v1/simulator/commands/{command_id}/result", status_code=202, dependencies=[Depends(simulator_auth)]
+)
+def command_result(command_id: str, body: CommandResult, store=Depends(db)):
+    found = store.commands.find_one({"_id": command_id, "dispatched_at": {"$ne": None}})
+    if not found:
+        raise HTTPException(404, "Command not found")
+    if found["status"] in ("applied", "failed"):
+        return {"status": "duplicate"}
+    at = now()
+    if body.status == "applied":
+        # The simulator already changed its device state, even when the result arrives late.
+        changes = {f"sim.{key}": value for key, value in found["sim"].items()}
+        store.runs.update_one({"_id": found["run_id"]}, {"$set": changes})
+    done = store.commands.update_one(
+        {"_id": command_id, "status": {"$in": ["pending", "claimed"]}},
+        {"$set": {"status": body.status, f"{body.status}_at": at, "result": body.result}},
+    )
+    if not done.matched_count:  # timed out meanwhile: keep as a late event for the worker
+        store.commands.update_one(
+            {"_id": command_id, "late_result": None},
+            {"$set": {"late_result": {"status": body.status, "at": at, "result": body.result}}},
+        )
+        return {"status": "late"}
+    return {"status": body.status}
 
 
 @app.get("/api/v1/demo-runs")

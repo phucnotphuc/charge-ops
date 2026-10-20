@@ -1,32 +1,16 @@
 from datetime import timedelta
 from uuid import uuid4
 
-import mongomock
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from chargeops.api import app
 from chargeops.config import settings
-from chargeops.domain import Sample, normalize_webhook, now, window_evidence
-from chargeops.storage import telemetry_pipeline
+from chargeops.domain import Sample, lag, normalize_webhook, now, window_evidence, with_residuals
+from chargeops.simulator import physics
+from chargeops.storage import window_rows
 from chargeops.worker import manage_run, process_event, tick
-
-
-@pytest.fixture
-def store(monkeypatch, tmp_path):
-    monkeypatch.setenv("SIMULATOR_SECRET", "s" * 32)
-    monkeypatch.setenv("WEBHOOK_SECRET", "w" * 32)
-    monkeypatch.setenv("LOG_DIR", str(tmp_path))
-    settings.cache_clear()
-    db = mongomock.MongoClient(tz_aware=True).chargeops
-    db.incidents.create_index(
-        [("run_id", 1), ("connector_id", 1), ("kind", 1)],
-        unique=True,
-        partialFilterExpression={"unresolved": True},
-    )
-    app.state.db = db
-    return db
 
 
 def rows(end, residual=12):
@@ -42,6 +26,41 @@ def test_window_blocks_and_gap():
     assert not window_evidence(rows(end)[3:], end)["quality"]
     assert not window_evidence([], end)["quality"]
     assert window_evidence(rows(end, -2), end)["residual_mean"] == -2
+
+
+def test_thermal_baseline_tracks_load_and_derating_recovers_fault():
+    start = now()
+
+    def simulate(scenario, commands):
+        rows, temperature, sim = [], None, {}
+        for t in range(0, 1000, 5):
+            sim.update(commands.get(t, {}))
+            current, _, steady = physics(t, scenario, sim)
+            temperature = steady if temperature is None else lag(temperature, steady, 5)
+            rows.append(
+                {
+                    "measured_at": start + timedelta(seconds=t),
+                    "current_a": current,
+                    "ambient_temperature_c": 25.0,
+                    "connector_temperature_c": temperature,
+                }
+            )
+        return with_residuals(rows)
+
+    def mean(rows, end):  # 60-second window ending at t=end
+        window = [r["residual"] for r in rows if 0 <= end - (r["measured_at"] - start).total_seconds() <= 60]
+        return sum(window) / len(window)
+
+    healthy = simulate("healthy", {300: {"current_limit_a": 30}, 600: {"current_limit_a": 200}})
+    assert max(abs(r["residual"]) for r in healthy) < 1e-9  # load changes alone never alarm
+    fault = simulate(
+        "thermal_fault",
+        {360: {"current_limit_a": 30}, 600: {"fault_cleared": True}, 660: {"current_limit_a": 200}},
+    )
+    assert mean(fault, 355) > 8  # alerting before derating
+    assert mean(fault, 420) > 3  # thermal lag: one window after derating is not yet recovered
+    assert mean(fault, 540) < 3  # recovered three minutes after derating to 30 A
+    assert all(r["residual"] < 3 for r in fault[132:])  # t >= 660: retest passes after maintenance
 
 
 def test_reject_nonfinite_and_naive_timestamp():
@@ -171,7 +190,7 @@ def test_ingest_validates_whole_batch_and_aggregation_deduplicates(store):
             client.post("/api/v1/telemetry/batch", json={"samples": [sample]}, headers=headers).status_code
             == 202
         )
-    rows = list(store.telemetry.aggregate(telemetry_pipeline(run_id, at + timedelta(seconds=1))))
+    rows = window_rows(store, run_id, at + timedelta(seconds=1))
     assert len(rows) == 1
     assert rows[0]["residual"] == pytest.approx(12)
 

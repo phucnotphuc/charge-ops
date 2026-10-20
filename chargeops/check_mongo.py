@@ -6,8 +6,8 @@ from uuid import uuid4
 from pymongo.errors import DuplicateKeyError
 
 from chargeops.domain import CONNECTOR, block_end, now, window_evidence
-from chargeops.storage import database, initialize, telemetry_pipeline
-from chargeops.worker import open_incident
+from chargeops.lifecycle import open_incident
+from chargeops.storage import database, initialize, window_rows
 
 
 def main():
@@ -42,8 +42,7 @@ def main():
         db.telemetry.insert_many(samples)
         # Retry with same sample identity, but a new MongoDB document identity.
         db.telemetry.insert_one({k: v for k, v in samples[0].items() if k != "_id"})
-        rows = list(db.telemetry.aggregate(telemetry_pipeline(run_id, end)))
-        evidence = window_evidence(rows, end)
+        evidence = window_evidence(window_rows(db, run_id, end), end)
         assert evidence["count"] == 12 and evidence["quality"]
         assert abs(evidence["residual_mean"] - 12) < 0.00001
         run = {"_id": run_id}

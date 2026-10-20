@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     mongodb_database: str = "chargeops"
     simulator_secret: SecretStr = Field(min_length=24)
     webhook_secret: SecretStr = Field(min_length=24)
+    operator_secret: SecretStr = Field(min_length=24)
     api_url: str = "http://api:8000"
     dd_agent_host: str = "datadog"
     dd_monitor_id: str = ""

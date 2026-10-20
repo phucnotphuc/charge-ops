@@ -7,7 +7,13 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, FiniteFloat, field_validator
 
 CONNECTOR = "connector-1"
-MANIFEST = "synthetic-constant-load-v1"
+MANIFEST = "synthetic-thermal-lag-v1"
+RUN_MAX_S = 1800
+# Healthy thermal model shared by simulator and detector baseline (calibrated, not ground truth).
+AMBIENT_C = 25.0
+THERMAL_K = 0.004  # °C per A² at steady state
+THERMAL_TAU_S = 45.0
+BASELINE_VERSION = "ema-tau45-v1"
 
 
 def now():
@@ -99,18 +105,39 @@ def window_evidence(rows, end):
     }
 
 
-def synthetic_values(elapsed, scenario):
-    # Constant load already at thermal equilibrium. Fault dynamics are simulator-only.
-    ambient, current = 25.0, 60.0
-    temperature = ambient + 0.004 * current**2
-    if scenario == "thermal_fault" and elapsed >= 120:
-        temperature += 25 * (1 - math.exp(-(elapsed - 120) / 60))
-    return dict(
-        current_a=current,
-        voltage_v=400,
-        power_kw=24,
-        requested_current_a=current,
-        current_limit_a=200,
-        connector_temperature_c=temperature,
-        ambient_temperature_c=ambient,
-    )
+def target_current(original_limit_a, reference_current_a):
+    """Absolute derating limit (CONTRACT §3): 200 A limit with 60 A actual load gives 30 A."""
+    return min(0.5 * original_limit_a, 0.5 * reference_current_a)
+
+
+class CommandRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["acknowledge", "reduce_load", "maintenance", "verify_recovery"]
+
+
+class CommandResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: Literal["applied", "failed"]
+    result: str = Field(default="", max_length=500)
+
+
+def lag(temperature, steady, dt):
+    """First-order thermal response over dt seconds."""
+    return temperature + (steady - temperature) * (1 - math.exp(-dt / THERMAL_TAU_S))
+
+
+def with_residuals(rows):
+    """Expected temperature lags ambient + k·I² over actual sample spacing; rows sorted, deduplicated.
+
+    Starts at equilibrium on the run's first sample, so history must begin at run start."""
+    expected = previous = None
+    for row in rows:
+        steady = row["ambient_temperature_c"] + THERMAL_K * row["current_a"] ** 2
+        if expected is None:
+            expected = steady
+        else:
+            expected = lag(expected, steady, (row["measured_at"] - previous).total_seconds())
+        previous = row["measured_at"]
+        row["expected_temperature_c"] = expected
+        row["residual"] = row["connector_temperature_c"] - expected
+    return rows

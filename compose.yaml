@@ -6,6 +6,7 @@ x-app: &app
     LOG_DIR: /logs
     SIMULATOR_SECRET: ${SIMULATOR_SECRET:?Run scripts/init_env.py first}
     WEBHOOK_SECRET: ${WEBHOOK_SECRET:?Run scripts/init_env.py first}
+    OPERATOR_SECRET: ${OPERATOR_SECRET:?Add OPERATOR_SECRET to .env (see .env.example)}
     DD_MONITOR_ID: ${DD_MONITOR_ID:-}
     DD_TRIAL_ID: ${DD_TRIAL_ID:-hackathon-2026}
   volumes:

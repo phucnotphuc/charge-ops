@@ -60,10 +60,49 @@ Block thiếu kết thúc 02:52:00: worker đã gửi (có log `metrics_emitted`
 - `wsl --shutdown`/restart Docker Desktop: chỉ api/worker/simulator có `restart: unless-stopped`; mongo/datadog/webhook-gateway/tunnel phải `docker compose --profile observability up -d` lại. Tunnel nhận URL mới → chạy lại `setup_datadog.py` với URL mới (lấy URL cuối cùng trong `docker compose logs tunnel`).
 - Lệnh CLI phải chạy trong container (`docker compose exec api python -m chargeops.cli …`); host không phân giải được `mongo:27017`.
 
+## Vòng xử lý G2 — 20/10/2026
+
+Một connector, theo CONTRACT §3. Code: `chargeops/lifecycle.py` (state machine, worker là nơi duy nhất ghi trạng thái incident), `simulator.py` (mô hình nhiệt), `domain.py` (baseline), `demo.py` (operator tự động).
+
+**Mô hình nhiệt và baseline:**
+
+- Simulator: dòng thực = `min(nhu cầu 60 A, giới hạn)`; nhiệt độ trễ bậc 1 (τ = 45 s) về `25 + 0,004·I²·(1 + f)`. Hệ số lỗi `f` tăng đến 0,7 sau giây 120 (`FAULT_FACTOR`, núm hiệu chỉnh): residual ≈10,1 °C ở 60 A và ≈2,5 °C ở 30 A. Lệnh đã áp dụng lưu ở `runs.sim`; simulator restart tiếp tục nhiệt độ từ mẫu cuối.
+- Baseline `ema-tau45-v1`: pipeline MongoDB lấy toàn bộ lịch sử run và khử trùng; `with_residuals` tính nhiệt kỳ vọng trễ bậc 1 theo khoảng cách thật giữa các mẫu (thiếu mẫu vẫn đúng; mongomock không hỗ trợ `$setWindowFields` nên phần lọc nằm ở Python). Tải thay đổi khi không lỗi → residual 0.
+- **Giả định:** baseline dùng cùng `k`/`τ` với simulator (hiệu chỉnh hoàn hảo, không nhiễu). G4 cần thêm sai lệch/nhiễu trước khi đánh giá.
+
+**Lệnh và trạng thái:** `POST /api/v1/incidents/{id}/commands` (`Idempotency-Key`; cùng key khác payload → 409; header tạm `X-Operator-Secret`, G3 thay bằng session) → worker kiểm tra trạng thái → simulator claim qua `GET /simulator/commands`, báo `POST /simulator/commands/{id}/result` → API cập nhật `runs.sim`.
+
+| Lệnh | Điều kiện | Kết quả |
+|---|---|---|
+| `acknowledge` | `open` | `acknowledged` |
+| `reduce_load` | `acknowledged`/`mitigating` (retry) | Đóng băng một lần `reference_current_a` (cửa sổ hợp lệ mới nhất, >0), giới hạn gốc, `target = min(0,5×gốc, 0,5×ref)`; → `mitigating` |
+| `maintenance` | `mitigated` | Simulator xóa lỗi |
+| `verify_recovery` | `mitigated` + bảo trì đã áp dụng | Khôi phục giới hạn gốc; khi áp dụng → `verifying` |
+
+- `mitigating`: cửa sổ đạt quality nằm trọn sau ACK có dòng trung bình ≤110 % target và mọi giới hạn ≤ target → `load_reduction_verified`; cùng điều kiện và residual trung bình <3 → `mitigated`. Sau 120 s từ ACK chưa có bằng chứng giảm dòng → `load_reduction_ineffective` (có dữ liệu) hoặc `load_reduction_unverified` (thiếu dữ liệu), giữ `mitigating`.
+- `verifying`: 120 s cửa sổ đạt liên tục (residual từng mẫu <3, dòng và nhu cầu ≥90 % ref, quality) → `resolved`, gỡ `unresolved`. Vi phạm ghi `retest_reset` với lý do `hot`/`low_load`/`insufficient_data`. Alert hợp lệ sau khi bắt đầu retest → về `open` (`recurrence`).
+- Command quá 30 s → `timed_out`; kết quả đến muộn ghi `late_command_result`, operator gửi lại (dùng lại target). Dừng run ghi `run_stopped`, giữ trạng thái.
+
+**Kết quả local — run `5c623c09…` (thermal_fault, `chargeops.demo --delay 10`):**
+
+| t+ (s) | Sự kiện |
+|---|---|
+| 319 | `opened` (detector local) |
+| 333 / 344 | `acknowledge` → `reduce_load` |
+| 423 | `load_reduction_verified` |
+| 498 | `mitigated` (residual cửa sổ 2,98) |
+| 510 / 512 | `maintenance` dispatched / applied |
+| 524 / 526 | `verify_recovery` → `verifying` |
+| 664 | `resolved` |
+
+MongoDB: ref 60 A, giới hạn gốc 200 A, target 30 A; 4 command `applied`; `runs.sim` cuối = `{current_limit_a: 200, fault_cleared: true}`. Biên mitigated nhỏ (2,98 < 3): nếu thêm nhiễu ở G4 cần giảm `FAULT_FACTOR`.
+
+Tests (`tests/test_lifecycle.py`): trọn vòng có retest reset đủ 3 lý do; 200 A/60 A → 30 A; ACK không giảm dòng (ineffective và unverified) kèm timeout, kết quả muộn, retry không giảm thêm; idempotency/401/409/lệnh sai trạng thái; tái phát trong retest và alert cũ không mở lại.
+
 ## Những phần cố ý chưa triển khai
 
-- Chỉ một connector, hai scenario `healthy`/`thermal_fault`, tải cố định 60 A/400 V. Nhiệt ban đầu ở cân bằng; baseline `ambient + 0.004 × current²` chỉ hợp lệ cho gate tải cố định này. Baseline động/tuning/đánh giá 20+20 seed chưa có.
-- Chưa có UI React, operator login, command giảm tải/bảo trì/retest hoặc endpoint quản lý run qua HTTP. CLI quản trị chỉ chạy local trong container, không public. Incident hiện chỉ mở; recovery Datadog không đóng incident.
+- Chỉ một connector (2 trạm/6 connector để sau G2), hai scenario `healthy`/`thermal_fault`, nhu cầu cố định 60 A/400 V. Tuning/đánh giá 20+20 seed chưa có; baseline chưa có nhiễu/sai lệch mô hình.
+- Chưa có UI React và operator login; lệnh operator bảo vệ tạm bằng `X-Operator-Secret`. Chưa có endpoint quản lý run qua HTTP (`/demo-runs` POST); start/stop vẫn qua CLI trong container. Recovery Datadog không đóng incident.
 - Ingest hiện dùng schema nhỏ của `Sample` (xem `/docs`); station/charger/provenance do API gán. Session chưa có. Không tuyên bố đã hoàn tất toàn bộ CONTRACT.md.
 - Chỉ chạy **một worker**; chưa hỗ trợ nhiều replica hoặc leader election. Windows hiện lưu lâu dài cùng evidence; cần thêm retention cho windows ở giai đoạn sau.
 - Agent gửi metrics bằng DogStatsD/UDP, không bảo đảm delivery. Worker đánh dấu window trước gửi để tránh nhân đôi block khi restart; crash giữa ghi và gửi có thể mất block. Cần đối chiếu số mẫu trên Datadog và kiểm chứng missing-data trước nghiệm thu. Không coi log `metrics_emitted` là bằng chứng Datadog nhận thành công.
@@ -92,7 +131,9 @@ docker compose exec api python -m chargeops.cli status
 docker compose exec api python -m chargeops.cli stop
 ```
 
-Worker nhận start/stop bất đồng bộ. Fault tăng nhiệt sau 120 giây, mẫu mỗi 5 giây, cửa sổ aggregation 60 giây đóng mỗi 15 giây. Run tự dừng sau 900 giây; stop giữ nguyên incident chưa resolved. CLI chỉ cho một pending/active run. Không mở run mới trước khi run cũ đã stopped.
+Worker nhận start/stop bất đồng bộ. Fault tăng nhiệt sau 120 giây, mẫu mỗi 5 giây, cửa sổ aggregation 60 giây đóng mỗi 15 giây. Run tự dừng sau 1800 giây; stop giữ nguyên incident chưa resolved.
+
+Vòng xử lý: `python -m chargeops.demo --delay 10` (tự đóng vai operator đến `resolved`), hoặc thủ công `python -m chargeops.cli command <incident_id> acknowledge|reduce_load|maintenance|verify_recovery` và `python -m chargeops.cli incident <incident_id>` (trạng thái, timeline, commands). Cần `OPERATOR_SECRET` trong `.env`; `.env` cũ thì thêm một secret ngẫu nhiên ≥24 ký tự (xem `.env.example`). CLI chỉ cho một pending/active run. Không mở run mới trước khi run cũ đã stopped.
 
 ## 2. Datadog thật
 

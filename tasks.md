@@ -13,8 +13,8 @@ Quy ước: `[x]` đã kiểm chứng trong lượt review này; `[ ]` chưa ho�
 Nguồn kiểm tra ngày 14/10: [trang chính](https://mini-hackathon-sep-2026.mugvn.com/) và [thể lệ, cập nhật 25/09](https://mini-hackathon-sep-2026.mugvn.com/terms). Kiểm tra lại thông báo BTC trước nộp.
 
 - [x] Xác minh lịch: build 17–31/10/2026; hạn nộp 31/10/2026, 23:59 ICT. Giữ core development từ 17/10.
-- [ ] **Trưởng đội:** xác minh đã đăng ký trước 12/10, 23:59 và nhận email xác nhận đội hợp lệ; lưu tham chiếu riêng, không commit thông tin cá nhân. Nếu thiếu, hỏi BTC về tư cách dự thi; không mặc định được nộp.
-- [ ] **Trưởng đội:** xác nhận đội 1–3 người, đủ điều kiện theo mục 2 thể lệ, có email công việc và link nộp bài.
+- [x] **Trưởng đội:** xác minh đã đăng ký trước 12/10, 23:59 và nhận email xác nhận đội hợp lệ; lưu tham chiếu riêng, không commit thông tin cá nhân. Nếu thiếu, hỏi BTC về tư cách dự thi; không mặc định được nộp.
+- [x] **Trưởng đội:** xác nhận đội 1–3 người, đủ điều kiện theo mục 2 thể lệ, có email công việc và link nộp bài.
 - [ ] **Trưởng đội:** chuẩn bị quyền đọc repo private cho tài khoản giám khảo chính thức trước hạn nộp; duy trì đến hết 22/11/2026.
 - [ ] **Trưởng đội:** ghi quy tắc đóng băng repository sau hạn nộp; chốt commit cuối trước hạn và không chỉnh repo sau đó.
 - [ ] **Chính:** cập nhật disclosure AI/tái sử dụng/nguồn dữ liệu thực dùng; rà dữ liệu và secrets theo mục 5–6 thể lệ.
@@ -67,19 +67,19 @@ Owner: agent chính phối hợp A/B. Nguồn: [Contract §1–4](docs/CONTRACT.
 Nguồn: [Contract §3](docs/CONTRACT.md), [Data card](docs/DATA_CARD.md).
 
 - [ ] **B:** kiểm định dataset: file/schema/unit/timezone, missing/trùng/thứ tự thời gian, checksum, phiên được chọn, attribution/license và biến đổi. Điều tra vấn đề chất lượng đến khi đủ bằng chứng quyết định dùng nguồn công khai hay hoàn toàn synthetic; ghi rõ lý do.
-- [ ] **B:** simulator hai trạm/sáu connector, bước 5 giây, quán tính nhiệt và đáp ứng tải, fault có seed; detector không đọc ground truth. Gắn provenance theo trường; manifest giữ cùng evidence ngoài TTL.
-- [ ] **A:** triển khai worker duy nhất chuyển state, command/inbox bền vững, snapshot evidence; dữ liệu trùng/muộn không làm sai latest state.
-- [ ] **A/B:** demo acknowledge → giảm tải → chứng minh tác dụng → bảo trì → retest → resolved.
-- [ ] **A/B:** đóng băng reference current từ 60 giây hợp lệ; mục tiêu `min(0.5 × original_limit_a, 0.5 × reference_current_a)`; test 200 A/60 A phải đặt 30 A; retry không giảm thêm.
-- [ ] **A/B:** ACK không đủ để mitigated: cùng cửa sổ hợp lệ sau ACK phải có dòng <=110% mục tiêu, giới hạn <=mục tiêu và phục hồi nhiệt theo contract. Sau 120 giây không đủ bằng chứng ghi ineffective/unverified, giữ incident chưa giải quyết.
-- [ ] **A/B:** retest 120 giây có residual từng mẫu <3°C và requested/actual current >=90% reference; nóng/tải thấp/stale reset timer; stop run và Datadog OK không tự resolve.
+- [ ] **B:** simulator hai trạm/sáu connector, bước 5 giây, quán tính nhiệt và đáp ứng tải, fault có seed; detector không đọc ground truth. Gắn provenance theo trường; manifest giữ cùng evidence ngoài TTL. *20/10: một connector có quán tính nhiệt (τ 45 s), đáp ứng lệnh giới hạn/bảo trì, tham số lỗi chỉ ở simulator; manifest `synthetic-thermal-lag-v1`. Chưa có 2 trạm/6 connector, seed và provenance theo trường.*
+- [ ] **A:** triển khai worker duy nhất chuyển state, command/inbox bền vững, snapshot evidence; dữ liệu trùng/muộn không làm sai latest state. *20/10: `lifecycle.py` — chỉ worker ghi trạng thái incident; commands/inbox lưu MongoDB; evidence trước/sau và timeline trong incident. Chưa có latest-state API (`/connectors`).*
+- [ ] **A/B:** demo acknowledge → giảm tải → chứng minh tác dụng → bảo trì → retest → resolved. *20/10: local run `5c623c09…` đạt trọn vòng (opened t+319 s → resolved t+664 s). Chờ lượt Datadog thật.*
+- [x] **A/B:** đóng băng reference current từ 60 giây hợp lệ; mục tiêu `min(0.5 × original_limit_a, 0.5 × reference_current_a)`; test 200 A/60 A phải đặt 30 A; retry không giảm thêm. *20/10: test `test_target_is_absolute_half_of_reference_or_limit`, retry trong `test_ack_without_lower_current_is_not_mitigated`; run `5c623c09…` ref 60 A, gốc 200 A, target 30 A.*
+- [x] **A/B:** ACK không đủ để mitigated: cùng cửa sổ hợp lệ sau ACK phải có dòng <=110% mục tiêu, giới hạn <=mục tiêu và phục hồi nhiệt theo contract. Sau 120 giây không đủ bằng chứng ghi ineffective/unverified, giữ incident chưa giải quyết. *20/10: `test_ack_without_lower_current_is_not_mitigated` (cả ineffective và unverified); live: `load_reduction_verified` t+423 s, `mitigated` t+498 s.*
+- [x] **A/B:** retest 120 giây có residual từng mẫu <3°C và requested/actual current >=90% reference; nóng/tải thấp/stale reset timer; stop run và Datadog OK không tự resolve. *20/10: `test_full_loop_open_to_resolved` reset với hot/low_load/insufficient_data; recovery Datadog không đóng incident (G1); dừng run ghi `run_stopped`; live retest t+526 → t+664 s.*
 
 ## 6. G3 — UI, độ bền và điều tra
 
 Nguồn: [Implementation gates 3–6](docs/IMPLEMENTATION.md), [Contract](docs/CONTRACT.md).
 
 - [ ] **C:** năm màn hình tiếng Việt dùng API thật; unit, freshness, provenance, mode/source, timeline và evidence trước/sau; đủ loading/error/empty states.
-- [ ] **A:** kiểm tra idempotency key, khác payload trả 409, ACK timeout 30 giây, ACK muộn; restart API/worker/simulator không mất state hoặc chạy lệnh hai lần.
+- [ ] **A:** kiểm tra idempotency key, khác payload trả 409, ACK timeout 30 giây, ACK muộn; restart API/worker/simulator không mất state hoặc chạy lệnh hai lần. *20/10: idempotency/409/timeout/kết quả muộn có unit test; simulator restart giữa run giữ nhiệt độ (run `af4e1239…`). Chưa thử restart giữa lúc có command đang chờ.*
 - [ ] **A:** test webhook trùng/muộn/sai run/thiếu identity, một incident active mỗi run/connector/type; bộ đếm 20 live run tồn tại qua restart. *20/10 (Datadog thật): replay trùng → `duplicate`; alert cho run đã dừng → `inactive_or_wrong_mode`; recovery không đóng incident; bộ đếm giữ qua restart và `wsl --shutdown`. Thiếu identity/sai run chỉ có unit test.*
 - [ ] **A/C:** viewer không điều khiển; operator session/Origin hoặc CSRF đúng contract; simulator/webhook secret riêng, không vào log/frontend/Git.
 - [ ] **Chính:** local hoàn chỉnh chạy offline sau khi tải images/packages; ngắt Internet trong mode Datadog hiện lỗi rõ, không fallback âm thầm.

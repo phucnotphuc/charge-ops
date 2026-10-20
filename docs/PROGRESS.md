@@ -2,6 +2,16 @@
 
 Plan: PLAN.md. Phạm vi hiện tại: chuẩn bị; phần cốt lõi từ 17/10 theo quyết định người dùng.
 
+## Cập nhật 20/10/2026 (chiều) — G2 vòng xử lý chạy thật ở local
+
+Chi tiết: MINIMAL_LOOP.md, mục "Vòng xử lý G2".
+
+- Simulator có quán tính nhiệt và đáp ứng lệnh; baseline `ema-tau45-v1` trễ bậc 1 (tải đổi khi không lỗi → residual 0). Run tối đa 1800 s.
+- State machine `open → acknowledged → mitigating → mitigated → verifying → resolved` theo CONTRACT §3 trong `chargeops/lifecycle.py`; command API có idempotency; `chargeops.demo` tự đóng vai operator. 20 tests qua.
+- Run local `5c623c09…`: `opened` t+319 s → `resolved` t+664 s; ref 60 A, giới hạn gốc 200 A, target 30 A; `mitigated` t+498 s (residual 2,98).
+- Run Datadog trọn vòng: đang chạy (lượt 3/20).
+- Chưa làm trong G2: 2 trạm/6 connector, kiểm định dataset; baseline chưa có nhiễu (G4).
+
 ## Cập nhật 20/10/2026 — gate G1 đạt với MongoDB và Datadog thật
 
 Commit `ccb67d3` trên `main` (đã push). Chi tiết và timeline: MINIMAL_LOOP.md, mục "Kết quả kiểm chứng thật — 20/10/2026".

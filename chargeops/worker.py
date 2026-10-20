@@ -1,34 +1,14 @@
 import time
 from datetime import timedelta
-from uuid import uuid4
 
 from datadog import DogStatsd
 from pymongo.errors import PyMongoError
 
 from chargeops.config import settings
-from chargeops.domain import CONNECTOR, block_end, now, window_evidence
+from chargeops.domain import CONNECTOR, RUN_MAX_S, block_end, now, window_evidence
+from chargeops.lifecycle import advance_incidents, expire_commands, on_alert, process_commands
 from chargeops.logging import event, logger
-from chargeops.storage import database, initialize, telemetry_pipeline
-
-
-def open_incident(db, run, evidence, source, at, event_id):
-    key = {"run_id": run["_id"], "connector_id": CONNECTOR, "kind": "thermal_anomaly", "unresolved": True}
-    db.incidents.update_one(
-        key,
-        {
-            "$setOnInsert": {
-                **key,
-                "_id": str(uuid4()),
-                "state": "open",
-                "source": source,
-                "opened_at": at,
-                "evidence": evidence,
-                "event_id": event_id,
-                "evidence_to_incident_seconds": (at - evidence["end"]).total_seconds(),
-            }
-        },
-        upsert=True,
-    )
+from chargeops.storage import database, initialize, window_rows
 
 
 def process_event(db, item, at, monitor_id):
@@ -58,7 +38,7 @@ def process_event(db, item, at, monitor_id):
         elif not evidence or not evidence["quality"] or evidence["residual_mean"] <= 8:
             reason = "insufficient_alert_evidence"
         else:
-            open_incident(db, run, evidence, "datadog", at, item["_id"])
+            reason = on_alert(db, run, evidence, "datadog", at, item["_id"], item["occurred_at"])
             db.incidents.update_one(
                 {"run_id": run["_id"], "event_id": item["_id"]},
                 {
@@ -71,7 +51,6 @@ def process_event(db, item, at, monitor_id):
                     }
                 },
             )
-            reason = "incident_opened_or_existing"
         db.monitor_state.update_one(
             {"_id": cursor_id},
             {"$set": {"occurred_at": item["occurred_at"], "status": item["status"]}},
@@ -112,7 +91,7 @@ def manage_run(db, at):
             db.budgets.update_one({"_id": trial_id}, {"$addToSet": {"run_ids": pending["_id"]}})
         db.runs.update_one({"_id": pending["_id"]}, {"$set": {"status": "active", "started_at": at}})
     run = db.runs.find_one({"status": "active"})
-    if run and (run.get("stop_requested") or (at - run["started_at"]).total_seconds() >= 900):
+    if run and (run.get("stop_requested") or (at - run["started_at"]).total_seconds() >= RUN_MAX_S):
         db.runs.update_one(
             {"_id": run["_id"]},
             {"$set": {"status": "stopped", "stopped_at": at}, "$unset": {"active_slot": ""}},
@@ -128,13 +107,13 @@ def tick(db, stats, log):
         end = block_end(at - timedelta(seconds=2))
         window_id = f"{run['_id']}:{end.isoformat()}"
         if not db.windows.find_one({"_id": window_id}):
-            rows = list(db.telemetry.aggregate(telemetry_pipeline(run["_id"], end)))
+            rows = window_rows(db, run["_id"], end)
             evidence = window_evidence(rows, end)
             evidence.update(_id=window_id, run_id=run["_id"], created_at=at)
             db.windows.insert_one(evidence)
             if run["mode"] == "local":
                 if evidence["quality"] and evidence["residual_mean"] > 8:
-                    open_incident(db, run, evidence, "local", at, window_id)
+                    on_alert(db, run, evidence, "local", at, window_id, end)
             else:
                 tags = [f"run_id:{run['_id']}", f"connector_id:{CONNECTOR}", "env:hackathon"]
                 # Export only the newest non-overlapping block, not the rolling mean.
@@ -169,6 +148,9 @@ def tick(db, stats, log):
             incident_id=incident and incident["_id"],
             outcome=outcome,
         )
+    process_commands(db, at)
+    expire_commands(db, at)
+    advance_incidents(db, at)
 
 
 def main():
