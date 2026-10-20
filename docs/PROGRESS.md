@@ -2,6 +2,14 @@
 
 Plan: PLAN.md. Phạm vi hiện tại: chuẩn bị; phần cốt lõi từ 17/10 theo quyết định người dùng.
 
+## Cập nhật 20/10/2026 (tối) — simulator replay đường tải thật
+
+Chi tiết: MINIMAL_LOOP.md, mục "Vòng xử lý G2".
+
+- Simulator replay 50 phiên Autosun–PolyU v3 (`chargeops/profiles/autosun_v3.csv`), nội suy 1 phút → 5 s; giới hạn gốc 250 A; khởi động nguội; `k = 0,0013 °C/A²`, `τ = 60 s` (nén ~37 lần); lỗi = 10,5 °C nóng thêm ở tải lúc lỗi bắt đầu. Baseline `ema-tau60-k0013-v2`; provenance `hybrid`.
+- Tests: cả 50 phiên khỏe (kể cả giảm tải/khôi phục) residual = 0; phiên demo báo động, hồi phục sau giảm tải, retest đạt. 20 tests qua; `check_mongo` đạt.
+- Run local `72956d89…` (profile `…00218810`, ~130 A): `opened` t+329 s → `mitigated` t+567 s → `resolved` t+732 s; ref 129,8 A, target 64,9 A. Chưa chạy lượt Datadog với cấu hình mới.
+
 ## Cập nhật 20/10/2026 — kiểm định dataset Autosun–PolyU v3
 
 Chi tiết: DATA_CARD.md, mục "Kết quả kiểm định 20/10/2026".
@@ -9,7 +17,7 @@ Chi tiết: DATA_CARD.md, mục "Kết quả kiểm định 20/10/2026".
 - `processed_data_longer_than_30.xlsx` tải về, SHA-256 khớp nguồn. Sau loại 240.393 dòng trùng giữa sheet: 1.141.926 dòng, 18.531 phiên (thấp hơn Readme). `id` không duy nhất; đơn vị V/A/kW kiểm chứng; nhiệt súng có giá trị phi vật lý.
 - 12.740 phiên đạt quy tắc chọn; 50 phiên chọn với seed 20261020 (manifest `data/manifests/autosun-v3.json`).
 - Ước lượng nhiệt từ dữ liệu: k ≈ 0,0011–0,0015 °C/A², τ ≈ 35–39 phút; simulator hiện k 0,004, τ 45 s.
-- Quyết định: replay đường tải 50 phiên (provenance hybrid), k theo dữ liệu, τ nén khoảng 35 lần để demo ~15 phút. Chưa triển khai; cần hiệu chỉnh lại hệ số lỗi/ngưỡng.
+- Quyết định: replay đường tải 50 phiên (provenance hybrid), k theo dữ liệu, τ nén khoảng 37 lần để demo ~15 phút. Đã triển khai (mục trên).
 
 ## Cập nhật 20/10/2026 (chiều) — G2 vòng xử lý chạy thật ở local và Datadog
 

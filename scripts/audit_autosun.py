@@ -18,6 +18,7 @@ from openpyxl import load_workbook
 RAW = Path("data/raw/autosun-v3")
 CSV = Path("data/processed/autosun_v3_longer_than_30.csv")
 MANIFEST = Path("data/manifests/autosun-v3.json")
+PROFILES = Path("chargeops/profiles/autosun_v3.csv")  # shipped in the image for load replay
 BASE = "https://data.mendeley.com/public-files/datasets/c7gg94tmvz/files"
 FILES = {  # published SHA-256 from the Mendeley public API (version 3)
     "Readme.txt": (
@@ -157,6 +158,14 @@ def main():
     eligible = sessions[keep]
     chosen = eligible.sample(n=SAMPLE, random_state=SEED).sort_index()
     clean = data[data["transaction_id"].isin(eligible.index)]
+    # Replay file: one row per published minute (steps are 60 s ±1 s and gap-free after the rules above).
+    profiles = data[data["transaction_id"].isin(chosen.index)][
+        ["transaction_id", "charginga", "chargingv"]
+    ].copy()
+    profiles.insert(1, "minute", profiles.groupby("transaction_id").cumcount())
+    profiles.columns = ["transaction_id", "minute", "current_a", "voltage_v"]
+    PROFILES.parent.mkdir(parents=True, exist_ok=True)
+    profiles.to_csv(PROFILES, index=False, lineterminator="\n")
     manifest = {
         "id": "autosun-polyu-v3",
         "title": "A dataset of EV battery charging from Autosun and Hong Kong Polytechnic University",
@@ -180,6 +189,11 @@ def main():
             "seed": SEED,
             "sample_size": SAMPLE,
             "selected_transaction_ids": list(chosen.index),
+            "replay_file": {
+                "path": str(PROFILES.as_posix()),
+                "rows": len(profiles),
+                "sha256": sha256(PROFILES),
+            },
         },
         "thermal_fit_eligible_sessions": {
             "gun_temperature1": thermal_fit(clean, "charging_gun_temperature1"),

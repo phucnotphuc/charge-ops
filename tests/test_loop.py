@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from chargeops.api import app
 from chargeops.config import settings
 from chargeops.domain import Sample, lag, normalize_webhook, now, window_evidence, with_residuals
-from chargeops.simulator import physics
+from chargeops.simulator import DEMO_PROFILE, PROFILES, physics
 from chargeops.storage import window_rows
 from chargeops.worker import manage_run, process_event, tick
 
@@ -28,19 +28,20 @@ def test_window_blocks_and_gap():
     assert window_evidence(rows(end, -2), end)["residual_mean"] == -2
 
 
-def test_thermal_baseline_tracks_load_and_derating_recovers_fault():
+def test_replayed_sessions_baseline_tracks_load_and_derating_recovers_fault():
     start = now()
 
-    def simulate(scenario, commands):
-        rows, temperature, sim = [], None, {}
-        for t in range(0, 1000, 5):
+    def simulate(profile, scenario, commands):
+        rows, temperature, sim = [], 25.0, {}  # cold start at ambient
+        for t in range(0, 1200, 5):
             sim.update(commands.get(t, {}))
-            current, _, steady = physics(t, scenario, sim)
-            temperature = steady if temperature is None else lag(temperature, steady, 5)
+            demand, current, _, _, steady = physics(t, scenario, sim, profile)
+            temperature = lag(temperature, steady, 5) if t else temperature
             rows.append(
                 {
                     "measured_at": start + timedelta(seconds=t),
                     "current_a": current,
+                    "requested_current_a": demand,
                     "ambient_temperature_c": 25.0,
                     "connector_temperature_c": temperature,
                 }
@@ -48,19 +49,26 @@ def test_thermal_baseline_tracks_load_and_derating_recovers_fault():
         return with_residuals(rows)
 
     def mean(rows, end):  # 60-second window ending at t=end
-        window = [r["residual"] for r in rows if 0 <= end - (r["measured_at"] - start).total_seconds() <= 60]
+        window = [r["residual"] for r in rows if 0 < end - (r["measured_at"] - start).total_seconds() <= 60]
         return sum(window) / len(window)
 
-    healthy = simulate("healthy", {300: {"current_limit_a": 30}, 600: {"current_limit_a": 200}})
-    assert max(abs(r["residual"]) for r in healthy) < 1e-9  # load changes alone never alarm
+    # Real load curves (ramps, tapers) plus derating and restore never alarm on a healthy connector.
+    for profile in PROFILES.values():
+        healthy = simulate(profile, "healthy", {300: {"current_limit_a": 40}, 600: {"current_limit_a": 250}})
+        assert max(abs(r["residual"]) for r in healthy) < 1e-9
+
+    demo = PROFILES[DEMO_PROFILE]  # ~130 A; target = min(0.5 × 250, 0.5 × 129.8) ≈ 65 A
     fault = simulate(
+        demo,
         "thermal_fault",
-        {360: {"current_limit_a": 30}, 600: {"fault_cleared": True}, 660: {"current_limit_a": 200}},
+        {360: {"current_limit_a": 65}, 600: {"fault_cleared": True}, 630: {"current_limit_a": 250}},
     )
-    assert mean(fault, 355) > 8  # alerting before derating
+    assert mean(fault, 330) > 8  # alerting before derating
     assert mean(fault, 420) > 3  # thermal lag: one window after derating is not yet recovered
-    assert mean(fault, 540) < 3  # recovered three minutes after derating to 30 A
-    assert all(r["residual"] < 3 for r in fault[132:])  # t >= 660: retest passes after maintenance
+    assert mean(fault, 570) < 3  # a quarter of the 10.5 °C fault heat remains at half current
+    assert all(
+        r["residual"] < 3 and r["requested_current_a"] > 0.9 * 129.8 for r in fault[126:]
+    )  # retest from t=630
 
 
 def test_reject_nonfinite_and_naive_timestamp():
@@ -192,7 +200,7 @@ def test_ingest_validates_whole_batch_and_aggregation_deduplicates(store):
         )
     rows = window_rows(store, run_id, at + timedelta(seconds=1))
     assert len(rows) == 1
-    assert rows[0]["residual"] == pytest.approx(12)
+    assert rows[0]["residual"] == pytest.approx(51.4 - 25)  # cold start: expected begins at ambient
 
 
 def test_datadog_mode_never_opens_incident_without_webhook(store, monkeypatch):
@@ -203,22 +211,26 @@ def test_datadog_mode_never_opens_incident_without_webhook(store, monkeypatch):
     run_id, at = setup_alert(store)
     end = block_end(at)
     store.windows.delete_many({})
-    for i in range(12):
-        store.telemetry.insert_one(
-            {
-                "sample_id": str(i),
-                "meta": {"run_id": run_id, "connector_id": "connector-1"},
-                "measured_at": end - timedelta(seconds=60 - i * 5),
-                "received_at": end,
-                "current_a": 60,
-                "ambient_temperature_c": 25,
-                "connector_temperature_c": 51.4,
-            }
-        )
+    samples = [
+        {
+            "sample_id": str(i),
+            "meta": {"run_id": run_id, "connector_id": "connector-1"},
+            "measured_at": end - timedelta(seconds=60 - i * 5),
+            "received_at": end,
+            "current_a": 60,
+            "ambient_temperature_c": 25,
+            "connector_temperature_c": 51.4,
+        }
+        for i in range(12)
+    ]
+    expected = with_residuals([dict(s) for s in samples])
+    store.telemetry.insert_many(samples)
     monkeypatch.setattr("chargeops.worker.now", lambda: end + timedelta(seconds=3))
     stats = Mock()
     tick(store, stats, Mock())
-    assert store.windows.find_one()["residual_mean"] == pytest.approx(12)
+    assert store.windows.find_one()["residual_mean"] == pytest.approx(
+        sum(r["residual"] for r in expected) / 12
+    )
     assert store.incidents.count_documents({}) == 0
     assert stats.increment.call_count == 3
     # Only three newest samples, not all 12 samples in the rolling window.

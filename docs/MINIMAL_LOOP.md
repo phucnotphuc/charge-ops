@@ -66,9 +66,11 @@ Một connector, theo CONTRACT §3. Code: `chargeops/lifecycle.py` (state machin
 
 **Mô hình nhiệt và baseline:**
 
-- Simulator: dòng thực = `min(nhu cầu 60 A, giới hạn)`; nhiệt độ trễ bậc 1 (τ = 45 s) về `25 + 0,004·I²·(1 + f)`. Hệ số lỗi `f` tăng đến 0,7 sau giây 120 (`FAULT_FACTOR`, núm hiệu chỉnh): residual ≈10,1 °C ở 60 A và ≈2,5 °C ở 30 A. Lệnh đã áp dụng lưu ở `runs.sim`; simulator restart tiếp tục nhiệt độ từ mẫu cuối.
-- Baseline `ema-tau45-v1`: pipeline MongoDB lấy toàn bộ lịch sử run và khử trùng; `with_residuals` tính nhiệt kỳ vọng trễ bậc 1 theo khoảng cách thật giữa các mẫu (thiếu mẫu vẫn đúng; mongomock không hỗ trợ `$setWindowFields` nên phần lọc nằm ở Python). Tải thay đổi khi không lỗi → residual 0.
-- **Giả định:** baseline dùng cùng `k`/`τ` với simulator (hiệu chỉnh hoàn hảo, không nhiễu). G4 cần thêm sai lệch/nhiễu trước khi đánh giá.
+- Đường tải (từ 20/10, chiều): simulator replay dòng điện và điện áp của 50 phiên Autosun–PolyU v3 đã kiểm định (`chargeops/profiles/autosun_v3.csv`, xem DATA_CARD), nội suy tuyến tính 1 phút → 5 giây, đúng tốc độ thật; hết phiên thì nhu cầu 0 A. Dòng trong dataset được coi là nhu cầu xe; dòng thực = `min(nhu cầu, giới hạn)`, giới hạn gốc 250 A. Mỗi run lưu `profile_id` (`cli start --profile`); mặc định `…00218810` (~130 A, ổn định 92/97 phút).
+- Nhiệt: trễ bậc 1 về `25 + k·I²·(1 + f)` với `k = 0,0013 °C/A²` (ước lượng từ nhiệt súng trong dataset) và `τ = 60 s` (thật ~37 phút, **nén ~37 lần** để demo ~15 phút). Súng bắt đầu ở nhiệt môi trường khi cắm (khởi động nguội). Lỗi định nghĩa bằng **°C nóng thêm ở tải lúc lỗi bắt đầu** (`FAULT_RESIDUAL_C = 10,5`, giây 120); hệ số `f = 10,5 / (k·I²_lúc_lỗi)` tăng dần trong 60 s. Giảm còn nửa dòng → phần nóng do lỗi còn ¼ (≈2,6 °C). Lệnh đã áp dụng lưu ở `runs.sim`; simulator restart tiếp tục nhiệt độ từ mẫu cuối.
+- Baseline `ema-tau60-k0013-v2`: pipeline MongoDB lấy toàn bộ lịch sử run và khử trùng; `with_residuals` bắt đầu ở nhiệt môi trường và tính nhiệt kỳ vọng trễ bậc 1 theo khoảng cách thật giữa các mẫu (thiếu mẫu vẫn đúng; mongomock không hỗ trợ `$setWindowFields` nên phần lọc nằm ở Python). Test: cả 50 phiên khỏe, kể cả giảm tải rồi khôi phục, residual = 0.
+- **Giả định:** baseline dùng cùng `k`/`τ` với simulator (hiệu chỉnh hoàn hảo, không nhiễu). G4 cần thêm sai lệch/nhiễu trước khi đánh giá. Provenance mẫu: manifest `autosun-replay-v1`, composition `hybrid` (tải/điện áp public, nhiệt/lỗi/giới hạn synthetic, dòng thực/công suất/residual derived).
+- Bản trước (`ema-tau45-v1`: nhu cầu cố định 60 A, `k = 0,004`, `τ = 45 s`, hệ số lỗi cố định 0,7) là cấu hình của các run `5c623c09…` và `39207f81…` bên dưới.
 
 **Lệnh và trạng thái:** `POST /api/v1/incidents/{id}/commands` (`Idempotency-Key`; cùng key khác payload → 409; header tạm `X-Operator-Secret`, G3 thay bằng session) → worker kiểm tra trạng thái → simulator claim qua `GET /simulator/commands`, báo `POST /simulator/commands/{id}/result` → API cập nhật `runs.sim`.
 
@@ -83,7 +85,21 @@ Một connector, theo CONTRACT §3. Code: `chargeops/lifecycle.py` (state machin
 - `verifying`: 120 s cửa sổ đạt liên tục (residual từng mẫu <3, dòng và nhu cầu ≥90 % ref, quality) → `resolved`, gỡ `unresolved`. Vi phạm ghi `retest_reset` với lý do `hot`/`low_load`/`insufficient_data`. Alert hợp lệ sau khi bắt đầu retest → về `open` (`recurrence`).
 - Command quá 30 s → `timed_out`; kết quả đến muộn ghi `late_command_result`, operator gửi lại (dùng lại target). Dừng run ghi `run_stopped`, giữ trạng thái.
 
-**Kết quả local — run `5c623c09…` (thermal_fault, `chargeops.demo --delay 10`):**
+**Kết quả local với đường tải thật — run `72956d89…` (thermal_fault, profile `…00218810`, `ema-tau60-k0013-v2`, `chargeops.demo --delay 10`):**
+
+| t+ (s) | Sự kiện |
+|---|---|
+| 329 | `opened` (detector local; mô phỏng trên giấy: 330) |
+| 342 / 356 | `acknowledge` → `reduce_load` |
+| 433 | `load_reduction_verified` |
+| 567 | `mitigated` (residual cửa sổ 2,98; 211 s sau giảm tải, mô phỏng: 210) |
+| 578 / 581 | `maintenance` dispatched / applied |
+| 593 / 597 | `verify_recovery` → `verifying` |
+| 732 | `resolved` |
+
+MongoDB: ref 129,8 A, giới hạn gốc 250 A, target 64,9 A (`min(125, 64,9)`); dòng thực 64,9–130,5 A; nhiệt cao nhất 56,3 °C; mọi mẫu có provenance `hybrid` / `autosun-replay-v1`; `runs.sim` cuối = `{current_limit_a: 250, fault_cleared: true}`.
+
+**Kết quả local cấu hình cũ — run `5c623c09…` (thermal_fault, `chargeops.demo --delay 10`):**
 
 | t+ (s) | Sự kiện |
 |---|---|

@@ -1,6 +1,6 @@
 # Data card — ChargeOps
 
-Trạng thái ngày 20/10/2026: **đã tải và kiểm định** `processed_data_longer_than_30.xlsx` (SHA-256 khớp nguồn). Kết luận: dùng được làm **mẫu đường tải** sau khi làm sạch; không dùng làm ground truth lỗi charger. Kết quả ở mục "Kết quả kiểm định 20/10/2026"; manifest `data/manifests/autosun-v3.json`; tái lập bằng `scripts/audit_autosun.py`. Simulator chưa replay đường tải (đã quyết định, chưa triển khai).
+Trạng thái ngày 20/10/2026: **đã tải và kiểm định** `processed_data_longer_than_30.xlsx` (SHA-256 khớp nguồn). Kết luận: dùng được làm **mẫu đường tải** sau khi làm sạch; không dùng làm ground truth lỗi charger. Kết quả ở mục "Kết quả kiểm định 20/10/2026"; manifest `data/manifests/autosun-v3.json`; tái lập bằng `scripts/audit_autosun.py`. Simulator replay đường tải của 50 phiên từ `chargeops/profiles/autosun_v3.csv` (xuất bởi script kiểm định, SHA-256 trong manifest); mô hình nhiệt dùng k từ dữ liệu và τ nén — xem MINIMAL_LOOP.md, mục "Vòng xử lý G2".
 
 ## Nguồn ứng viên
 
@@ -73,7 +73,8 @@ Tái lập: `uv run --with pandas==2.2.3 --with openpyxl==3.1.5 python -I script
 **Quyết định (20/10/2026):**
 
 - Dùng dataset làm mẫu đường tải: simulator replay dòng điện của 50 phiên đã chọn, nội suy 1 phút → 5 giây (ghi rõ là nội suy, không phải tần suất gốc). Provenance `hybrid`: tải `public`, nhiệt và lỗi `synthetic`, residual `derived`.
-- Mô hình nhiệt: dùng k theo bậc độ lớn từ dữ liệu (~0,0013 °C/A²), giữ τ nén (~60 s) để một lượt demo khoảng 15 phút; ghi rõ là **thời gian nhiệt được nén khoảng 35 lần** so với súng sạc thật. Hệ số lỗi và ngưỡng 8/3 °C phải hiệu chỉnh lại trên tập tuning (G4) vì residual phụ thuộc k.
+- Mô hình nhiệt: dùng k theo bậc độ lớn từ dữ liệu (0,0013 °C/A²), giữ τ nén (60 s) để một lượt demo khoảng 15 phút; ghi rõ là **thời gian nhiệt được nén khoảng 37 lần** so với súng sạc thật. Lỗi được định nghĩa bằng °C nóng thêm ở tải lúc lỗi bắt đầu (mặc định 10,5 °C) để mức nghiêm trọng không phụ thuộc dòng của từng phiên; ngưỡng 8/3 °C giữ nguyên. Phân bố mức nghiêm trọng và ngưỡng được khóa trên tập tuning (G4).
+- Dòng trong dataset là dòng thực đo được; simulator coi đó là nhu cầu xe (`requested_current_a`). Giới hạn gốc 250 A (dòng lớn nhất quan sát được) là giả định synthetic.
 - Nhãn pin, `types`, `class_judge` không dùng cho detector.
 
 **Attribution:** haosen yang, Jinpeng Tian, Weijie Mai, Chi-yung Chung. *A dataset of EV battery charging from Shenzhen Auto Electric Power Plant Co., Ltd (Autosun) and Hong Kong Polytechnic University*, Mendeley Data, V3, 2024. DOI [10.17632/c7gg94tmvz.3](https://doi.org/10.17632/c7gg94tmvz.3). CC BY 4.0. Biến đổi của ChargeOps: loại trùng giữa sheet, lọc phiên theo quy tắc trên, chỉ dùng dòng/điện áp, nội suy 1 phút → 5 giây.

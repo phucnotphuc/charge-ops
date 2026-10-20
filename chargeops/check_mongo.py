@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from pymongo.errors import DuplicateKeyError
 
-from chargeops.domain import CONNECTOR, block_end, now, window_evidence
+from chargeops.domain import CONNECTOR, block_end, now, window_evidence, with_residuals
 from chargeops.lifecycle import open_incident
 from chargeops.storage import database, initialize, window_rows
 
@@ -39,12 +39,14 @@ def main():
             }
             for i in range(12)
         ]
+        expected = with_residuals([dict(s) for s in samples])
         db.telemetry.insert_many(samples)
         # Retry with same sample identity, but a new MongoDB document identity.
         db.telemetry.insert_one({k: v for k, v in samples[0].items() if k != "_id"})
         evidence = window_evidence(window_rows(db, run_id, end), end)
         assert evidence["count"] == 12 and evidence["quality"]
-        assert abs(evidence["residual_mean"] - 12) < 0.00001
+        # Deduplicated pipeline + baseline on real MongoDB equals the baseline on the 12 distinct samples.
+        assert abs(evidence["residual_mean"] - sum(r["residual"] for r in expected) / 12) < 0.00001
         run = {"_id": run_id}
         open_incident(db, run, evidence, "local", end, "smoke")
         open_incident(db, run, evidence, "local", end, "smoke-retry")

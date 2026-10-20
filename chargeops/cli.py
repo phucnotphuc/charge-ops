@@ -7,6 +7,7 @@ from pymongo.errors import DuplicateKeyError
 
 from chargeops.config import settings
 from chargeops.domain import BASELINE_VERSION, now
+from chargeops.simulator import DEMO_PROFILE, PROFILES
 from chargeops.storage import database, initialize
 
 
@@ -16,6 +17,7 @@ def main():
     start = sub.add_parser("start")
     start.add_argument("--mode", choices=["local", "datadog"], default="datadog")
     start.add_argument("--scenario", choices=["healthy", "thermal_fault"], default="thermal_fault")
+    start.add_argument("--profile", default=DEMO_PROFILE, help="Autosun transaction_id to replay (one of 50)")
     sub.add_parser("stop")
     sub.add_parser("status")
     command = sub.add_parser("command", help="Operator command through the HTTP API")
@@ -48,6 +50,8 @@ def main():
     db = database()
     initialize(db)
     if args.command == "start":
+        if args.profile not in PROFILES:
+            parser.exit(1, f"Unknown profile {args.profile}; see chargeops/profiles/autosun_v3.csv\n")
         run_id = str(uuid4())
         try:
             db.runs.insert_one(
@@ -57,6 +61,7 @@ def main():
                     "status": "pending",
                     "mode": args.mode,
                     "scenario": args.scenario,
+                    "profile_id": args.profile,
                     "created_at": now(),
                     "baseline_version": BASELINE_VERSION,
                     "stop_requested": False,

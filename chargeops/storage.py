@@ -36,15 +36,29 @@ def initialize(db):
         {"_id": MANIFEST},
         {
             "$setOnInsert": {
-                "composition": "synthetic",
+                "composition": "hybrid",
                 "version": 1,
                 "fields": {
-                    "electrical": "synthetic",
-                    "temperature": "synthetic",
+                    "requested_current_a": "public: Autosun-PolyU v3 charginga, 1-min linearly interpolated to 5 s",
+                    "voltage_v": "public: Autosun-PolyU v3 chargingv, 1-min linearly interpolated to 5 s",
+                    "current_a": "derived: min(requested_current_a, current_limit_a)",
+                    "power_kw": "derived: voltage_v * current_a / 1000",
+                    "current_limit_a": "synthetic: 250 A rating, operator commands",
+                    "connector_temperature_c": "synthetic: thermal lag model with injected fault",
+                    "ambient_temperature_c": "synthetic",
                     "ids": "synthetic",
                     "residual": "derived",
                 },
-                "baseline": f"{BASELINE_VERSION}: first-order lag (tau 45 s) toward ambient + 0.004 * current_a^2",
+                "source": {
+                    "doi": "10.17632/c7gg94tmvz.3",
+                    "license": "CC BY 4.0",
+                    "authors": "haosen yang, Jinpeng Tian, Weijie Mai, Chi-yung Chung",
+                    "file": "chargeops/profiles/autosun_v3.csv (see data/manifests/autosun-v3.json)",
+                },
+                "baseline": (
+                    f"{BASELINE_VERSION}: cold start at ambient, first-order lag (tau 60 s, compressed ~37x) "
+                    "toward ambient + 0.0013 * current_a^2"
+                ),
             }
         },
         upsert=True,

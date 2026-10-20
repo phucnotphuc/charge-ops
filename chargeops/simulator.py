@@ -1,6 +1,9 @@
+import csv
 import math
 import time
+from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 from uuid import UUID, uuid5
 
 import httpx
@@ -10,21 +13,55 @@ from chargeops.domain import AMBIENT_C, THERMAL_K, lag, now
 from chargeops.logging import event, logger
 
 # Ground truth: simulator-only, never read by the detector. Calibration knobs.
-DEMAND_A = 60.0
-ORIGINAL_LIMIT_A = 200.0
+ORIGINAL_LIMIT_A = 250.0  # highest current in the Autosun–PolyU v3 data
 FAULT_START_S = 120
 FAULT_RAMP_S = 60
-FAULT_FACTOR = 0.7  # extra I²R heating at full fault: residual ≈10.1 °C at 60 A, ≈2.5 °C at 30 A
+FAULT_RESIDUAL_C = 10.5  # extra heat at the onset load; halving current leaves a quarter (≈2.6 °C)
+DEMO_PROFILE = "44020100400000052012112300218810"  # ~130 A, stable for 92 of 97 minutes
 
 
-def physics(elapsed, scenario, sim):
-    """Current, applied limit and steady-state temperature; `sim` holds applied commands."""
+def load_profiles():
+    """Per-minute (current A, voltage V) of the 50 audited sessions (data/manifests/autosun-v3.json)."""
+    profiles = defaultdict(list)
+    with (Path(__file__).parent / "profiles" / "autosun_v3.csv").open(encoding="utf-8") as f:
+        for row in csv.DictReader(f):  # rows are ordered by minute within each session
+            profiles[row["transaction_id"]].append((float(row["current_a"]), float(row["voltage_v"])))
+    return dict(profiles)
+
+
+PROFILES = load_profiles()
+
+
+def replay(profile, elapsed):
+    """Vehicle demand and voltage, linearly interpolated between published minutes; 0 A after the session."""
+    position = elapsed / 60
+    minute = int(position)
+    if minute >= len(profile):
+        return 0.0, profile[-1][1]
+    if minute == len(profile) - 1:
+        return profile[minute]
+    weight = position - minute
+    (a0, v0), (a1, v1) = profile[minute], profile[minute + 1]
+    return a0 + (a1 - a0) * weight, v0 + (v1 - v0) * weight
+
+
+def physics(elapsed, scenario, sim, profile):
+    """Demand, current, limit, voltage and steady-state temperature; `sim` holds applied commands."""
+    demand, voltage = replay(profile, elapsed)
     limit = sim.get("current_limit_a", ORIGINAL_LIMIT_A)
-    current = min(DEMAND_A, limit)
+    current = min(demand, limit)
     fault = 0.0
-    if scenario == "thermal_fault" and elapsed >= FAULT_START_S and not sim.get("fault_cleared"):
-        fault = FAULT_FACTOR * (1 - math.exp(-(elapsed - FAULT_START_S) / FAULT_RAMP_S))
-    return current, limit, AMBIENT_C + THERMAL_K * current**2 * (1 + fault)
+    onset_a = min(replay(profile, FAULT_START_S)[0], ORIGINAL_LIMIT_A)
+    if (
+        scenario == "thermal_fault"
+        and elapsed >= FAULT_START_S
+        and onset_a > 0
+        and not sim.get("fault_cleared")
+    ):
+        # Extra I²R heating sized in °C at the onset load, so severity does not depend on the session's current.
+        full = FAULT_RESIDUAL_C / (THERMAL_K * onset_a**2)
+        fault = full * (1 - math.exp(-(elapsed - FAULT_START_S) / FAULT_RAMP_S))
+    return demand, current, limit, voltage, AMBIENT_C + THERMAL_K * current**2 * (1 + fault)
 
 
 def main():
@@ -52,12 +89,16 @@ def main():
                     measured = now()
                     elapsed = (measured - datetime.fromisoformat(run["started_at"])).total_seconds()
                     if pending is None or pending["run_id"] != run["_id"]:
-                        current, limit, steady = physics(elapsed, run["scenario"], run.get("sim") or {})
+                        profile = PROFILES[run.get("profile_id", DEMO_PROFILE)]
+                        demand, current, limit, voltage, steady = physics(
+                            elapsed, run["scenario"], run.get("sim") or {}, profile
+                        )
                         if thermal.get("run_id") != run["_id"]:
+                            # Cold start at plug-in; a restarted simulator resumes from the last stored sample.
                             last = run.get("last_sample")
                             thermal = {
                                 "run_id": run["_id"],
-                                "temperature": last["connector_temperature_c"] if last else steady,
+                                "temperature": last["connector_temperature_c"] if last else AMBIENT_C,
                                 "at": datetime.fromisoformat(last["measured_at"]) if last else measured,
                             }
                         dt = (measured - thermal["at"]).total_seconds()
@@ -68,9 +109,9 @@ def main():
                             "connector_id": "connector-1",
                             "measured_at": measured.isoformat(),
                             "current_a": current,
-                            "voltage_v": 400.0,
-                            "power_kw": 0.4 * current,
-                            "requested_current_a": DEMAND_A,
+                            "voltage_v": voltage,
+                            "power_kw": voltage * current / 1000,
+                            "requested_current_a": demand,
                             "current_limit_a": limit,
                             "connector_temperature_c": thermal["temperature"],
                             "ambient_temperature_c": AMBIENT_C,

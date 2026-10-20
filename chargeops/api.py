@@ -92,7 +92,7 @@ def ingest(batch: Batch, store=Depends(db)):
                 "station_id": "station-1",
                 "charger_id": "charger-1",
             },
-            provenance={"composition": "synthetic", "manifest_id": MANIFEST},
+            provenance={"composition": "hybrid", "manifest_id": MANIFEST},
         )
         documents.append(document)
     store.telemetry.insert_many(documents)

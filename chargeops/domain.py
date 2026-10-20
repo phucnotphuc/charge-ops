@@ -7,13 +7,14 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, FiniteFloat, field_validator
 
 CONNECTOR = "connector-1"
-MANIFEST = "synthetic-thermal-lag-v1"
+MANIFEST = "autosun-replay-v1"
 RUN_MAX_S = 1800
 # Healthy thermal model shared by simulator and detector baseline (calibrated, not ground truth).
+# k: Autosun–PolyU v3 gun-temperature fit (0.0011–0.0015). tau: real ~37 min, compressed ~37x for a 15-minute demo.
 AMBIENT_C = 25.0
-THERMAL_K = 0.004  # °C per A² at steady state
-THERMAL_TAU_S = 45.0
-BASELINE_VERSION = "ema-tau45-v1"
+THERMAL_K = 0.0013  # °C per A² at steady state
+THERMAL_TAU_S = 60.0
+BASELINE_VERSION = "ema-tau60-k0013-v2"
 
 
 def now():
@@ -129,12 +130,13 @@ def lag(temperature, steady, dt):
 def with_residuals(rows):
     """Expected temperature lags ambient + k·I² over actual sample spacing; rows sorted, deduplicated.
 
-    Starts at equilibrium on the run's first sample, so history must begin at run start."""
+    Cold start: the gun is at ambient when the session begins, so history must begin at run start.
+    A gun already hot at plug-in therefore shows as positive residual instead of being absorbed."""
     expected = previous = None
     for row in rows:
         steady = row["ambient_temperature_c"] + THERMAL_K * row["current_a"] ** 2
         if expected is None:
-            expected = steady
+            expected = row["ambient_temperature_c"]
         else:
             expected = lag(expected, steady, (row["measured_at"] - previous).total_seconds())
         previous = row["measured_at"]
