@@ -1,0 +1,2 @@
+# Keep replay data byte-identical so its SHA-256 matches data/manifests/autosun-v3.json
+chargeops/profiles/*.csv -text
