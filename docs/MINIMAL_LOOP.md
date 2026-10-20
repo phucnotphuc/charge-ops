@@ -42,6 +42,17 @@ Phần lớn ~1 phút 55 giây từ lúc vượt ngưỡng đến alert là cử
 
 Live run đã dùng: 2/20.
 
+**Đối chiếu MongoDB ↔ Datadog:** phía MongoDB tính lại từng block 15 giây như worker (`telemetry_pipeline`, 15 giây cuối mỗi window), khớp 100% với log `metrics_emitted`. Phía Datadog lấy `sum:chargeops.{samples,residual_positive,residual_negative}{run_id:…}.as_count().rollup(sum, 60)` qua Metrics API.
+
+| Run | Mẫu (MongoDB → Datadog) | Tổng residual dương | Residual trung bình |
+|---|---|---|---|
+| Healthy `640e418e…` | 86 → 86 (30/30 block) | 0 → 0 | 0,000 → 0,000 |
+| Thermal `f738bf26…` | 114 → 111 (39/40 block) | 1950,8 → 1876,1 | 17,11 → 16,90 |
+
+Block thiếu kết thúc 02:52:00: worker đã gửi (có log `metrics_emitted`) nhưng `wsl --shutdown` tắt Agent trước khi Agent flush (DogStatsD gom ~10 giây). Đúng giới hạn UDP nêu ở mục dưới; mọi block khác khớp từng phút. Không tắt/restart Docker trong lúc có run Datadog. Residual âm luôn 0 ở cả hai run nên chưa kiểm chứng phần âm.
+
+**Log Management:** Datadog nhận đủ 6 log `webhook_received`/`webhook_processed` của run `f738bf26…` (đã export CSV vào `artifacts/`), tìm được bằng `@run_id`, outcome khớp MongoDB. Từ commit sau `07afb21`, mỗi log có `timestamp` (Datadog dùng làm thời gian log, trước đó là thời điểm Agent đọc file nên cặp received/processed trùng giờ và có thể đảo thứ tự) và `component` (`api`/`worker`, thay field `service` cũ); `webhook_processed` có thêm `connector_id` và `incident_id` của incident đang mở. Kiểm chứng bằng webhook thủ công `manual-log-check-20261020` (run đã dừng → `inactive_or_wrong_mode`, không mở incident): Datadog hiện received 03:33:42.020 → processed 03:33:42.055, `@incident_id:c2405a30-00b5-4688-90f4-d667ecaa1372` tìm được log liên quan. Log trước 03:32 UTC 20/10 vẫn ở format cũ.
+
 **Sự cố gặp phải và cách xử lý:**
 
 - `setup_datadog.py` bị HTTP 400 ở `/dashboard`: widget formula thiếu `"response_format": "timeseries"`. Đã sửa; script giờ in nội dung lỗi Datadog với mọi API trừ webhook (body webhook có thể chứa secret).
@@ -117,7 +128,7 @@ Thiếu monitor ID thì worker từ chối start, không tiêu run budget. Tối
 - Dashboard: residual, số mẫu, quality theo run/connector.
 - Monitor nhiệt: mỗi block 15 giây gửi tổng residual dương, trị tuyệt đối residual âm và số mẫu; `sum(last_1m)` cùng `.as_count()` tính `(positive - negative) / samples`. Không gửi rolling mean rồi lấy mean lần nữa. Việc alignment/flush của Agent và cửa sổ Datadog phải kiểm chứng thật, không suy từ unit tests.
 - Monitor quality là gate kỹ thuật: ALERT của monitor này nghĩa là dữ liệu hợp lệ. Chỉ composite `thermal && quality` gửi webhook sự cố. Khi quality mất, composite recovery không chứng minh connector đã sửa.
-- Logs từ `/logs/*.log` được Agent thu thập; tìm `run_id`, `event_id`, `webhook_received` và `webhook_processed`. API không log secret/header/raw webhook. Chưa có APM.
+- Logs từ `/logs/*.log` được Agent thu thập (tag `service:chargeops`); mỗi dòng JSON có `timestamp`, `component`, `event`. Tìm `@run_id:…`, `@event_id:…`, `@incident_id:…`, `@event:(webhook_received OR webhook_processed)`. API không log secret/header/raw webhook. Chưa có APM.
 - Webhook dùng `$ID`, `$ALERT_ID`, `$ALERT_SCOPE`, `$DATE`, `$ALERT_TRANSITION`; API chuẩn hóa thành event/run/connector/timestamp/status, thiếu identity thì quarantine. Worker chỉ nhận đúng composite ID đã cấu hình, đúng run đang active và evidence hợp lệ gần thời điểm alert.
 - Incident có snapshot ngoài TTL telemetry, timestamps Datadog/nhận webhook/mở incident, `webhook_delivery_seconds` và `evidence_to_incident_seconds`. Đây là độ trễ từng đoạn; **không phải MTTD từ lúc fault injection**. Chưa có benchmark MTTD.
 - Tunnel chỉ forward POST `/api/v1/webhooks/datadog`, mọi đường khác trả 404. Endpoint cần secret riêng.
@@ -125,8 +136,8 @@ Thiếu monitor ID thì worker từ chối start, không tiêu run budget. Tối
 ## 4. Checklist nghiệm thu thật (cập nhật 20/10)
 
 1. ✅ check_mongo đạt trên MongoDB thật. ✅ Healthy run Datadog `640e418e…` không mở incident.
-2. ✅ Monitor Triggered, webhook vào inbox, đúng một incident `source=datadog` (run `f738bf26…`). Metrics thật có trên dashboard. ⏳ Chưa kiểm tra logs trên Datadog Log Management.
-3. ⏳ Chưa so sánh count/mean local với Datadog; chưa thử mất mẫu/residual âm.
+2. ✅ Monitor Triggered, webhook vào inbox, đúng một incident `source=datadog` (run `f738bf26…`). Metrics thật có trên dashboard. ✅ Logs có trên Datadog Log Management, nối được run/connector/incident.
+3. ✅ Count/mean MongoDB khớp Datadog (healthy 86/86; thermal 39/40 block, block thiếu do tắt Agent). Worker không mở incident khi evidence thiếu chất lượng (unit test). ⏳ Chưa thử residual âm và độ trễ gửi metric.
 4. ✅ Retry cùng webhook trả `duplicate`; alert cho run đã dừng bị từ chối. Thứ tự sai chỉ có unit test.
 5. ✅ Recovery thật không đóng incident. Dừng simulator/mất dữ liệu: chưa thử riêng.
 6. ✅ Restart API/worker giữ inbox/incident. ⏳ Chưa lưu logs/ảnh vào artifacts. Không đưa URL tunnel/secrets vào repo.

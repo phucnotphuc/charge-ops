@@ -157,7 +157,18 @@ def tick(db, stats, log):
                 )
     for item in db.inbox.find({"processed": False}).sort("occurred_at", 1).limit(100):
         outcome = process_event(db, item, at, settings().dd_monitor_id)
-        event(log, "webhook_processed", run_id=item["run_id"], event_id=item["_id"], outcome=outcome)
+        incident = db.incidents.find_one(
+            {"run_id": item["run_id"], "connector_id": item["connector_id"], "unresolved": True}, {"_id": 1}
+        )
+        event(
+            log,
+            "webhook_processed",
+            run_id=item["run_id"],
+            connector_id=item["connector_id"],
+            event_id=item["_id"],
+            incident_id=incident and incident["_id"],
+            outcome=outcome,
+        )
 
 
 def main():

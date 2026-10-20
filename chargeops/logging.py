@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import UTC, datetime
 from pathlib import Path
 
 from chargeops.config import settings
@@ -17,4 +18,6 @@ def logger(service):
 
 
 def event(log, name, **fields):
-    log.info(json.dumps({"service": log.name, "event": name, **fields}, default=str))
+    # Datadog uses `timestamp` as the log date; `component` avoids clashing with the Agent's service tag.
+    at = datetime.now(UTC).isoformat(timespec="milliseconds")
+    log.info(json.dumps({"timestamp": at, "component": log.name, "event": name, **fields}, default=str))

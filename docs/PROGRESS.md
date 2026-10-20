@@ -13,7 +13,9 @@ Commit `ccb67d3` trên `main` (đã push). Chi tiết và timeline: MINIMAL_LOOP
 - Run Datadog healthy `640e418e…`: đạt — ~7,5 phút không incident/webhook, residual 0,0, quality 26/26 cửa sổ; 23/26 cửa sổ đúng 12 mẫu sau sửa simulator.
 - Ngân sách live run: 2/20 đã dùng (trial `hackathon-2026`). Datadog trial còn 9 ngày tính từ 20/10 (hết ~29/10, trước hạn nộp 31/10) → lưu evidence sớm.
 - Sửa trong lượt: dashboard widget thiếu `response_format` (HTTP 400); simulator ngủ theo mốc 5 giây wall-clock vì timer VM Docker Desktop chạy nhanh ~7% (`.wslconfig` clocksource không khắc phục được, đã gỡ); test missing-monitor bị `.env` thật ảnh hưởng.
-- Còn lại G1: kiểm tra Log Management (`run_id`, `webhook_received`/`webhook_processed`) trên Datadog; lưu ảnh dashboard/monitor/incident đã che URL tunnel vào `artifacts/`; đối chiếu số mẫu local và Datadog.
+- Log Management: đủ 6 log webhook của run `f738bf26…` trên Datadog (CSV đã lưu `artifacts/`). Log giờ có `timestamp`, `component`, và `webhook_processed` có `connector_id`/`incident_id`; đã kiểm chứng trên Datadog bằng webhook thủ công `manual-log-check-20261020`.
+- Đối chiếu MongoDB ↔ Datadog: healthy 86/86 mẫu, residual 0; thermal 39/40 block khớp từng phút, block 02:52:00 mất do `wsl --shutdown` tắt Agent trước khi flush (giới hạn UDP đã biết).
+- Còn lại G1: lưu ảnh dashboard/monitor/incident đã che URL tunnel vào `artifacts/` (nếu chưa); chưa có web/frontend; chưa đối chiếu từng trường payload webhook với CONTRACT.md. Tiếp theo: G2.
 
 ## Trạng thái ngày 14/10
 
