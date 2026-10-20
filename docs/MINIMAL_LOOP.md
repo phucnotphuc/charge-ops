@@ -2,11 +2,52 @@
 
 ## Phạm vi và bằng chứng
 
-Đã viết API FastAPI, worker, simulator một connector, schema/index/time-series MongoDB, aggregation deduplicate/residual, inbox webhook, incident idempotent, Compose, cấu hình Agent/Caddy và script tạo tài nguyên Datadog. Có local mode riêng, không tự fallback khi Datadog lỗi. Đã khóa dependencies Python và chạy tests logic/API bằng mongomock; Compose validate đạt. **Chưa chạy container, MongoDB thật hoặc Datadog thật; gate chưa đạt.**
+Đã viết API FastAPI, worker, simulator một connector, schema/index/time-series MongoDB, aggregation deduplicate/residual, inbox webhook, incident idempotent, Compose, cấu hình Agent/Caddy và script tạo tài nguyên Datadog. Có local mode riêng, không tự fallback khi Datadog lỗi. Đã khóa dependencies Python và chạy tests logic/API bằng mongomock; Compose validate đạt. **Ngày 20/10 đã chạy container, MongoDB thật và Datadog thật; gate một connector → Datadog → incident đạt** — xem [Kết quả kiểm chứng thật](#kết-quả-kiểm-chứng-thật--20102026).
 
 Người dùng yêu cầu bắt đầu ngay trước 17/10; xem DISCLOSURE.md. Không commit/push trong lượt này. Bộ test không được sử dụng làm video/bằng chứng tích hợp thật.
 
 Kết quả kiểm tra ngày 14/10: **13 tests passed** (logic/API với mongomock), Ruff đạt, Python compile đạt và `docker compose --profile observability config --quiet` đạt. Một cảnh báo deprecation TestClient/httpx được ghi ở cuối tài liệu. `chargeops.check_mongo` và setup Datadog chưa chạy vì Engine/keys chưa sẵn sàng.
+
+## Kết quả kiểm chứng thật — 20/10/2026
+
+Commit `ccb67d3`. Mốc thời gian theo UTC, lấy từ MongoDB (`runs`, `inbox`, `incidents`) và dashboard Datadog.
+
+**MongoDB thật:** `check_mongo` PASS trên `mongo:8.0.5` (time series + TTL, aggregation khử trùng/residual, unique active run, incident idempotent). `/api/v1/ready` trả `ready`.
+
+**Run local `90b92398…` (thermal_fault):** start 02:25:54, incident `source=local` lúc 02:29:03; cửa sổ evidence 13 mẫu, quality true, residual_mean 10,9.
+
+**Run Datadog `f738bf26…` (thermal_fault):**
+
+| Mốc | UTC |
+|---|---|
+| Run start | 02:44:31 |
+| Fault (start + 120 s) | ~02:46:31 |
+| Residual > 8 trên dashboard | ~02:47:15 |
+| Composite monitor `334614967` Triggered | 02:49:08 |
+| Webhook vào inbox (event `8861753711242670672`) | 02:49:09,7 — `webhook_delivery_seconds` 1,7 |
+| Incident `source=datadog` mở | 02:49:10,6 — `evidence_to_incident_seconds` 10,6 |
+
+Phần lớn ~1 phút 55 giây từ lúc vượt ngưỡng đến alert là cửa sổ `last_1m` cộng độ trễ đánh giá của Datadog. Đây là số liệu một run, không phải benchmark MTTD.
+
+**Checklist mục 4 đã kiểm chứng:**
+
+| Kiểm tra | Kết quả | Nguồn |
+|---|---|---|
+| Replay cùng webhook (2 lần, có secret) | `duplicate`; vẫn 1 incident Datadog | POST thủ công |
+| Recovery không đóng incident | Inbox `8861763766285793385` → `recovery_recorded_not_resolved`; incident vẫn `open` | Webhook `Recovered` thật từ Datadog |
+| Alert sau khi run dừng | Inbox `8861764779028762423` → `inactive_or_wrong_mode`; không mở incident mới | Webhook thật từ Datadog |
+| Restart giữ dữ liệu | Sau `docker compose restart api worker` và `wsl --shutdown`: 2 incident, 3 inbox, budget giữ nguyên | MongoDB |
+| Healthy run không mở incident | Đang chờ — run `640e418e…` | Datadog thật |
+| Tunnel chỉ mở webhook | POST thiếu secret → 401; đường khác → 404 | curl qua tunnel |
+
+Live run đã dùng: 2/20.
+
+**Sự cố gặp phải và cách xử lý:**
+
+- `setup_datadog.py` bị HTTP 400 ở `/dashboard`: widget formula thiếu `"response_format": "timeseries"`. Đã sửa; script giờ in nội dung lỗi Datadog với mọi API trừ webhook (body webhook có thể chứa secret).
+- Timer trong VM Docker Desktop chạy nhanh ~7% (`sleep(30)` ≈ 28 giây thật); wall clock được kéo lùi ~1,7–2 giây mỗi ~30 giây. Host Windows bình thường. Đổi clocksource sang `hyperv_clocksource_tsc_page` (runtime và qua `.wslconfig` khi boot) không khắc phục được. Simulator giờ ngủ đến mốc 5 giây wall-clock, cửa sổ trở về ~12 mẫu. Giới hạn còn lại: timestamp lệch tới ~2 giây, nên `webhook_delivery_seconds` (so đồng hồ Datadog với VM) chỉ gần đúng.
+- `wsl --shutdown`/restart Docker Desktop: chỉ api/worker/simulator có `restart: unless-stopped`; mongo/datadog/webhook-gateway/tunnel phải `docker compose --profile observability up -d` lại. Tunnel nhận URL mới → chạy lại `setup_datadog.py` với URL mới (lấy URL cuối cùng trong `docker compose logs tunnel`).
+- Lệnh CLI phải chạy trong container (`docker compose exec api python -m chargeops.cli …`); host không phân giải được `mongo:27017`.
 
 ## Những phần cố ý chưa triển khai
 
@@ -81,14 +122,14 @@ Thiếu monitor ID thì worker từ chối start, không tiêu run budget. Tối
 - Incident có snapshot ngoài TTL telemetry, timestamps Datadog/nhận webhook/mở incident, `webhook_delivery_seconds` và `evidence_to_incident_seconds`. Đây là độ trễ từng đoạn; **không phải MTTD từ lúc fault injection**. Chưa có benchmark MTTD.
 - Tunnel chỉ forward POST `/api/v1/webhooks/datadog`, mọi đường khác trả 404. Endpoint cần secret riêng.
 
-## 4. Checklist nghiệm thu thật (chưa thực hiện)
+## 4. Checklist nghiệm thu thật (cập nhật 20/10)
 
-1. check_mongo đạt trên MongoDB thật; healthy run không mở incident.
-2. Run datadog có metrics/logs thật, monitor thực sự Triggered, webhook vào inbox, đúng một incident `source=datadog`.
-3. So sánh cửa sổ count/mean local với Datadog, gồm residual âm, mất mẫu và độ trễ gửi; kiểm tra worker không chấp nhận evidence thiếu chất lượng.
-4. Retry cùng webhook không tạo incident thứ hai; event run đã dừng/đến sai thứ tự không tạo incident mới.
-5. Recovery không đóng incident; dừng simulator/mất dữ liệu không được coi đã phục hồi.
-6. Restart API/worker giữ inbox/incident; lưu logs, ảnh dashboard/monitor và timestamps đã che thông tin nhạy cảm vào artifacts. Không đưa URL tunnel/secrets vào repo.
+1. ✅ check_mongo đạt trên MongoDB thật. ⏳ Healthy run Datadog `640e418e…` đang chạy.
+2. ✅ Monitor Triggered, webhook vào inbox, đúng một incident `source=datadog` (run `f738bf26…`). Metrics thật có trên dashboard. ⏳ Chưa kiểm tra logs trên Datadog Log Management.
+3. ⏳ Chưa so sánh count/mean local với Datadog; chưa thử mất mẫu/residual âm.
+4. ✅ Retry cùng webhook trả `duplicate`; alert cho run đã dừng bị từ chối. Thứ tự sai chỉ có unit test.
+5. ✅ Recovery thật không đóng incident. Dừng simulator/mất dữ liệu: chưa thử riêng.
+6. ✅ Restart API/worker giữ inbox/incident. ⏳ Chưa lưu logs/ảnh vào artifacts. Không đưa URL tunnel/secrets vào repo.
 
 Kiểm thử logic:
 
@@ -98,7 +139,7 @@ uv run ruff check chargeops scripts tests
 docker compose --profile observability config --quiet
 ```
 
-Tests mongomock không thay thế kiểm thử MongoDB time series/index thật. TestClient hiện có cảnh báo deprecation httpx từ Starlette; tests vẫn chạy, chưa nâng transport ngoài phạm vi gate.
+Kết quả ngày 20/10: 13 passed, Ruff đạt. Tests mongomock không thay thế kiểm thử MongoDB time series/index thật. TestClient hiện có cảnh báo deprecation httpx từ Starlette; tests vẫn chạy, chưa nâng transport ngoài phạm vi gate.
 
 ## Nguồn triển khai
 

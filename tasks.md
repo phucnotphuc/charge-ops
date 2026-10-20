@@ -1,8 +1,10 @@
 # ChargeOps — Checklist thi MUGVN 2026
 
-Cập nhật: 14/10/2026, giờ Việt Nam. Tổng hợp review độc lập của ba sub-agent: thể lệ/hồ sơ, kỹ thuật và dữ liệu/đánh giá; agent chính đối chiếu nguồn BTC do người dùng cung cấp.
+Cập nhật: 20/10/2026, giờ Việt Nam (bản gốc 14/10: tổng hợp review độc lập của ba sub-agent: thể lệ/hồ sơ, kỹ thuật và dữ liệu/đánh giá; agent chính đối chiếu nguồn BTC do người dùng cung cấp).
 
-**Đánh giá hiện tại:** hướng giải pháp phù hợp bài toán phát hiện → điều tra → xử lý. Chưa đủ bằng chứng để gọi là bài thi hợp lệ hoặc MVP đạt: repo mới có tài liệu, chưa có ứng dụng, tích hợp Datadog hay kết quả đo. Ưu tiên xác nhận đăng ký, sau đó chứng minh tích hợp thật trước khi mở rộng.
+**Đánh giá hiện tại (20/10):** vòng tối thiểu một connector → MongoDB → Datadog monitor → webhook → incident đã chạy thật (commit `ccb67d3`, run `f738bf26…`; chi tiết [MINIMAL_LOOP](docs/MINIMAL_LOOP.md#kết-quả-kiểm-chứng-thật--20102026)). G1 gần đạt: còn Log Management, đối chiếu số mẫu local/Datadog và lưu evidence. Chưa có UI, vòng xử lý G2 hay kết quả đánh giá.
+
+**Rủi ro P0 mới:** Datadog trial còn 9 ngày tính từ 20/10 (hết ~29/10), trước hạn nộp 31/10 và thời gian chấm đến 22/11. Lưu đủ evidence/video Datadog trước 29/10 và hỏi BTC/Datadog về gia hạn hoặc cách chấm khi trial hết.
 
 Quy ước: `[x]` đã kiểm chứng trong lượt review này; `[ ]` chưa hoàn thành/chưa kiểm chứng. Mỗi mục chỉ đánh dấu x khi có evidence: commit, báo cáo, run ID, ảnh/log đã che secret hoặc xác nhận BTC. A/B/C bên dưới là vai trò sub-agent triển khai, không phải thành viên đội thi. Trưởng đội chịu trách nhiệm tài khoản, quyết định và nộp bài.
 
@@ -19,7 +21,7 @@ Nguồn kiểm tra ngày 14/10: [trang chính](https://mini-hackathon-sep-2026.m
 
 ## 2. Điều kiện kỹ thuật và điểm số
 
-Theo [yêu cầu BTC và rubric](https://mini-hackathon-sep-2026.mugvn.com/): MongoDB phải là dữ liệu vận hành chính, có mô hình/truy cập hợp lý và Aggregation Pipeline. Datadog cần dashboard, monitor và ít nhất một năng lực bổ sung. Bảng dưới ánh xạ bằng chứng dự kiến của ChargeOps; chưa mục nào được nghiệm thu.
+Theo [yêu cầu BTC và rubric](https://mini-hackathon-sep-2026.mugvn.com/): MongoDB phải là dữ liệu vận hành chính, có mô hình/truy cập hợp lý và Aggregation Pipeline. Datadog cần dashboard, monitor và ít nhất một năng lực bổ sung. Bảng dưới ánh xạ bằng chứng dự kiến của ChargeOps; đến 20/10 mới có bằng chứng thật cho vòng tối thiểu (MongoDB time series/aggregation, dashboard, monitor), chưa tiêu chí nào nghiệm thu đủ.
 
 | Tiêu chí | Bằng chứng ChargeOps cần tạo | Gate |
 |---|---|---|
@@ -38,9 +40,9 @@ Nguồn: [PLAN](PLAN.md), [Dependencies](docs/DEPENDENCIES.md), [Environment](do
 
 - [x] Ba sub-agent đọc và review toàn bộ nhóm tài liệu về phạm vi, contract, triển khai, data/evaluation và disclosure.
 - [x] Kiểm tra local Git: có `4ed3ae8`, `f642417`; `main` khớp ref local `origin/main` tại lượt đọc. Đây không phải xác minh remote trực tiếp.
-- [ ] **Chính:** đối soát remote/private/push hiện tại; sửa ghi chú commit/push đang chờ đã cũ trong PROGRESS, ENVIRONMENT, IMPLEMENTATION. Không tạo lại repo.
-- [ ] **Trưởng đội + chính:** xác minh trial Datadog, tính năng Log Management, ngày hết hạn/quota và khả năng truy cập lúc chấm; chỉ dùng trial, không bật trả phí.
-- [ ] **Chính:** xác minh Docker Linux Engine, RAM/disk, Node/npm và phương án uv/Python 3.12 container; không đổi Python host.
+- [ ] **Chính:** đối soát remote/private/push hiện tại; sửa ghi chú commit/push đang chờ đã cũ trong PROGRESS, ENVIRONMENT, IMPLEMENTATION. Không tạo lại repo. *20/10: push `ccb67d3` lên `origin/main` thành công; PROGRESS đã cập nhật; chưa kiểm lại private và ghi chú cũ trong ENVIRONMENT/IMPLEMENTATION.*
+- [ ] **Trưởng đội + chính:** xác minh trial Datadog, tính năng Log Management, ngày hết hạn/quota và khả năng truy cập lúc chấm; chỉ dùng trial, không bật trả phí. *20/10: API keys, monitor, dashboard, webhook hoạt động; trial hết ~29/10 (xem rủi ro P0); Log Management và truy cập lúc chấm chưa xác minh.*
+- [ ] **Chính:** xác minh Docker Linux Engine, RAM/disk, Node/npm và phương án uv/Python 3.12 container; không đổi Python host. *20/10: Docker Engine 29.6.2 và image Python 3.12/uv build, chạy được; RAM/disk, Node/npm chưa kiểm lại. Timer VM Docker Desktop chạy nhanh ~7%, đã xử lý trong simulator (xem MINIMAL_LOOP).*
 - [ ] **Chính:** phân công file ownership A backend, B simulator/evaluation, C frontend; mọi đổi contract qua điều phối và reviewer độc lập.
 - [ ] **Chính + B:** chốt protocol đánh giá trên giấy: phân bổ healthy/load increase/demand drop, thời lượng, fault severity/time, trip/restart, incident matching, mẫu số connector-hour và trường hợp B không trip.
 
@@ -50,13 +52,13 @@ Không viết core, Compose/Dockerfile, tests sản phẩm hoặc cài dependenc
 
 Owner: agent chính phối hợp A/B. Nguồn: [Contract §1–4](docs/CONTRACT.md), [Implementation lượt 0/0b](docs/IMPLEMENTATION.md).
 
-- [ ] Tạo monorepo/shared models/OpenAPI; sinh TypeScript types, lockfiles npm/uv và pin images sau build tương thích.
-- [ ] Compose chạy MongoDB, API, worker, simulator, web; health/readiness hoạt động; MongoDB chỉ ở mạng nội bộ.
-- [ ] **Một connector tổng hợp → ingest → MongoDB Aggregation Pipeline → metric → dashboard/monitor Datadog thật → webhook → đúng một incident source Datadog.**
-- [ ] Bật Log Management thật; nối log với run/connector/incident để điều tra, lưu timestamps và đo latency end-to-end. Không coi template/ảnh minh họa là evidence.
-- [ ] Kiểm chứng phép tính weighted mean: bốn block 15 giây không chồng lắp, một cửa sổ 60 giây; >=10 mẫu khác nhau, gap <=15 giây, mẫu cuối <=30 giây; thiếu chất lượng chặn alert/recovery.
-- [ ] Đối chiếu payload webhook thật với contract; inbox bền vững, xác thực, quarantine thiếu identity; chỉ listener webhook được tunnel công khai.
-- [ ] Ghi ngân sách tối đa 20 unique live run/trial bền vững; dành lượt cho sửa tích hợp và ba lần diễn tập cuối; evaluation offline không export.
+- [ ] Tạo monorepo/shared models/OpenAPI; sinh TypeScript types, lockfiles npm/uv và pin images sau build tương thích. *20/10: `uv.lock` và images pin (mongo 8.0.5, agent 7.66.1, caddy 2.9.1, cloudflared 2025.2.1) đã build/pull chạy được; OpenAPI có tại `/docs`; chưa có frontend/TypeScript/npm.*
+- [ ] Compose chạy MongoDB, API, worker, simulator, web; health/readiness hoạt động; MongoDB chỉ ở mạng nội bộ. *20/10: đạt cho mongo/api/worker/simulator (+ datadog/gateway/tunnel), `/api/v1/ready` = ready, MongoDB không publish port; còn thiếu web.*
+- [x] **Một connector tổng hợp → ingest → MongoDB Aggregation Pipeline → metric → dashboard/monitor Datadog thật → webhook → đúng một incident source Datadog.** *20/10: run `f738bf26…`, composite monitor `334614967` Triggered 02:49:08 UTC, webhook `8861753711242670672`, incident `c2405a30…` `source=datadog`; commit `ccb67d3`.*
+- [ ] Bật Log Management thật; nối log với run/connector/incident để điều tra, lưu timestamps và đo latency end-to-end. Không coi template/ảnh minh họa là evidence. *20/10: Agent gửi logs nhưng chưa xác minh trên Datadog Logs. Đã đo webhook delivery 1,7 s (±2 s do đồng hồ VM) và evidence → incident 10,6 s.*
+- [ ] Kiểm chứng phép tính weighted mean: bốn block 15 giây không chồng lắp, một cửa sổ 60 giây; >=10 mẫu khác nhau, gap <=15 giây, mẫu cuối <=30 giây; thiếu chất lượng chặn alert/recovery. *20/10: dashboard `(a-b)/c` khớp xu hướng residual local; cửa sổ thiếu mẫu (8) có quality=false. Chưa đối chiếu số liệu từng cửa sổ local với Datadog.*
+- [ ] Đối chiếu payload webhook thật với contract; inbox bền vững, xác thực, quarantine thiếu identity; chỉ listener webhook được tunnel công khai. *20/10: payload Datadog thật (alert, recovery) được chuẩn hóa và xử lý; inbox giữ qua restart; thiếu secret → 401; đường khác qua tunnel → 404. Quarantine chỉ có unit test; chưa đối chiếu từng trường với CONTRACT.md.*
+- [x] Ghi ngân sách tối đa 20 unique live run/trial bền vững; dành lượt cho sửa tích hợp và ba lần diễn tập cuối; evaluation offline không export. *20/10: collection `budgets` giữ run IDs qua restart; đã dùng 2/20.*
 
 **Điều kiện qua gate:** lưu cấu hình monitor, log/ảnh đã che secret, run ID, incident ID và latency đo thật. Chưa đạt thì xử lý tích hợp trước khi mở rộng UI/dataset.
 
@@ -78,7 +80,7 @@ Nguồn: [Implementation gates 3–6](docs/IMPLEMENTATION.md), [Contract](docs/C
 
 - [ ] **C:** năm màn hình tiếng Việt dùng API thật; unit, freshness, provenance, mode/source, timeline và evidence trước/sau; đủ loading/error/empty states.
 - [ ] **A:** kiểm tra idempotency key, khác payload trả 409, ACK timeout 30 giây, ACK muộn; restart API/worker/simulator không mất state hoặc chạy lệnh hai lần.
-- [ ] **A:** test webhook trùng/muộn/sai run/thiếu identity, một incident active mỗi run/connector/type; bộ đếm 20 live run tồn tại qua restart.
+- [ ] **A:** test webhook trùng/muộn/sai run/thiếu identity, một incident active mỗi run/connector/type; bộ đếm 20 live run tồn tại qua restart. *20/10 (Datadog thật): replay trùng → `duplicate`; alert cho run đã dừng → `inactive_or_wrong_mode`; recovery không đóng incident; bộ đếm giữ qua restart và `wsl --shutdown`. Thiếu identity/sai run chỉ có unit test.*
 - [ ] **A/C:** viewer không điều khiển; operator session/Origin hoặc CSRF đúng contract; simulator/webhook secret riêng, không vào log/frontend/Git.
 - [ ] **Chính:** local hoàn chỉnh chạy offline sau khi tải images/packages; ngắt Internet trong mode Datadog hiện lỗi rõ, không fallback âm thầm.
 - [ ] **Chính/C:** diễn tập điều tra từ alert đến residual/load/ambient/freshness và logs liên quan, rồi chứng minh hành động có tác dụng; UI không dùng mock khi API lỗi.
