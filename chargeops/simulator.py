@@ -64,9 +64,13 @@ class Simulator:
         out = []
         for cid in CONNECTORS:
             sim = dict((run.get("sim") or {}).get(cid) or {})
-            injected = sim.pop("fault_injected_at", None)
-            if injected:
-                sim["fault_injected_s"] = (datetime.fromisoformat(injected) - started).total_seconds()
+            for stamp, seconds in (
+                ("fault_injected_at", "fault_injected_s"),
+                ("fault_cleared_at", "fault_cleared_s"),
+            ):
+                value = sim.pop(stamp, None)
+                if value:
+                    sim[seconds] = (datetime.fromisoformat(value) - started).total_seconds()
             demand, current, limit, voltage, steady = physics(plans[cid], elapsed, sim)
             temperature, at = self.thermal[cid]
             temperature = lag(temperature, steady, (measured - at).total_seconds())
@@ -95,6 +99,10 @@ class Simulator:
         response = self.client.get("/api/v1/simulator/run")
         response.raise_for_status()
         run = response.json()
+        if run and self.thermal.get("run_id") != run["_id"]:  # (re)start: fetch each connector's last sample
+            response = self.client.get("/api/v1/simulator/run", params={"resume": "true"})
+            response.raise_for_status()
+            run = response.json()
         if not run:
             self.pending = None
             return

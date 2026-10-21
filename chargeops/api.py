@@ -139,9 +139,9 @@ def ready(store=Depends(db)):
 
 
 @app.get("/api/v1/simulator/run", dependencies=[Depends(simulator_auth)])
-def active_run(store=Depends(db)):
+def active_run(resume: bool = False, store=Depends(db)):
     run = store.runs.find_one({"status": "active"})
-    if run:
+    if run and resume:
         # Lets a restarted simulator resume each connector's thermal state instead of jumping to equilibrium.
         pipeline = [
             {"$match": {"meta.run_id": run["_id"]}},
@@ -185,7 +185,7 @@ def consume_event(event_id: str, store=Depends(db)):
     key = f"sim.{found['connector_id']}"
     store.runs.update_one(
         {"_id": found["run_id"], f"{key}.fault_injected_at": {"$ne": consumed}},
-        {"$set": {f"{key}.fault_injected_at": consumed, f"{key}.fault_cleared": False}},
+        {"$set": {f"{key}.fault_injected_at": consumed}},
     )
     if not first.modified_count:
         return {"status": "duplicate"}
@@ -338,6 +338,8 @@ def command_result(command_id: str, body: CommandResult, store=Depends(db)):
         # The simulator already changed its device state, even when the result arrives late; only the
         # command's own connector changes.
         changes = {f"sim.{found['connector_id']}.{key}": value for key, value in found["sim"].items()}
+        if found["sim"].get("fault_cleared"):  # when, so an injected fault is told apart from the seeded one
+            changes[f"sim.{found['connector_id']}.fault_cleared_at"] = at
         store.runs.update_one({"_id": found["run_id"]}, {"$set": changes})
     done = store.commands.update_one(
         {"_id": command_id, "status": {"$in": ["pending", "claimed"]}},

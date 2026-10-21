@@ -96,6 +96,8 @@ export const EVENT_LABEL: Record<string, string> = {
 
 export const SCENARIO_LABEL: Record<string, string> = {
   healthy: "Khỏe mạnh",
+  load_increase: "Tăng tải",
+  demand_drop: "Giảm nhu cầu",
   thermal_fault: "Lỗi nhiệt",
 };
 

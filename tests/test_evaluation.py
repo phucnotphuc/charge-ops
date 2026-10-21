@@ -488,8 +488,13 @@ def test_relocked_v3_1_reproduces_v3_results_exactly(tmp_path):
     lock = json.loads(LOCK.read_text(encoding="utf-8"))
     v3 = json.loads((LOCK.parent / "locked-b1-eval-v3.json").read_text(encoding="utf-8"))
     assert protocol.PROTOCOL_VERSION == lock["protocol_version"] == "b1-eval-v3.1"
-    same = ["a_threshold_c", "c_alert_c", "c_recovered_c", "tuning_seeds", "evaluation_seeds", "tuning"]
-    assert {k: lock[k] for k in same} == {k: v3[k] for k in same}
+
+    def content(doc):  # everything except version metadata
+        meta = ("protocol_version", "fingerprint", "locked_at")
+        return {k: v for k, v in doc.items() if k not in meta and not k.startswith("relock_")}
+
+    assert content(lock) == content(v3)
+    assert lock["relock_of"]["fingerprint"] == v3["fingerprint"]
     result = run(LOCK, protocol.PROTOCOL_VERSION, tmp_path)
     runs = hashlib.sha256()
     for line in (tmp_path / "runs.jsonl").read_text(encoding="utf-8").splitlines():

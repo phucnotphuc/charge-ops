@@ -58,6 +58,11 @@ class Harness:
                 tick(self.store, self.stats, Mock())
             self.t += 5
 
+    def run_while(self, busy, limit):
+        """Advance step by step while `busy()` holds, up to `limit` seconds."""
+        while busy() and self.t <= limit:
+            self.run_until(self.t)
+
     def command(self, incident_id, kind):
         response = self.client.post(
             f"/api/v1/incidents/{incident_id}/commands",
@@ -189,31 +194,23 @@ def test_windows_are_per_connector(fleet, store):
         assert abs(w["residual_mean"]) < 1e-9
 
 
-def test_injected_fault_on_connector_4_opens_one_incident_there_only(fleet, store):
+def test_fault_on_connector_4_opens_one_incident_and_commands_apply_only_there(fleet, store):
     fleet.start("healthy", 5)
     fleet.run_until(60)
     response = fleet.client.post(
         f"/api/v1/demo-runs/{RUN}/inject-fault", json={"connector_id": "connector-4"}, headers=OPERATOR
     )
     assert response.status_code == 202
-    fleet.run_until(420)
+    fleet.run_while(lambda: not fleet.incidents(), 420)
     incidents = fleet.incidents()
     assert [(i["connector_id"], i["state"]) for i in incidents] == [("connector-4", "open")]
     assert incidents[0]["evidence"]["connector_id"] == "connector-4"
-
-
-def test_command_applies_only_to_its_connector(fleet, store):
-    fleet.start("healthy", 5)
-    fleet.run_until(60)
-    fleet.client.post(
-        f"/api/v1/demo-runs/{RUN}/inject-fault", json={"connector_id": "connector-4"}, headers=OPERATOR
-    )
-    fleet.run_until(420)
-    incident = fleet.incidents()[0]
+    incident = incidents[0]
     fleet.command(incident["_id"], "acknowledge")
-    fleet.run_until(430)
+    fleet.run_until(fleet.t)
     fleet.command(incident["_id"], "reduce_load")
-    fleet.run_until(460)
+    fleet.run_while(lambda: store.commands.find_one({"type": "reduce_load"})["status"] != "applied", 600)
+    fleet.run_until(fleet.t + 5)  # one sample after the ACK
     incident = store.incidents.find_one()
     assert incident["state"] == "mitigating"
     command = store.commands.find_one({"type": "reduce_load"})
@@ -223,18 +220,16 @@ def test_command_applies_only_to_its_connector(fleet, store):
     assert run["sim"]["connector-4"]["current_limit_a"] == incident["target_current_a"]
     latest = {
         s["connector_id"]: s["current_limit_a"]
-        for s in store.telemetry.find({"measured_at": T0 + timedelta(seconds=460)})
+        for s in store.telemetry.find({"measured_at": T0 + timedelta(seconds=fleet.t - 5)})
     }
     assert latest.pop("connector-4") == incident["target_current_a"] < ORIGINAL_LIMIT_A
     assert set(latest.values()) == {ORIGINAL_LIMIT_A}
     # The rest of the loop on connector-4's own windows: mitigated -> maintenance -> retest -> resolved.
-    while store.incidents.find_one()["state"] != "mitigated" and fleet.t < 900:
-        fleet.run_until(fleet.t + 15)
+    fleet.run_while(lambda: store.incidents.find_one()["state"] != "mitigated", 900)
     fleet.command(incident["_id"], "maintenance")
-    fleet.run_until(fleet.t + 15)
+    fleet.run_while(lambda: not store.incidents.find_one().get("maintenance_applied_at"), 1000)
     fleet.command(incident["_id"], "verify_recovery")
-    while store.incidents.find_one()["state"] != "resolved" and fleet.t < 1500:
-        fleet.run_until(fleet.t + 15)
+    fleet.run_while(lambda: store.incidents.find_one()["state"] != "resolved", 1500)
     incident = store.incidents.find_one()
     assert incident["state"] == "resolved"
     windows = {
@@ -264,6 +259,7 @@ def test_inject_fault_event_consumed_exactly_once_across_restart(fleet, store):
     assert fleet.sim_client.get("/api/v1/simulator/events").json() == []
     assert store.run_events.find_one()["consumed_at"] == consumed
     assert store.runs.find_one()["sim"]["connector-2"]["fault_injected_at"] == injected
+    assert "fault_cleared" not in store.runs.find_one()["sim"]["connector-2"]  # seeded marker untouched
     # A retried consume (lost response) is a duplicate and changes nothing.
     again = fleet.sim_client.post(f"/api/v1/simulator/events/{event['_id']}/consume")
     assert again.json() == {"status": "duplicate"}
@@ -276,6 +272,9 @@ def test_simulator_restart_resumes_each_connector_temperature(fleet, store):
     before = {
         s["connector_id"]: s for s in store.telemetry.find({"measured_at": T0 + timedelta(seconds=100)})
     }
+    assert "last_samples" not in fleet.sim_client.get("/api/v1/simulator/run").json()  # only on resume
+    resumed = fleet.sim_client.get("/api/v1/simulator/run", params={"resume": "true"}).json()
+    assert set(resumed["last_samples"]) == set(CONNECTORS)
     fleet.simulator = Simulator(fleet.sim_client)
     fleet.run_until(105, worker=False)
     after = {s["connector_id"]: s for s in store.telemetry.find({"measured_at": T0 + timedelta(seconds=105)})}
@@ -299,7 +298,8 @@ def test_seeded_thermal_fault_opens_incident_on_planned_connector_only(fleet, st
     plan = fleet_plan(seed, "thermal_fault")
     faulty = next(c for c, p in plan.items() if p.fault_onset_s is not None)
     fleet.start("thermal_fault", seed)
-    fleet.run_until(plan[faulty].fault_onset_s + 300)
+    fleet.run_while(lambda: not fleet.incidents(), plan[faulty].fault_onset_s + 300)
+    fleet.run_until(fleet.t + 30)  # no second incident elsewhere shortly after
     assert [i["connector_id"] for i in fleet.incidents()] == [faulty]
 
 
@@ -379,3 +379,43 @@ def test_connectors_lists_the_whole_fleet(fleet):
     assert [(c["connector_id"], c["station_id"], c["charger_id"]) for c in items] == [
         (c, *LOCATION[c]) for c in CONNECTORS
     ]
+
+
+def test_injection_never_revives_a_cleared_seeded_fault():
+    from dataclasses import replace
+
+    plan = next(p for p in fleet_plan(4, "thermal_fault").values() if p.fault_onset_s is not None)
+    onset = plan.fault_onset_s
+    healthy = replace(plan, fault_onset_s=None, fault_severity_c=None)
+    at = onset + 400
+
+    def heat(p, **sim):
+        return physics(p, at, sim)[4]
+
+    baseline, injected_only = heat(healthy), heat(healthy, fault_injected_s=onset + 200)
+    assert heat(plan) > baseline and injected_only > baseline
+    cleared = {"fault_cleared": True, "fault_cleared_s": onset + 100}
+    assert heat(plan, **cleared) == baseline
+    # Injected after maintenance: only the injected fault heats; the seeded one stays cleared.
+    assert heat(plan, **cleared, fault_injected_s=onset + 200) == injected_only
+    # Maintenance after the injection clears the injected fault too.
+    assert heat(healthy, **cleared, fault_injected_s=onset + 50) == baseline
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [("get", "/api/v1/simulator/events"), ("post", "/api/v1/simulator/events/any/consume")],
+)
+def test_simulator_event_endpoints_need_the_simulator_secret(fleet, method, path):
+    assert getattr(fleet.client, method)(path).status_code == 401
+    wrong = {"X-Simulator-Secret": "x" * 32}
+    assert getattr(fleet.client, method)(path, headers=wrong).status_code == 401
+
+
+def test_check_mongo_core_path_runs_on_the_fleet_scheme(store):
+    from chargeops.check_mongo import check_loop
+
+    check_loop(store)  # connector-1
+    store.runs.delete_many({})  # frees the single active slot for a second smoke run
+    check_loop(store, "connector-6")
+    assert store.incidents.count_documents({"connector_id": {"$in": ["connector-1", "connector-6"]}}) == 2

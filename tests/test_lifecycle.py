@@ -130,7 +130,12 @@ def test_full_loop_open_to_resolved(store, flow):
     simulate(97)
     advance_incidents(store, at(98))
     assert incident()["state"] == "verifying"
-    assert store.runs.find_one()["sim"] == {"connector-1": {"current_limit_a": 200, "fault_cleared": True}}
+    device = {
+        "current_limit_a": 200,
+        "fault_cleared": True,
+        "fault_cleared_at": incident()["maintenance_applied_at"],
+    }
+    assert store.runs.find_one()["sim"] == {"connector-1": device}
 
     plan = {160: {}, 175: {"current": 40}, 190: {}, 205: {"quality": False}, 220: {}, 235: {"residual": 4}}
     for end in range(160, 311, 15):

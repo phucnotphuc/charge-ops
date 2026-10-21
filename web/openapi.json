@@ -1840,6 +1840,16 @@
         "operationId": "active_run_api_v1_simulator_run_get",
         "parameters": [
           {
+            "in": "query",
+            "name": "resume",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Resume",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "x-simulator-secret",
             "required": false,

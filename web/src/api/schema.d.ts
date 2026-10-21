@@ -1376,7 +1376,9 @@ export interface operations {
     };
     active_run_api_v1_simulator_run_get: {
         parameters: {
-            query?: never;
+            query?: {
+                resume?: boolean;
+            };
             header?: {
                 "x-simulator-secret"?: string;
             };

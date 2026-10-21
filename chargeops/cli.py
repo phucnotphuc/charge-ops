@@ -17,7 +17,9 @@ def main():
     start = sub.add_parser("start")
     start.add_argument("--mode", choices=["local", "datadog"], default="datadog")
     start.add_argument("--scenario", choices=SCENARIOS, default="thermal_fault")
-    start.add_argument("--seed", type=int, default=0, help="drives profiles, fault connector, onset, severity")
+    start.add_argument(
+        "--seed", type=int, default=0, help="drives profiles, fault connector, onset, severity"
+    )
     start.add_argument("--profile", default=None, help="pin one Autosun transaction_id (one of 50)")
     sub.add_parser("stop")
     sub.add_parser("status")

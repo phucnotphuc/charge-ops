@@ -19,7 +19,7 @@ from chargeops.domain import (
 )
 from chargeops.lifecycle import advance_incidents, expire_commands, on_alert, process_commands
 from chargeops.logging import event, logger
-from chargeops.storage import database, initialize, window_rows
+from chargeops.storage import database, fleet_window_rows, initialize
 
 WATCHED = ("inbox", "commands", "run_events")
 STATE_ID = "change_stream"
@@ -227,9 +227,7 @@ def run_phases(db, stats, log):
         manage_run(db, at)
     run = db.runs.find_one({"status": "active"})
     if run:
-        for connector_id in CONNECTORS:
-            with span("worker.alert_evaluation", run_id=run["_id"], connector_id=connector_id):
-                evaluate_window(db, stats, log, run, at, connector_id)
+        evaluate_windows(db, stats, log, run, at)
     with span("worker.inbox"):
         for item in db.inbox.find({"processed": False}).sort("occurred_at", 1).limit(100):
             with span(
@@ -261,13 +259,20 @@ def run_phases(db, stats, log):
         advance_incidents(db, at)
 
 
-def evaluate_window(db, stats, log, run, at, connector_id):
+def evaluate_windows(db, stats, log, run, at):
     # Wait two seconds for ingestion; metric window ends on a 15-second boundary.
     end = block_end(at - timedelta(seconds=2))
-    window_id = f"{run['_id']}:{connector_id}:{end.isoformat()}"
-    if db.windows.find_one({"_id": window_id}):
+    todo = [c for c in CONNECTORS if not db.windows.find_one({"_id": f"{run['_id']}:{c}:{end.isoformat()}"})]
+    if not todo:
         return
-    rows = window_rows(db, run["_id"], end, connector_id)
+    rows = fleet_window_rows(db, run["_id"], end)  # one aggregation for the whole fleet
+    for connector_id in todo:
+        with span("worker.alert_evaluation", run_id=run["_id"], connector_id=connector_id):
+            evaluate_window(db, stats, log, run, at, end, connector_id, rows.get(connector_id, []))
+
+
+def evaluate_window(db, stats, log, run, at, end, connector_id, rows):
+    window_id = f"{run['_id']}:{connector_id}:{end.isoformat()}"
     evidence = window_evidence(rows, end)
     evidence.update(_id=window_id, run_id=run["_id"], connector_id=connector_id, created_at=at)
     db.windows.insert_one(evidence)

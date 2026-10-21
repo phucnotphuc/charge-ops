@@ -106,19 +106,21 @@ def demand_at(plan, elapsed):
 def physics(plan, elapsed, sim):
     """One connector: demand, current, limit, voltage and steady-state temperature.
 
-    `sim` is this connector's device state from applied commands and consumed fault events:
-    current_limit_a, fault_cleared, fault_injected_s (elapsed seconds at injection)."""
+    `sim` is this connector's device state from applied commands and consumed fault events, in elapsed
+    seconds: current_limit_a, fault_cleared (any maintenance), fault_cleared_s (latest maintenance),
+    fault_injected_s. Maintenance clears the seeded fault for good; an injected fault stays active unless
+    maintenance was applied after it, so an injection never revives a cleared seeded fault."""
     demand, voltage = demand_at(plan, elapsed)
     limit = sim.get("current_limit_a", ORIGINAL_LIMIT_A)
     current = min(demand, limit)
     faults = []
-    if plan.fault_onset_s is not None:
+    if plan.fault_onset_s is not None and not sim.get("fault_cleared"):
         faults.append((plan.fault_onset_s, plan.fault_severity_c))
-    if sim.get("fault_injected_s") is not None:
-        faults.append((sim["fault_injected_s"], FAULT_RESIDUAL_C))
+    injected, cleared = sim.get("fault_injected_s"), sim.get("fault_cleared_s")
+    if injected is not None and (cleared is None or cleared < injected):
+        faults.append((injected, FAULT_RESIDUAL_C))
     heat = 0.0
-    if not sim.get("fault_cleared"):
-        for onset, severity in faults:
-            onset_a = min(demand_at(plan, onset)[0], ORIGINAL_LIMIT_A)
-            heat = max(heat, fault_multiplier(elapsed, onset, severity, FAULT_RAMP_S, onset_a, THERMAL_K))
+    for onset, severity in faults:
+        onset_a = min(demand_at(plan, onset)[0], ORIGINAL_LIMIT_A)
+        heat = max(heat, fault_multiplier(elapsed, onset, severity, FAULT_RAMP_S, onset_a, THERMAL_K))
     return demand, current, limit, voltage, AMBIENT_C + THERMAL_K * current**2 * (1 + heat)
