@@ -23,6 +23,8 @@ Monorepo frontend và package Python dùng chung API/worker/simulator, infrastru
 
 Local mode hoàn chỉnh không cần cloud sau khi tải dependency/image. Datadog mode phải có telemetry/metrics thật, alert thật, webhook thật. Không thay ngầm Datadog bằng detector local khi cloud lỗi.
 
+Lõi miền tách khỏi adapter theo [ARCHITECTURE.md](docs/ARCHITECTURE.md): `TelemetrySource`, `ChargerCommandSink`, `Detector`, `AlertSource`, `MetricsSink`, `Identity`. Bản thi chỉ có một implementation mỗi seam (simulator, residual, DogStatsD/ddtrace, user local); phần riêng cuộc thi (trần run_id, tunnel, demo-runs, evaluation) gom vào module demo. Mục tiêu: code dùng tiếp sau cuộc thi với OCPP/vendor observability khác mà không sửa lõi.
+
 ## Dữ liệu và mô phỏng
 
 Hai trạm, sáu connector; mỗi 5 giây phát mẫu. Khảo sát Autosun–Hong Kong Polytechnic v3, kiểm tra tải file, schema, đơn vị, thiếu dữ liệu và timestamp. Dataset dùng làm mẫu tải, không dùng nhãn lỗi pin làm lỗi charger. Điều tra vấn đề chất lượng đến khi đủ bằng chứng quyết định sử dụng; nếu không tải được hoặc không đạt kiểm định, dùng tổng hợp hoàn toàn và khai báo rõ lý do.
@@ -33,7 +35,7 @@ Provenance public/synthetic/derived áp dụng theo trường trong manifest. Co
 
 ## MongoDB và API
 
-Telemetry time series TTL 14 ngày; timestamps UTC observed/received, ID mẫu, connector/session, V/A/kW, nhiệt connector/môi trường, tải yêu cầu/giới hạn và provenance. Connector, session, baseline, incident/event/command, run/source/evaluation dùng collection thường. Bằng chứng incident lưu riêng ngoài TTL telemetry. Aggregation 15 giây: residual, xu hướng, freshness; khử mẫu trùng bằng ID. Không Change Streams trên time series.
+Telemetry time series TTL 14 ngày; timestamps UTC observed/received, ID mẫu, connector/session, V/A/kW, nhiệt connector/môi trường, tải yêu cầu/giới hạn và provenance. Connector, session, baseline, incident/event/command, run/source/evaluation dùng collection thường. Bằng chứng incident lưu riêng ngoài TTL telemetry. Aggregation 15 giây: residual, xu hướng (`$setWindowFields`), freshness; khử mẫu trùng bằng ID. Change Streams không hỗ trợ time series, nên chỉ dùng trên collection thường (inbox/commands/events) để worker nhận việc theo sự kiện; MongoDB chạy replica set một node trong Compose. Mục tiêu: polling 5 giây chỉ còn ở frontend.
 
 API /api/v1: đọc connector/telemetry/incident/evaluation; ingest; Datadog webhook; duyệt giảm tải, bảo trì, retest; demo start/stop; health/readiness. OpenAPI là hợp đồng frontend với kiểu TypeScript sinh tự động.
 
@@ -51,11 +53,13 @@ Operator giảm tải bằng giới hạn tuyệt đối `target_current_a = min
 
 ## UI và bảo mật
 
-Năm màn hình tiếng Việt: tổng quan, connector, incident, điều khiển demo, đánh giá. Hiển thị unit/freshness/provenance/timeline; loading/error/empty state. Viewer chỉ đọc; operator login cấu hình local, password hash, HttpOnly session cookie. Secret riêng simulator/webhook; không log/commit secret, .env, dữ liệu thô lớn.
+Năm màn hình tiếng Việt: tổng quan, connector, incident, điều khiển demo, đánh giá. Thứ tự ưu tiên: incident (timeline/evidence/lệnh) → điều khiển demo → tổng quan; connector và đánh giá chỉ làm sau khi G2 đạt, có thể gộp vào tổng quan nếu thiếu thời gian. Hiển thị unit/freshness/provenance/timeline; loading/error/empty state. Viewer chỉ đọc; operator login cấu hình local, password hash, HttpOnly session cookie. Secret riêng simulator/webhook; không log/commit secret, .env, dữ liệu thô lớn.
 
 ## Repo và sub-agent
 
 Tạo repo độc lập; giữ nguyên repository cha. Xác minh repo remote đích và private trước push. Chỉ đẩy file thuộc dự án, không secrets/build/venv/raw data. Không bật dịch vụ trả phí. Cấp quyền giám khảo sau khi có tài khoản chính thức.
+
+Datadog dùng ba tín hiệu liên kết để chấm phần điều tra: metrics (dashboard/monitor), Log Management (log JSON có `trace_id`) và APM traces từ `ddtrace` cho ingest → aggregation → webhook → worker → command. Alert message chứa link tới dashboard và log query lọc theo `run_id`/`connector_id`. APM là bắt buộc nội bộ, không phải "nếu hữu ích".
 
 Agent chính quản lý nền tảng/hợp đồng/Compose/integration và ưu tiên tích hợp Datadog tối thiểu ngay khi nền tảng sẵn sàng trong khung build chính thức, không chờ hoàn thiện backend/UI. A: backend/ingest/state/commands/auth/tests. B: dataset/simulator/baseline/evaluation. C: frontend năm màn hình/tests. Sau gate Datadog đầu tiên mới mở rộng observability; reviewer độc lập ở lượt kiểm tra. Không sửa cùng file, không đổi API chung một phía; tất cả thay đổi qua điều phối.
 

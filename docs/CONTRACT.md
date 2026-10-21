@@ -12,7 +12,8 @@ Mỗi mẫu telemetry gồm:
 
 | Trường | Ý nghĩa |
 |---|---|
-| `sample_id`, `run_id`, `station_id`, `charger_id`, `connector_id`, `session_id` | Định danh; `session_id` có thể null |
+| `sample_id`, `org_id`, `run_id`, `station_id`, `charger_id`, `connector_id`, `session_id` | Định danh; `org_id` cố định trong bản thi; `run_id` chỉ bắt buộc ở chế độ demo; `session_id` có thể null |
+| `schema_version` | Số nguyên, bắt đầu `1`; thay đổi schema theo kiểu thêm trường |
 | `measured_at`, `received_at` | Thời điểm đo; API tự ghi thời điểm nhận |
 | `voltage_v`, `current_a`, `power_kw` | V, A, kW; công suất là giá trị đo, không suy ra thay thế âm thầm |
 | `connector_temperature_c`, `ambient_temperature_c` | Độ C |
@@ -20,7 +21,7 @@ Mỗi mẫu telemetry gồm:
 | `connector_status`, `session_status` | `available/charging/faulted/offline`; `idle/active/completed/interrupted` |
 | `provenance` | `{composition: synthetic|public_replay|hybrid, manifest_id: string}`; manifest bất biến có version và nguồn theo từng trường |
 
-Mọi trường số phải hữu hạn. Các đại lượng điện/tải không âm; không dùng giới hạn nhiệt tùy ý để loại chính mẫu bất thường cần phát hiện. API chỉ nhận mẫu thuộc run đang hoạt động và connector hợp lệ. Metadata time series gồm run/station/charger/connector. Mẫu trùng được loại theo `(run_id, sample_id)` trong aggregation; latest-state cập nhật theo thời gian đo, không theo thứ tự đến. Telemetry TTL 14 ngày; bằng chứng incident lưu riêng ngoài TTL.
+Mọi trường số phải hữu hạn. Các đại lượng điện/tải không âm; không dùng giới hạn nhiệt tùy ý để loại chính mẫu bất thường cần phát hiện. API chỉ nhận mẫu thuộc run đang hoạt động và connector hợp lệ. Metadata time series gồm org/run/station/charger/connector. Mẫu trùng được loại theo `(run_id, sample_id)` trong aggregation; latest-state cập nhật theo thời gian đo, không theo thứ tự đến. Telemetry TTL 14 ngày; bằng chứng incident lưu riêng ngoài TTL.
 
 Hai trạm, mỗi trạm ba connector. Ground truth lỗi và seed lưu trong dữ liệu simulator/evaluation, tách khỏi đầu vào detector. Dataset công khai chỉ làm mẫu đường tải sau kiểm định; nhãn lỗi pin không trở thành nhãn lỗi charger. `composition` mô tả toàn mẫu. Manifest được telemetry tham chiếu ánh xạ từng trường sang `public`, `synthetic` hoặc `derived`, kèm source/version/checksum cho public, model/version cho synthetic, công thức và input fields cho derived. Ví dụ tải public và nhiệt simulator có composition hybrid, trường nhiệt synthetic; residual là derived. Nhiệt tương tác không được gắn public chỉ vì tải lấy từ dataset. Giữ manifest khi telemetry hết TTL để đọc lại bằng chứng incident.
 
@@ -45,7 +46,7 @@ Hai trạm, mỗi trạm ba connector. Ground truth lỗi và seed lưu trong d�
 | `POST /simulator/commands/{id}/result` | `{status: applied|failed, applied_at, result}`; ghi event kết quả | Simulator secret |
 | `POST /webhooks/datadog` | Payload chuẩn hóa ở mục 4 | Webhook secret |
 
-Request tạo command trả 202 và command ID; không trả thông báo đã giảm tải. API ghi yêu cầu/event bền vững; **worker duy nhất ghi chuyển trạng thái incident**. Start/stop cũng là yêu cầu bất đồng bộ để tránh API/simulator tranh quyền điều khiển. Frontend poll mỗi 5 giây; OpenAPI backend là nguồn sinh TypeScript types. Simulator chỉ poll/apply command liên quan tới run của nó.
+Request tạo command trả 202 và command ID; không trả thông báo đã giảm tải. API ghi yêu cầu/event bền vững; **worker duy nhất ghi chuyển trạng thái incident**. Start/stop cũng là yêu cầu bất đồng bộ để tránh API/simulator tranh quyền điều khiển. Frontend poll mỗi 5 giây; OpenAPI backend là nguồn sinh TypeScript types. Worker nhận event/command/inbox mới qua Change Streams trên collection thường, có resume token lưu bền vững để restart không bỏ sót; telemetry time series vẫn đọc bằng aggregation. Simulator chỉ poll/apply command liên quan tới run của nó, sau interface `ChargerCommandSink` (xem [ARCHITECTURE.md](ARCHITECTURE.md)) để thay bằng OCPP `SetChargingProfile` sau này mà không đổi state machine.
 
 ## 3. Detector và trạng thái
 

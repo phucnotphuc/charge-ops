@@ -17,6 +17,7 @@ Hệ thống demo cảnh báo sớm bất thường nhiệt connector: telemetry
 - [PLAN.md](PLAN.md): phạm vi, triển khai và nghiệm thu đã duyệt.
 - [Dependencies](docs/DEPENDENCIES.md): công cụ và package dự kiến, cách khóa phiên bản khi build.
 - [Contract](docs/CONTRACT.md): hợp đồng cho frontend/backend/simulator.
+- [Architecture](docs/ARCHITECTURE.md): seams lõi/adapter, đường mở rộng tải và lộ trình sau cuộc thi.
 - [Implementation](docs/IMPLEMENTATION.md): phân công và thứ tự sub-agent.
 - [Data card](docs/DATA_CARD.md): nguồn, giấy phép, giới hạn bằng chứng.
 - [Environment](docs/ENVIRONMENT.md): trạng thái môi trường đã kiểm tra.
