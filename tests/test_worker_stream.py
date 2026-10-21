@@ -1,7 +1,10 @@
 import mongomock
+import pytest
 from pymongo.errors import PyMongoError
 
 from chargeops import worker
+from chargeops.config import settings
+from chargeops.domain import now
 from chargeops.worker import ChangeWaker, run_loop
 
 
@@ -45,7 +48,6 @@ def test_fallback_when_watch_unsupported():
     log = Log()
     waker = ChangeWaker(FakeDb(error=NotImplementedError("no watch")), log)
     waker.start()
-    assert not waker.available
     assert sum("change_stream_unavailable" in line for line in log.lines) == 1
     assert waker.wait(0.01) is False
     waker.stop()
@@ -87,7 +89,7 @@ def test_stale_resume_token_retries_without_it():
     db.watch = watch
     waker = ChangeWaker(db, Log())
     waker.start()
-    assert waker.available
+    assert any("change_stream_resume_reset" in line for line in waker.log.lines)
     waker.stop()
 
 
@@ -147,3 +149,60 @@ def test_span_tags_when_enabled(monkeypatch):
     with worker.span("worker.inbox", run_id="r1", connector_id=None) as s:
         assert s.get_tag("run_id") == "r1"
         assert s.get_tag("connector_id") is None
+
+
+def test_failed_tick_does_not_commit_resume_token(monkeypatch):
+    def boom(db, stats, log):
+        raise PyMongoError("down")
+
+    monkeypatch.setattr(worker, "tick", boom)
+    db = FakeDb(FakeStream([{"operationType": "insert"}]))
+    waker = ChangeWaker(db, Log())
+    waker.start()
+    run_loop(db, None, Log(), waker, interval=30, min_gap=0, iterations=1)
+    assert db.worker_state.find_one({"_id": "change_stream"}) is None
+    waker.stop()
+
+
+class RacyRuns:
+    """Cancels the pending run right after the worker reads it."""
+
+    def __init__(self, runs):
+        self.runs = runs
+
+    def find_one(self, *args, **kwargs):
+        found = self.runs.find_one(*args, **kwargs)
+        if found and found["status"] == "pending":
+            self.runs.update_one({"_id": found["_id"]}, {"$set": {"status": "cancelled"}})
+        return found
+
+    def __getattr__(self, name):
+        return getattr(self.runs, name)
+
+
+class RacyDb:
+    def __init__(self, db):
+        self.db, self.runs = db, RacyRuns(db.runs)
+
+    def __getattr__(self, name):
+        return getattr(self.db, name)
+
+
+@pytest.mark.parametrize("monitor_id", ["", "123"])
+def test_cancelled_pending_run_is_not_activated_or_charged(store, monkeypatch, monitor_id):
+    monkeypatch.setenv("DD_MONITOR_ID", monitor_id)
+    settings.cache_clear()
+    store.runs.insert_one({"_id": "r1", "status": "pending", "mode": "datadog"})
+    worker.manage_run(RacyDb(store), now())
+    assert store.runs.find_one({"_id": "r1"})["status"] == "cancelled"
+    budget = store.budgets.find_one({"_id": settings().dd_trial_id})
+    assert not budget or budget["run_ids"] == []
+
+
+def test_activation_charges_budget_after_match(store, monkeypatch):
+    monkeypatch.setenv("DD_MONITOR_ID", "123")
+    settings.cache_clear()
+    store.runs.insert_one({"_id": "r2", "status": "pending", "mode": "datadog"})
+    worker.manage_run(store, now())
+    assert store.runs.find_one({"_id": "r2"})["status"] == "active"
+    assert store.budgets.find_one({"_id": settings().dd_trial_id})["run_ids"] == ["r2"]

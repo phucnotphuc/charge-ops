@@ -37,7 +37,6 @@ class ChangeWaker:
 
     def __init__(self, db, log):
         self.db, self.log = db, log
-        self.available = False
         self.wake = threading.Event()
         self.stopping = threading.Event()
         self.thread = None
@@ -59,8 +58,8 @@ class ChangeWaker:
         if state and state.get("token"):
             try:
                 return self.db.watch(pipeline, resume_after=state["token"], max_await_time_ms=1000)
-            except Exception:  # stale or invalid token: start from now, ticks cover the gap
-                pass
+            except Exception as exc:  # stale or invalid token: start from now, ticks cover the gap
+                event(self.log, "change_stream_resume_reset", error_type=type(exc).__name__)
         return self.db.watch(pipeline, max_await_time_ms=1000)
 
     def start(self):
@@ -69,7 +68,6 @@ class ChangeWaker:
         except Exception as exc:  # standalone mongod, mongomock: polling only
             event(self.log, "change_stream_unavailable", error_type=type(exc).__name__)
             return
-        self.available = True
         self.thread = threading.Thread(target=self._pump, daemon=True)
         self.thread.start()
 
@@ -78,7 +76,6 @@ class ChangeWaker:
             try:
                 change = self.stream.try_next()
             except Exception as exc:
-                self.available = False
                 event(self.log, "change_stream_unavailable", error_type=type(exc).__name__)
                 return
             if change is None:
@@ -166,10 +163,12 @@ def process_event(db, item, at, monitor_id):
 def manage_run(db, at):
     pending = db.runs.find_one({"status": "pending"})
     if pending:
+        # Every update is filtered on status=pending so an API-side cancel wins the race.
+        still_pending = {"_id": pending["_id"], "status": "pending"}
         if pending["mode"] == "datadog":
             if not settings().dd_monitor_id:
                 db.runs.update_one(
-                    {"_id": pending["_id"]},
+                    still_pending,
                     {
                         "$set": {"status": "rejected", "reason": "configure_dd_monitor_id_first"},
                         "$unset": {"active_slot": ""},
@@ -182,15 +181,16 @@ def manage_run(db, at):
             budget = db.budgets.find_one({"_id": trial_id})
             if pending["_id"] not in budget["run_ids"] and len(budget["run_ids"]) >= 20:
                 db.runs.update_one(
-                    {"_id": pending["_id"]},
+                    still_pending,
                     {
                         "$set": {"status": "rejected", "reason": "trial_run_budget_exhausted"},
                         "$unset": {"active_slot": ""},
                     },
                 )
                 return
-            db.budgets.update_one({"_id": trial_id}, {"$addToSet": {"run_ids": pending["_id"]}})
-        db.runs.update_one({"_id": pending["_id"]}, {"$set": {"status": "active", "started_at": at}})
+        activated = db.runs.update_one(still_pending, {"$set": {"status": "active", "started_at": at}})
+        if activated.matched_count == 1 and pending["mode"] == "datadog":
+            db.budgets.update_one({"_id": settings().dd_trial_id}, {"$addToSet": {"run_ids": pending["_id"]}})
     run = db.runs.find_one({"status": "active"})
     if run and (run.get("stop_requested") or (at - run["started_at"]).total_seconds() >= RUN_MAX_S):
         db.runs.update_one(
@@ -200,6 +200,11 @@ def manage_run(db, at):
 
 
 def tick(db, stats, log):
+    with span("worker.tick"):
+        run_phases(db, stats, log)
+
+
+def run_phases(db, stats, log):
     at = now()
     with span("worker.manage_run"):
         manage_run(db, at)

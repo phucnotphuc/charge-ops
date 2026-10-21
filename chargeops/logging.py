@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,14 +21,10 @@ def logger(service):
 
 def trace_fields():
     # Datadog's log-trace correlation attributes; empty outside an active span.
-    span = tracer.current_span()
-    if span is None:
+    # tracer.get_log_correlation_context() renders the trace id in Datadog's log format (32-char hex).
+    if tracer.current_span() is None:
         return {}
-    fields = {"dd.trace_id": str(span.trace_id), "dd.span_id": str(span.span_id)}
-    for key, name in (("dd.service", "DD_SERVICE"), ("dd.env", "DD_ENV"), ("dd.version", "DD_VERSION")):
-        if os.environ.get(name):
-            fields[key] = os.environ[name]
-    return fields
+    return {key: value for key, value in tracer.get_log_correlation_context().items() if value}
 
 
 def event(log, name, **fields):
