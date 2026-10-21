@@ -1,14 +1,25 @@
 name: chargeops
+x-env: &env
+  MONGODB_URI: mongodb://mongo:27017/?replicaSet=rs0
+  LOG_DIR: /logs
+  SIMULATOR_SECRET: ${SIMULATOR_SECRET:?Run scripts/init_env.py first}
+  WEBHOOK_SECRET: ${WEBHOOK_SECRET:?Run scripts/init_env.py first}
+  OPERATOR_SECRET: ${OPERATOR_SECRET:?Add OPERATOR_SECRET to .env (see .env.example)}
+  DD_MONITOR_ID: ${DD_MONITOR_ID:-}
+  DD_TRIAL_ID: ${DD_TRIAL_ID:-hackathon-2026}
+  OPERATOR_USERNAME: ${OPERATOR_USERNAME:-}
+  OPERATOR_PASSWORD_HASH: ${OPERATOR_PASSWORD_HASH:-}
+  ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+  DD_TRACE_ENABLED: ${DD_TRACE_ENABLED:-false}
+  DD_INSTRUMENTATION_TELEMETRY_ENABLED: ${DD_INSTRUMENTATION_TELEMETRY_ENABLED:-false}
+  DD_AGENT_HOST: datadog
+  DD_ENV: hackathon
+  DD_VERSION: ${APP_VERSION:-0.1.0}
 x-app: &app
-  build: .
-  environment:
-    MONGODB_URI: mongodb://mongo:27017
-    LOG_DIR: /logs
-    SIMULATOR_SECRET: ${SIMULATOR_SECRET:?Run scripts/init_env.py first}
-    WEBHOOK_SECRET: ${WEBHOOK_SECRET:?Run scripts/init_env.py first}
-    OPERATOR_SECRET: ${OPERATOR_SECRET:?Add OPERATOR_SECRET to .env (see .env.example)}
-    DD_MONITOR_ID: ${DD_MONITOR_ID:-}
-    DD_TRIAL_ID: ${DD_TRIAL_ID:-hackathon-2026}
+  build:
+    context: .
+    args:
+      APP_VERSION: ${APP_VERSION:-0.1.0}
   volumes:
     - app-logs:/logs
   depends_on:
@@ -18,15 +29,25 @@ x-app: &app
 services:
   mongo:
     image: mongo:8.0.5
+    command: [mongod, --replSet, rs0, --bind_ip_all]
     volumes:
       - mongo-data:/data/db
     healthcheck:
-      test: [CMD, mongosh, --quiet, --eval, "quit(db.adminCommand('ping').ok ? 0 : 1)"]
+      # Idempotent one-node replica set: initiate on first run, healthy once primary.
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - |
+          try { rs.status() } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongo:27017'}]}) }
+          quit(db.hello().isWritablePrimary ? 0 : 1)
       interval: 5s
       timeout: 5s
       retries: 20
   api:
     <<: *app
+    environment: {<<: *env, DD_SERVICE: chargeops-api}
     ports: ["127.0.0.1:8080:8000"]
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/ready')"]
@@ -35,9 +56,11 @@ services:
       retries: 20
   worker:
     <<: *app
+    environment: {<<: *env, DD_SERVICE: chargeops-worker}
     command: [python, -m, chargeops.worker]
   simulator:
     <<: *app
+    environment: {<<: *env, DD_SERVICE: chargeops-simulator}
     command: [python, -m, chargeops.simulator]
     depends_on:
       api:
@@ -51,7 +74,8 @@ services:
       DD_HOSTNAME: chargeops-local
       DD_DOGSTATSD_NON_LOCAL_TRAFFIC: "true"
       DD_LOGS_ENABLED: "true"
-      DD_APM_ENABLED: "false"
+      DD_APM_ENABLED: "true"
+      DD_APM_NON_LOCAL_TRAFFIC: "true"
     volumes:
       - app-logs:/logs:ro
       - ./infra/datadog-logs.yaml:/etc/datadog-agent/conf.d/chargeops.d/conf.yaml:ro
