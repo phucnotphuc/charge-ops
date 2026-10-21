@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     simulator_secret: SecretStr = Field(min_length=24)
     webhook_secret: SecretStr = Field(min_length=24)
     operator_secret: SecretStr = Field(min_length=24)
+    operator_username: str = "operator"
+    operator_password_hash: SecretStr = SecretStr("")
+    allowed_origins: str = "http://localhost:8080,http://localhost:5173"
     api_url: str = "http://api:8000"
     dd_agent_host: str = "datadog"
     dd_monitor_id: str = ""
