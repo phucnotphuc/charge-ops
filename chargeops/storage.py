@@ -4,7 +4,7 @@ from pymongo import MongoClient
 from pymongo.errors import CollectionInvalid
 
 from chargeops.config import settings
-from chargeops.domain import BASELINE_VERSION, CONNECTOR, MANIFEST, with_residuals
+from chargeops.domain import BASELINE_VERSION, MANIFEST, with_residuals
 
 
 def database():
@@ -29,11 +29,11 @@ def initialize(db):
         partialFilterExpression={"unresolved": True},
     )
     db.sessions.create_index("expires_at", expireAfterSeconds=0)
-    db.run_events.create_index([("run_id", 1), ("requested_at", 1)])
+    db.run_events.create_index([("run_id", 1), ("consumed_at", 1), ("requested_at", 1)])
     db.inbox.create_index([("processed", 1), ("occurred_at", 1)])
     db.commands.create_index("idempotency_key", unique=True)
     db.commands.create_index([("incident_id", 1), ("type", 1), ("applied_at", -1)])
-    db.windows.create_index([("run_id", 1), ("end", -1)])
+    db.windows.create_index([("run_id", 1), ("connector_id", 1), ("end", -1)])
     db.sources.update_one(
         {"_id": MANIFEST},
         {
@@ -67,10 +67,10 @@ def initialize(db):
     )
 
 
-def telemetry_pipeline(run_id, end):
+def telemetry_pipeline(run_id, end, connector_id):
     """Whole run history up to `end`, deduplicated by sample_id; the thermal baseline needs it from run start."""
     return [
-        {"$match": {"meta.run_id": run_id, "meta.connector_id": CONNECTOR, "measured_at": {"$lt": end}}},
+        {"$match": {"meta.run_id": run_id, "meta.connector_id": connector_id, "measured_at": {"$lt": end}}},
         {"$sort": {"received_at": 1}},
         {"$group": {"_id": "$sample_id", "sample": {"$first": "$$ROOT"}}},
         {"$replaceRoot": {"newRoot": "$sample"}},
@@ -79,7 +79,7 @@ def telemetry_pipeline(run_id, end):
     ]
 
 
-def window_rows(db, run_id, end):
-    """Samples of the 60-second window ending at `end`, with lagged expected temperature and residual."""
-    rows = with_residuals(list(db.telemetry.aggregate(telemetry_pipeline(run_id, end))))
+def window_rows(db, run_id, end, connector_id):
+    """One connector's samples of the 60-second window ending at `end`, with lagged expected temperature and residual."""
+    rows = with_residuals(list(db.telemetry.aggregate(telemetry_pipeline(run_id, end, connector_id))))
     return [r for r in rows if r["measured_at"] >= end - timedelta(seconds=60)]

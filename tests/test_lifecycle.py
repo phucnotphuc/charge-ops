@@ -27,8 +27,9 @@ def window(store, end, current=30.0, limit=30.0, residual=1.0, requested=60.0, q
     ]
     store.windows.insert_one(
         {
-            "_id": f"{RUN}:{end.isoformat()}",
+            "_id": f"{RUN}:connector-1:{end.isoformat()}",
             "run_id": RUN,
+            "connector_id": "connector-1",
             "start": end - timedelta(seconds=60),
             "end": end,
             "quality": quality,
@@ -49,7 +50,12 @@ def flow(store, monkeypatch):
     )
     window(store, t - timedelta(seconds=10), current=60, limit=200, residual=10)  # pre-derating reference
     open_incident(
-        store, {"_id": RUN}, {"end": t - timedelta(seconds=10)}, "local", t - timedelta(seconds=5), "w"
+        store,
+        {"_id": RUN},
+        {"end": t - timedelta(seconds=10), "connector_id": "connector-1"},
+        "local",
+        t - timedelta(seconds=5),
+        "w",
     )
     client = TestClient(app)
 
@@ -107,7 +113,7 @@ def test_full_loop_open_to_resolved(store, flow):
         30,
     )
     simulate(5)  # ACK at t+5
-    assert store.runs.find_one()["sim"] == {"current_limit_a": 30}
+    assert store.runs.find_one()["sim"] == {"connector-1": {"current_limit_a": 30}}
 
     window(store, t + timedelta(seconds=70), residual=5)  # load reduced, still hot
     advance_incidents(store, at(70))
@@ -124,7 +130,7 @@ def test_full_loop_open_to_resolved(store, flow):
     simulate(97)
     advance_incidents(store, at(98))
     assert incident()["state"] == "verifying"
-    assert store.runs.find_one()["sim"] == {"current_limit_a": 200, "fault_cleared": True}
+    assert store.runs.find_one()["sim"] == {"connector-1": {"current_limit_a": 200, "fault_cleared": True}}
 
     plan = {160: {}, 175: {"current": 40}, 190: {}, 205: {"quality": False}, 220: {}, 235: {"residual": 4}}
     for end in range(160, 311, 15):
@@ -187,8 +193,14 @@ def test_alert_during_retest_reopens_but_stale_alert_does_not(store, flow):
     t, *_ = flow
     store.incidents.update_one({}, {"$set": {"state": "verifying", "verifying_since": t}})
     run = {"_id": RUN}
-    assert on_alert(store, run, {}, "datadog", t, "old", t - timedelta(seconds=1)) == "incident_existing"
-    assert on_alert(store, run, {}, "datadog", t, "new", t + timedelta(seconds=10)) == "incident_reopened"
+    assert (
+        on_alert(store, run, {"connector_id": "connector-1"}, "datadog", t, "old", t - timedelta(seconds=1))
+        == "incident_existing"
+    )
+    assert (
+        on_alert(store, run, {"connector_id": "connector-1"}, "datadog", t, "new", t + timedelta(seconds=10))
+        == "incident_reopened"
+    )
     found = store.incidents.find_one()
     assert found["state"] == "open" and found["timeline"][-1]["event"] == "recurrence"
     assert found["source"] == "local"  # recurrence does not rewrite the original source

@@ -7,7 +7,7 @@ type Schemas = components["schemas"];
 
 export type Role = "viewer" | "operator";
 export type RunMode = "local" | "datadog";
-export type Scenario = "healthy" | "thermal_fault";
+export type Scenario = Schemas["DemoRunCreate"]["scenario"];
 
 export type IncidentState =
   | "open"

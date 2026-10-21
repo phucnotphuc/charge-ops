@@ -110,7 +110,9 @@ def test_operator_secret_header_still_works(client):
 
 
 def test_incident_command_with_session_cookie_and_origin(client, store):
-    store.incidents.insert_one({"_id": "inc-1", "run_id": "r1", "state": "open"})
+    store.incidents.insert_one(
+        {"_id": "inc-1", "run_id": "r1", "connector_id": "connector-1", "state": "open"}
+    )
     login(client)
     url = "/api/v1/incidents/inc-1/commands"
     headers = {"Idempotency-Key": "k1"}

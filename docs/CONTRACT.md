@@ -1,6 +1,6 @@
 # ChargeOps — Hợp đồng triển khai v1
 
-**Phạm vi hiện thực ngày 20/10:** một connector với ingest, worker, alert/inbox/incident, baseline có quán tính nhiệt, commands (`acknowledge`/`reduce_load`/`maintenance`/`verify_recovery`), kiểm chứng giảm tải và retest theo §3; operator tạm dùng `X-Operator-Secret`. Xem MINIMAL_LOOP.md, mục "Vòng xử lý G2". Auth/session, UI, `/demo-runs` qua HTTP, `/connectors`, telemetry API, evaluation, 2 trạm/6 connector và scenario `load_increase`/`demand_drop` vẫn là thiết kế đích. Ngày triển khai sớm ghi tại DISCLOSURE.md.
+**Phạm vi hiện thực ngày 20/10:** một connector với ingest, worker, alert/inbox/incident, baseline có quán tính nhiệt, commands (`acknowledge`/`reduce_load`/`maintenance`/`verify_recovery`), kiểm chứng giảm tải và retest theo §3; operator tạm dùng `X-Operator-Secret`. Xem MINIMAL_LOOP.md, mục "Vòng xử lý G2". Auth/session, UI, `/demo-runs` qua HTTP, `/connectors`, telemetry API, evaluation vẫn là thiết kế đích. *21/10 (WP-W2B, mới kiểm chứng bằng unit test mongomock, chưa chạy live Datadog):* 2 trạm × 3 connector, bốn scenario theo seed, inject-fault qua simulator, worker theo từng connector. Ngày triển khai sớm ghi tại DISCLOSURE.md.
 
 Tài liệu chuẩn bị ngày 14/10/2026; phần cốt lõi chỉ bắt đầu từ 17/10/2026 theo lựa chọn của nhóm. Đây là thiết kế, chưa phải API đã tồn tại. Agent chính sở hữu thay đổi hợp đồng; backend, frontend và simulator triển khai theo cùng phiên bản này.
 
@@ -23,7 +23,7 @@ Mỗi mẫu telemetry gồm:
 
 Mọi trường số phải hữu hạn. Các đại lượng điện/tải không âm; không dùng giới hạn nhiệt tùy ý để loại chính mẫu bất thường cần phát hiện. API chỉ nhận mẫu thuộc run đang hoạt động và connector hợp lệ. Metadata time series gồm org/run/station/charger/connector. Mẫu trùng được loại theo `(run_id, sample_id)` trong aggregation; latest-state cập nhật theo thời gian đo, không theo thứ tự đến. Telemetry TTL 14 ngày; bằng chứng incident lưu riêng ngoài TTL.
 
-Hai trạm, mỗi trạm ba connector. Ground truth lỗi và seed lưu trong dữ liệu simulator/evaluation, tách khỏi đầu vào detector. Dataset công khai chỉ làm mẫu đường tải sau kiểm định; nhãn lỗi pin không trở thành nhãn lỗi charger. `composition` mô tả toàn mẫu. Manifest được telemetry tham chiếu ánh xạ từng trường sang `public`, `synthetic` hoặc `derived`, kèm source/version/checksum cho public, model/version cho synthetic, công thức và input fields cho derived. Ví dụ tải public và nhiệt simulator có composition hybrid, trường nhiệt synthetic; residual là derived. Nhiệt tương tác không được gắn public chỉ vì tải lấy từ dataset. Giữ manifest khi telemetry hết TTL để đọc lại bằng chứng incident.
+Hai trạm, mỗi trạm ba connector, ID tổng hợp cố định: `station-1/charger-1/connector-1..3`, `station-2/charger-2/connector-4..6` (`domain.CONNECTORS`, `domain.LOCATION`); API suy ra `station_id`/`charger_id` từ `connector_id`. Mỗi bước 5 giây simulator gửi một `/telemetry/batch` gồm 6 mẫu, `sample_id = uuid5(run_id, "<connector_id>:<bước>")`, retry gửi lại đúng các ID đó. Mỗi connector replay một phiên Autosun khác nhau, có nhiệt độ, giới hạn dòng và lệnh riêng; `seed` của run quyết định phiên tải, tham số `load_increase`/`demand_drop` (khoảng của evaluation) và với `thermal_fault` là connector lỗi (trong các connector có tải ổn định ±8% suốt 900 giây sau onset), onset 120–300 s và mức 9,5–11 °C tại tải lúc onset (`chargeops/fleet.py`); các connector còn lại khỏe. Kế hoạch này chỉ simulator tính, không lưu vào run. Ground truth lỗi và seed lưu trong dữ liệu simulator/evaluation, tách khỏi đầu vào detector. Dataset công khai chỉ làm mẫu đường tải sau kiểm định; nhãn lỗi pin không trở thành nhãn lỗi charger. `composition` mô tả toàn mẫu. Manifest được telemetry tham chiếu ánh xạ từng trường sang `public`, `synthetic` hoặc `derived`, kèm source/version/checksum cho public, model/version cho synthetic, công thức và input fields cho derived. Ví dụ tải public và nhiệt simulator có composition hybrid, trường nhiệt synthetic; residual là derived. Nhiệt tương tác không được gắn public chỉ vì tải lấy từ dataset. Giữ manifest khi telemetry hết TTL để đọc lại bằng chứng incident.
 
 ## 2. API và quyền sở hữu
 
@@ -39,10 +39,11 @@ Hai trạm, mỗi trạm ba connector. Ground truth lỗi và seed lưu trong d�
 | `POST /demo-runs` | `{scenario: healthy|load_increase|demand_drop|thermal_fault, seed: integer}` | Operator |
 | `POST /demo-runs/{id}/start`, `POST /demo-runs/{id}/stop` | Yêu cầu start/stop; chỉ một run hoạt động | Operator |
 | `GET /demo-runs`, `GET /demo-runs/{id}` | State, seed, mode, scenario, cấu hình đã khóa | Viewer |
-| `POST /demo-runs/{id}/inject-fault` | `{connector_id}`; ghi event điều khiển simulator | Operator |
+| `POST /demo-runs/{id}/inject-fault` | `{connector_id}` (một trong 6 connector của run); ghi event điều khiển simulator | Operator |
 | `GET /evaluations`, `GET /evaluations/{id}` | Kết quả thật, seed, baseline/config version | Viewer |
 | `POST /telemetry/batch` | `{samples: [...]}`, tối đa 1.000 mẫu; kiểm tra toàn bộ trước ghi | Simulator secret |
-| `GET /simulator/commands` | Command chưa xác nhận của run hoạt động | Simulator secret |
+| `GET /simulator/commands` | Command chưa xác nhận của run hoạt động, kèm `connector_id`; kết quả `applied` chỉ đổi trạng thái thiết bị `run.sim[connector_id]` | Simulator secret |
+| `GET /simulator/events`, `POST /simulator/events/{id}/consume` | Event `inject_fault` chưa tiêu thụ; consume đặt `consumed_at` đúng một lần (lặp lại trả `duplicate`) và lỗi bắt đầu trên connector đó tại `consumed_at` | Simulator secret |
 | `POST /simulator/commands/{id}/result` | `{status: applied|failed, applied_at, result}`; ghi event kết quả | Simulator secret |
 | `POST /webhooks/datadog` | Payload chuẩn hóa ở mục 4 | Webhook secret |
 

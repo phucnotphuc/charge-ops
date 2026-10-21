@@ -254,6 +254,8 @@
           "scenario": {
             "enum": [
               "healthy",
+              "load_increase",
+              "demand_drop",
               "thermal_fault"
             ],
             "title": "Scenario",
@@ -420,7 +422,14 @@
         "additionalProperties": false,
         "properties": {
           "connector_id": {
-            "const": "connector-1",
+            "enum": [
+              "connector-1",
+              "connector-2",
+              "connector-3",
+              "connector-4",
+              "connector-5",
+              "connector-6"
+            ],
             "title": "Connector Id",
             "type": "string"
           }
@@ -475,8 +484,14 @@
             "type": "number"
           },
           "connector_id": {
-            "const": "connector-1",
-            "default": "connector-1",
+            "enum": [
+              "connector-1",
+              "connector-2",
+              "connector-3",
+              "connector-4",
+              "connector-5",
+              "connector-6"
+            ],
             "title": "Connector Id",
             "type": "string"
           },
@@ -528,6 +543,7 @@
         "required": [
           "sample_id",
           "run_id",
+          "connector_id",
           "measured_at",
           "current_a",
           "voltage_v",
@@ -1730,6 +1746,93 @@
           }
         },
         "summary": "Command Result"
+      }
+    },
+    "/api/v1/simulator/events": {
+      "get": {
+        "description": "Unconsumed fault-injection events of the active run, oldest first.",
+        "operationId": "simulator_events_api_v1_simulator_events_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-simulator-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Simulator-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Simulator Events"
+      }
+    },
+    "/api/v1/simulator/events/{event_id}/consume": {
+      "post": {
+        "description": "Exactly once: consumed_at is set only while null and the fault starts on that connector at that time.\n\nA retry (lost response, simulator restart) re-applies the same timestamp, so it changes nothing.",
+        "operationId": "consume_event_api_v1_simulator_events__event_id__consume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-simulator-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Simulator-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Consume Event"
       }
     },
     "/api/v1/simulator/run": {

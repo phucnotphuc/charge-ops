@@ -8,7 +8,15 @@ from datadog import DogStatsd
 from pymongo.errors import PyMongoError
 
 from chargeops.config import settings
-from chargeops.domain import ALERT_RESIDUAL_C, CONNECTOR, RUN_MAX_S, block_end, now, window_evidence
+from chargeops.domain import (
+    ALERT_RESIDUAL_C,
+    CONNECTORS,
+    LOCATION,
+    RUN_MAX_S,
+    block_end,
+    now,
+    window_evidence,
+)
 from chargeops.lifecycle import advance_incidents, expire_commands, on_alert, process_commands
 from chargeops.logging import event, logger
 from chargeops.storage import database, initialize, window_rows
@@ -127,6 +135,7 @@ def process_event(db, item, at, monitor_id):
         evidence = db.windows.find_one(
             {
                 "run_id": run["_id"],
+                "connector_id": item["connector_id"],
                 "end": {"$lte": item["occurred_at"], "$gte": item["occurred_at"] - timedelta(seconds=30)},
             },
             sort=[("end", -1)],
@@ -162,7 +171,9 @@ def process_event(db, item, at, monitor_id):
 
 def manage_run(db, at):
     # Idempotent: repairs a crash between activation and the post-activation charge.
-    started = [r["_id"] for r in db.runs.find({"mode": "datadog", "started_at": {"$exists": True}}, {"_id": 1})]
+    started = [
+        r["_id"] for r in db.runs.find({"mode": "datadog", "started_at": {"$exists": True}}, {"_id": 1})
+    ]
     if started:
         db.budgets.update_one(
             {"_id": settings().dd_trial_id}, {"$addToSet": {"run_ids": {"$each": started}}}, upsert=True
@@ -216,8 +227,9 @@ def run_phases(db, stats, log):
         manage_run(db, at)
     run = db.runs.find_one({"status": "active"})
     if run:
-        with span("worker.alert_evaluation", run_id=run["_id"], connector_id=CONNECTOR):
-            evaluate_window(db, stats, log, run, at)
+        for connector_id in CONNECTORS:
+            with span("worker.alert_evaluation", run_id=run["_id"], connector_id=connector_id):
+                evaluate_window(db, stats, log, run, at, connector_id)
     with span("worker.inbox"):
         for item in db.inbox.find({"processed": False}).sort("occurred_at", 1).limit(100):
             with span(
@@ -249,21 +261,27 @@ def run_phases(db, stats, log):
         advance_incidents(db, at)
 
 
-def evaluate_window(db, stats, log, run, at):
+def evaluate_window(db, stats, log, run, at, connector_id):
     # Wait two seconds for ingestion; metric window ends on a 15-second boundary.
     end = block_end(at - timedelta(seconds=2))
-    window_id = f"{run['_id']}:{end.isoformat()}"
+    window_id = f"{run['_id']}:{connector_id}:{end.isoformat()}"
     if db.windows.find_one({"_id": window_id}):
         return
-    rows = window_rows(db, run["_id"], end)
+    rows = window_rows(db, run["_id"], end, connector_id)
     evidence = window_evidence(rows, end)
-    evidence.update(_id=window_id, run_id=run["_id"], created_at=at)
+    evidence.update(_id=window_id, run_id=run["_id"], connector_id=connector_id, created_at=at)
     db.windows.insert_one(evidence)
     if run["mode"] == "local":
         if evidence["quality"] and evidence["residual_mean"] > ALERT_RESIDUAL_C:
             on_alert(db, run, evidence, "local", at, window_id, end)
         return
-    tags = [f"run_id:{run['_id']}", f"connector_id:{CONNECTOR}", "env:hackathon"]
+    station_id = LOCATION[connector_id][0]
+    tags = [
+        f"run_id:{run['_id']}",
+        f"connector_id:{connector_id}",
+        f"station_id:{station_id}",
+        "env:hackathon",
+    ]
     # Export only the newest non-overlapping block, not the rolling mean.
     block = [r for r in rows if r["measured_at"] >= end - timedelta(seconds=15)]
     stats.increment("chargeops.residual_positive", sum(max(r["residual"], 0) for r in block), tags=tags)
@@ -274,6 +292,7 @@ def evaluate_window(db, stats, log, run, at):
         log,
         "metrics_emitted",
         run_id=run["_id"],
+        connector_id=connector_id,
         window_end=end,
         quality=evidence["quality"],
         count=len(block),
