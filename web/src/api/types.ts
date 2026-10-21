@@ -3,7 +3,7 @@
 
 export type Role = "viewer" | "operator";
 export type RunMode = "local" | "datadog";
-export type Scenario = "healthy" | "load_increase" | "demand_drop" | "thermal_fault";
+export type Scenario = "healthy" | "thermal_fault";
 
 export type IncidentState =
   | "open"
@@ -38,12 +38,12 @@ export interface Provenance {
 export interface TelemetrySample {
   sample_id: string;
   run_id: string;
-  station_id: string;
-  charger_id: string;
+  station_id: string | null;
+  charger_id: string | null;
   connector_id: string;
-  session_id: string | null;
+  session_id?: string | null;
   measured_at: string;
-  received_at: string;
+  received_at: string | null;
   voltage_v: number | null;
   current_a: number | null;
   power_kw: number | null;
@@ -51,29 +51,35 @@ export interface TelemetrySample {
   ambient_temperature_c: number | null;
   requested_current_a: number | null;
   current_limit_a: number | null;
-  connector_status: "available" | "charging" | "faulted" | "offline";
-  session_status: "idle" | "active" | "completed" | "interrupted" | null;
-  provenance: Provenance;
+  connector_status?: "available" | "charging" | "faulted" | "offline" | null;
+  session_status?: "idle" | "active" | "completed" | "interrupted" | null;
+  provenance?: Provenance | null;
 }
 
-/** GET /connectors item: latest telemetry, freshness, active incident, mode. */
+/** GET /connectors and GET /connectors/{id}: latest telemetry, server-computed freshness, active incident, mode. */
 export interface Connector {
   connector_id: string;
-  station_id: string;
-  charger_id: string;
+  station_id: string | null;
+  charger_id: string | null;
   run_id: string | null;
+  run_status: string | null;
   mode: RunMode | null;
   latest: TelemetrySample | null;
-  freshness_seconds: number | null;
-  active_incident_id: string | null;
+  measured_at: string | null;
+  /** Seconds since the newest sample, computed by the server (null: no telemetry yet). */
+  freshness_s: number | null;
+  /** Server verdict: freshness > 30 s, or no telemetry. */
+  stale: boolean;
+  active_incident: { id: string; state: IncidentState } | null;
 }
 
 /** GET /connectors/{id}/telemetry item: measured series plus expected temperature. */
 export interface TelemetryPoint {
+  sample_id?: string;
   measured_at: string;
   connector_temperature_c: number | null;
   expected_temperature_c: number | null;
-  residual_c: number | null;
+  residual: number | null;
   current_a: number | null;
   current_limit_a: number | null;
   ambient_temperature_c: number | null;
@@ -142,10 +148,11 @@ export interface CommandAccepted {
   status: CommandStatus;
 }
 
+// NOTE: GET /demo-runs returns raw Mongo docs (`_id`); GET/POST /demo-runs/{id}... return `id`. Use idOf().
 export interface DemoRun {
   id?: string;
   _id?: string;
-  status: "pending" | "active" | "stopped" | "rejected" | string;
+  status: "created" | "pending" | "active" | "stopped" | "rejected" | "cancelled" | string;
   mode: RunMode;
   scenario: Scenario | string;
   seed?: number | null;
@@ -154,8 +161,6 @@ export interface DemoRun {
   stopped_at?: string | null;
   reason?: string | null;
   stop_requested?: boolean;
-  /** Datadog live-run budget, when the backend returns it. */
-  datadog_budget?: { used: number; limit: number } | null;
 }
 
 export interface Evaluation {

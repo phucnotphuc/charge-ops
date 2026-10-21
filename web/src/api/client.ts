@@ -14,6 +14,8 @@ import type {
 } from "./types";
 
 const BASE = "/api/v1";
+export const TELEMETRY_PAGE_LIMIT = 1000;
+export const MAX_TELEMETRY_PAGES = 20;
 
 export class ApiError extends Error {
   constructor(
@@ -75,9 +77,29 @@ export const api = {
   logout: () => post<void>("/auth/logout"),
 
   connectors: () => request<Page<Connector>>("/connectors"),
-  connectorTelemetry: (id: string, runId: string | null, from: string, to: string) => {
-    const query = new URLSearchParams({ from, to, ...(runId ? { run_id: runId } : {}) });
+  connector: (id: string) => request<Connector>(`/connectors/${encodeURIComponent(id)}`),
+  telemetryPage: (id: string, runId: string | null, from: string, to: string, cursor: string | null) => {
+    const query = new URLSearchParams({
+      from,
+      to,
+      limit: String(TELEMETRY_PAGE_LIMIT),
+      ...(runId ? { run_id: runId } : {}),
+      ...(cursor ? { cursor } : {}),
+    });
     return request<Page<TelemetryPoint>>(`/connectors/${encodeURIComponent(id)}/telemetry?${query}`);
+  },
+  /** Follows next_cursor up to MAX_TELEMETRY_PAGES; `truncated` is true when the cap cut the series short. */
+  connectorTelemetry: async (id: string, runId: string | null, from: string, to: string) => {
+    const items: TelemetryPoint[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    do {
+      const page: Page<TelemetryPoint> = await api.telemetryPage(id, runId, from, to, cursor);
+      items.push(...page.items);
+      cursor = page.next_cursor;
+      pages += 1;
+    } while (cursor && pages < MAX_TELEMETRY_PAGES);
+    return { items, truncated: cursor !== null };
   },
 
   incidents: () => request<Page<Incident>>("/incidents"),

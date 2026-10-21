@@ -40,9 +40,7 @@ export function IncidentDetail() {
 export function IncidentView({ incident, onChanged }: { incident: Incident; onChanged?: () => void }) {
   const { role } = useAuth();
   const incidentId = idOf(incident);
-  const commands = incident.commands ?? [];
-  const reduce = commands.filter((c) => c.type === "reduce_load");
-  const ack = reduce.find((c) => c.status === "applied");
+  const ack = latestAppliedReduction(incident);
   const verifiedAt = incident.load_reduction_verified_at ?? null;
 
   return (
@@ -139,6 +137,18 @@ export function IncidentView({ incident, onChanged }: { incident: Incident; onCh
       </div>
     </div>
   );
+}
+
+/** Newest applied reduce_load in the current handling cycle (after the last recurrence), not the first ever. */
+export function latestAppliedReduction(incident: Incident): Command | undefined {
+  const cycleStart = incident.timeline
+    .filter((e) => e.event === "recurrence")
+    .map((e) => Date.parse(e.at))
+    .reduce((a, b) => Math.max(a, b), 0);
+  return (incident.commands ?? [])
+    .filter((c) => c.type === "reduce_load" && c.status === "applied" && c.applied_at)
+    .filter((c) => Date.parse(c.applied_at as string) >= cycleStart)
+    .sort((a, b) => Date.parse(b.applied_at as string) - Date.parse(a.applied_at as string))[0];
 }
 
 function ProofRow({ ok, title, detail, warn }: { ok: boolean; title: string; detail: string; warn?: boolean }) {

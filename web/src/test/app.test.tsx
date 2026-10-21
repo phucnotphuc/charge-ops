@@ -7,6 +7,9 @@ import { DemoControl } from "../pages/DemoControl";
 import { Evaluations } from "../pages/Evaluations";
 import { IncidentDetail } from "../pages/IncidentDetail";
 import { Overview } from "../pages/Overview";
+import { api, MAX_TELEMETRY_PAGES } from "../api/client";
+import { downsample } from "../lib/format";
+import { latestAppliedReduction } from "../pages/IncidentDetail";
 import { connector, incident } from "./fixtures";
 
 type Handler = (url: string, init?: RequestInit) => { status?: number; body?: unknown };
@@ -116,9 +119,9 @@ describe("overview", () => {
         return {
           body: {
             items: [
-              connector({ connector_id: "fresh", freshness_seconds: 5 }),
-              connector({ connector_id: "old", freshness_seconds: 45 }),
-              connector({ connector_id: "none", freshness_seconds: null, latest: null }),
+              connector({ connector_id: "fresh", freshness_s: 5, stale: false }),
+              connector({ connector_id: "old", freshness_s: 45, stale: true }),
+              connector({ connector_id: "none", freshness_s: null, stale: true, latest: null, measured_at: null }),
             ],
             next_cursor: null,
           },
@@ -159,7 +162,11 @@ describe("demo control and evaluations", () => {
       if (url.endsWith("/demo-runs"))
         return {
           body: {
-            items: [{ id: "run-abcdef12", status: "active", mode: "datadog", scenario: "thermal_fault", seed: 7, datadog_budget: { used: 3, limit: 20 } }],
+            items: [
+              { _id: "run-abcdef12", status: "active", mode: "datadog", scenario: "thermal_fault", seed: 7 },
+              { _id: "run-rejected", status: "rejected", mode: "datadog", scenario: "healthy", seed: 1, reason: "trial_run_budget_exhausted" },
+              { _id: "run-cancelled", status: "cancelled", mode: "local", scenario: "healthy", seed: 2 },
+            ],
             next_cursor: null,
           },
         };
@@ -167,9 +174,12 @@ describe("demo control and evaluations", () => {
       return { status: 404 };
     });
     renderAt("/demo", <DemoControl />);
-    expect(await screen.findByTestId("budget")).toHaveTextContent("3/20");
+    expect(await screen.findByTestId("run-reason")).toHaveTextContent("20 run ID Datadog");
+    expect(screen.getByText("Đã hủy")).toBeInTheDocument();
+    const scenarios = Array.from(screen.getByLabelText("Kịch bản").querySelectorAll("option")).map((o) => o.value);
+    expect(scenarios).toEqual(["healthy", "thermal_fault"]);
     expect(screen.getByRole("button", { name: "Tạo run" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Dừng" })).toBeDisabled();
+    screen.getAllByRole("button", { name: "Dừng" }).forEach((b) => expect(b).toBeDisabled());
     expect(screen.getByRole("button", { name: "Chèn lỗi" })).toBeDisabled();
   });
 
@@ -178,5 +188,102 @@ describe("demo control and evaluations", () => {
     renderAt("/evaluations", <Evaluations />);
     expect(await screen.findByTestId("empty")).toHaveTextContent("Chưa có kết quả đánh giá");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+describe("real backend shapes", () => {
+  it("shows the active incident state on the connector card", async () => {
+    mockFetch((url) =>
+      url.endsWith("/auth/me")
+        ? unauthenticated
+        : { body: { items: [connector({ active_incident: { id: "inc-7", state: "mitigating" } })], next_cursor: null } },
+    );
+    renderAt("/", <Overview />);
+    const card = await screen.findByTestId("connector-connector-1");
+    expect(card).toHaveTextContent("Có sự cố đang xử lý");
+    expect(card).toHaveTextContent("Đang giảm tải");
+    expect(card.querySelector("a[href='/incidents/inc-7']")).not.toBeNull();
+  });
+
+  it("does not crash when provenance and status fields are missing or null", async () => {
+    const base = connector();
+    mockFetch((url) =>
+      url.endsWith("/auth/me")
+        ? unauthenticated
+        : {
+            body: {
+              items: [
+                connector({ latest: { ...base.latest!, provenance: null } }),
+                connector({ connector_id: "no-prov", latest: { ...base.latest!, provenance: undefined, connector_status: undefined } }),
+                connector({ connector_id: "no-station", station_id: null, charger_id: null }),
+              ],
+              next_cursor: null,
+            },
+          },
+    );
+    renderAt("/", <Overview />);
+    expect(await screen.findByTestId("connector-no-prov")).toHaveTextContent("manifest —");
+    expect(screen.getByTestId("connector-no-station")).toHaveTextContent("Trạm — · Trụ —");
+    expect(screen.getAllByTestId("provenance")[0]).toHaveTextContent("Nguồn dữ liệu: —");
+  });
+});
+
+describe("telemetry client", () => {
+  const point = (i: number) => ({ measured_at: new Date(1_700_000_000_000 + i * 5000).toISOString(), residual: i });
+
+  it("sends limit=1000 and follows next_cursor", async () => {
+    const urls: string[] = [];
+    mockFetch((url) => {
+      urls.push(url);
+      const cursor = new URL(url, "http://x").searchParams.get("cursor");
+      if (!cursor) return { body: { items: [point(0), point(1)], next_cursor: "c1" } };
+      if (cursor === "c1") return { body: { items: [point(2)], next_cursor: "c2" } };
+      return { body: { items: [point(3)], next_cursor: null } };
+    });
+    const result = await api.connectorTelemetry("connector-1", "run-1", "2026-10-21T00:00:00Z", "2026-10-21T01:00:00Z");
+    expect(result.items.map((p) => p.residual)).toEqual([0, 1, 2, 3]);
+    expect(result.truncated).toBe(false);
+    expect(urls).toHaveLength(3);
+    expect(urls.every((u) => new URL(u, "http://x").searchParams.get("limit") === "1000")).toBe(true);
+    expect(new URL(urls[1], "http://x").searchParams.get("cursor")).toBe("c1");
+  });
+
+  it("stops at the page cap and reports truncation", async () => {
+    const fetchMock = mockFetch(() => ({ body: { items: [point(0)], next_cursor: "more" } }));
+    const result = await api.connectorTelemetry("connector-1", null, "2026-10-21T00:00:00Z", "2026-10-21T01:00:00Z");
+    expect(fetchMock).toHaveBeenCalledTimes(MAX_TELEMETRY_PAGES);
+    expect(result.truncated).toBe(true);
+  });
+
+  it("downsamples to at most 1500 points keeping first and last", () => {
+    const data = Array.from({ length: 17_280 }, (_, i) => i);
+    const out = downsample(data, 1500);
+    expect(out).toHaveLength(1500);
+    expect(out[0]).toBe(0);
+    expect(out[out.length - 1]).toBe(17_279);
+    expect(downsample([1, 2, 3], 1500)).toEqual([1, 2, 3]);
+  });
+});
+
+describe("ACK selection", () => {
+  it("uses the latest applied reduce_load of the current cycle", () => {
+    const inc = incident({
+      timeline: [
+        { at: "2026-10-20T03:00:00Z", event: "opened" },
+        { at: "2026-10-20T04:00:00Z", event: "recurrence" },
+      ],
+      commands: [
+        { id: "a", type: "reduce_load", status: "applied", applied_at: "2026-10-20T03:10:00Z" },
+        { id: "b", type: "reduce_load", status: "applied", applied_at: "2026-10-20T04:10:00Z" },
+        { id: "c", type: "reduce_load", status: "applied", applied_at: "2026-10-20T04:20:00Z" },
+        { id: "d", type: "reduce_load", status: "failed", applied_at: null },
+      ],
+    });
+    expect(latestAppliedReduction(inc)?.id).toBe("c");
+    const old = incident({
+      commands: [{ id: "a", type: "reduce_load", status: "applied", applied_at: "2026-10-20T03:10:00Z" }],
+      timeline: [{ at: "2026-10-20T05:00:00Z", event: "recurrence" }],
+    });
+    expect(latestAppliedReduction(old)).toBeUndefined();
   });
 });

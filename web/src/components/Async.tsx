@@ -3,13 +3,22 @@ import { AlertTriangle, Inbox, Loader2 } from "lucide-react";
 import type { ApiError } from "../api/client";
 import type { Polled } from "../api/hooks";
 
-export function ErrorBox({ error, onRetry }: { error: ApiError; onRetry?: () => void }) {
+export function ErrorBox({
+  error,
+  onRetry,
+  reasons,
+}: {
+  error: ApiError;
+  onRetry?: () => void;
+  /** Optional Vietnamese explanations keyed by backend error code (e.g. 409 conflict codes). */
+  reasons?: Record<string, string>;
+}) {
   return (
     <div className="state state-error" role="alert">
       <AlertTriangle size={20} aria-hidden />
       <div>
         <strong>Không tải được dữ liệu</strong>
-        <p>{error.message}</p>
+        <p>{reasons?.[error.code] ?? error.message}</p>
         <p className="muted small">
           {error.status ? `HTTP ${error.status} · ` : ""}
           {error.code}

@@ -1,5 +1,4 @@
 export const TZ = "Asia/Ho_Chi_Minh";
-export const STALE_SECONDS = 30;
 
 const dateTime = new Intl.DateTimeFormat("vi-VN", {
   timeZone: TZ,
@@ -40,18 +39,13 @@ export function fmtAge(seconds: number | null | undefined): string {
   return `${Math.round(seconds / 60)} phút trước`;
 }
 
-export function isStale(seconds: number | null | undefined): boolean {
-  return seconds === null || seconds === undefined || seconds > STALE_SECONDS;
-}
-
-/** Server freshness if given, else derived from the newest sample time. */
-export function freshnessOf(c: {
-  freshness_seconds: number | null;
-  latest: { measured_at: string } | null;
-}): number | null {
-  if (c.freshness_seconds !== null && c.freshness_seconds !== undefined) return c.freshness_seconds;
-  if (!c.latest) return null;
-  return Math.max(0, (Date.now() - new Date(c.latest.measured_at).getTime()) / 1000);
+/** Keep at most `max` points, evenly spaced and always including the last one. */
+export function downsample<T>(items: T[], max = 1500): T[] {
+  if (items.length <= max) return items;
+  const out: T[] = [];
+  const step = (items.length - 1) / (max - 1);
+  for (let i = 0; i < max; i++) out.push(items[Math.round(i * step)]);
+  return out;
 }
 
 export const STATE_LABEL: Record<string, string> = {
@@ -102,8 +96,6 @@ export const EVENT_LABEL: Record<string, string> = {
 
 export const SCENARIO_LABEL: Record<string, string> = {
   healthy: "Khỏe mạnh",
-  load_increase: "Tải tăng",
-  demand_drop: "Nhu cầu giảm",
   thermal_fault: "Lỗi nhiệt",
 };
 
@@ -112,6 +104,14 @@ export const RUN_STATUS_LABEL: Record<string, string> = {
   active: "Đang chạy",
   stopped: "Đã dừng",
   rejected: "Bị từ chối",
+  created: "Đã tạo, chưa khởi động",
+  cancelled: "Đã hủy",
+};
+
+export const REASON_LABEL: Record<string, string> = {
+  configure_dd_monitor_id_first: "Chưa cấu hình DD_MONITOR_ID cho Datadog; hãy cấu hình trước khi chạy chế độ Datadog.",
+  trial_run_budget_exhausted: "Đã dùng hết 20 run ID Datadog của bản dùng thử; chỉ còn chạy chế độ Local.",
+  demo_ended_unresolved: "Run demo đã kết thúc khi sự cố chưa giải quyết.",
 };
 
 export const COMPOSITION_LABEL: Record<string, string> = {

@@ -15,7 +15,9 @@ import { api } from "../api/client";
 import { usePolling } from "../api/hooks";
 import type { TelemetryPoint } from "../api/types";
 import { Async } from "../components/Async";
-import { TZ } from "../lib/format";
+import { STATE_LABEL, TZ, downsample } from "../lib/format";
+
+export const MAX_POINTS = 1500;
 
 const WINDOWS = [
   { label: "15 phút", ms: 15 * 60_000 },
@@ -39,17 +41,16 @@ export function ConnectorPage() {
   const { id = "" } = useParams();
   const [windowMs, setWindowMs] = useState(WINDOWS[1].ms);
   const polled = usePolling(async () => {
-    const connectors = await api.connectors();
-    const connector = connectors.items.find((c) => c.connector_id === id) ?? null;
+    const connector = await api.connector(id);
     const to = new Date();
     const from = new Date(to.getTime() - windowMs);
     const telemetry = await api.connectorTelemetry(
       id,
-      connector?.run_id ?? null,
+      connector.run_id,
       from.toISOString(),
       to.toISOString(),
     );
-    return { connector, points: telemetry.items };
+    return { connector, points: downsample(telemetry.items, MAX_POINTS), total: telemetry.items.length, truncated: telemetry.truncated };
   }, [id, windowMs]);
 
   return (
@@ -75,11 +76,25 @@ export function ConnectorPage() {
         isEmpty={(d) => d.points.length === 0}
         empty="Không có telemetry trong khoảng thời gian đã chọn."
       >
-        {({ connector, points }) => (
+        {({ connector, points, total, truncated }) => (
           <div className="stack">
-            {connector?.active_incident_id && (
+            {connector.active_incident && (
               <p>
-                <Link to={`/incidents/${connector.active_incident_id}`}>Có sự cố đang xử lý, xem chi tiết</Link>
+                <Link to={`/incidents/${connector.active_incident.id}`}>Có sự cố đang xử lý, xem chi tiết</Link>{" "}
+                <span className={`badge state-${connector.active_incident.state}`}>
+                  {STATE_LABEL[connector.active_incident.state] ?? connector.active_incident.state}
+                </span>
+              </p>
+            )}
+            {connector.stale && (
+              <p className="banner" data-testid="stale-note">
+                Dữ liệu của connector này đang cũ (quá 30 giây hoặc chưa có telemetry).
+              </p>
+            )}
+            {(truncated || total > points.length) && (
+              <p className="muted small" data-testid="series-note">
+                {truncated ? "Chuỗi dài hơn giới hạn tải, chỉ hiển thị phần đầu. " : ""}
+                Hiển thị {points.length}/{total} điểm.
               </p>
             )}
             <ChartCard title="Nhiệt độ connector: đo và kỳ vọng (°C)" points={points}>
@@ -87,7 +102,7 @@ export function ConnectorPage() {
               <Line type="monotone" dataKey="expected_temperature_c" name="Nhiệt kỳ vọng (°C)" stroke="#2563eb" strokeDasharray="5 3" dot={false} connectNulls={false} isAnimationActive={false} />
             </ChartCard>
             <ChartCard title="Residual nhiệt (°C)" points={points}>
-              <Line type="monotone" dataKey="residual_c" name="Residual (°C)" stroke="#7c3aed" dot={false} connectNulls={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="residual" name="Residual (°C)" stroke="#7c3aed" dot={false} connectNulls={false} isAnimationActive={false} />
               <ReferenceLine y={8} stroke="#b91c1c" strokeDasharray="4 4" label="Ngưỡng cảnh báo 8 °C" />
               <ReferenceLine y={3} stroke="#15803d" strokeDasharray="4 4" label="Ngưỡng phục hồi 3 °C" />
             </ChartCard>

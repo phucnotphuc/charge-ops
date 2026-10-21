@@ -5,7 +5,7 @@ import { usePolling } from "../api/hooks";
 import type { Connector } from "../api/types";
 import { Async } from "../components/Async";
 import { ModeBadge } from "../components/Badges";
-import { COMPOSITION_LABEL, fmtAge, fmtNum, fmtTime, freshnessOf, isStale } from "../lib/format";
+import { COMPOSITION_LABEL, STATE_LABEL, fmtAge, fmtNum, fmtTime } from "../lib/format";
 
 const STATUS_LABEL: Record<string, string> = {
   available: "Sẵn sàng",
@@ -37,8 +37,8 @@ export function Overview() {
 }
 
 export function ConnectorCard({ connector: c }: { connector: Connector }) {
-  const age = freshnessOf(c);
-  const stale = isStale(age);
+  const age = c.freshness_s;
+  const stale = c.stale;
   const s = c.latest;
   return (
     <article className={`card connector ${stale ? "stale" : ""}`} data-testid={`connector-${c.connector_id}`}>
@@ -47,12 +47,14 @@ export function ConnectorCard({ connector: c }: { connector: Connector }) {
           <Plug size={16} aria-hidden /> <Link to={`/connectors/${encodeURIComponent(c.connector_id)}`}>{c.connector_id}</Link>
         </h2>
         <span className="muted small">
-          Trạm {c.station_id} · Trụ {c.charger_id}
+          Trạm {c.station_id ?? "—"} · Trụ {c.charger_id ?? "—"}
         </span>
       </header>
       <div className="badges">
         <ModeBadge mode={c.mode} />
-        {s && <span className="badge neutral">{STATUS_LABEL[s.connector_status] ?? s.connector_status}</span>}
+        <span className="badge neutral">
+          Trạng thái: {s?.connector_status ? (STATUS_LABEL[s.connector_status] ?? s.connector_status) : "—"}
+        </span>
       </div>
       {s ? (
         <dl className="metrics">
@@ -89,14 +91,19 @@ export function ConnectorCard({ connector: c }: { connector: Connector }) {
         {s && <span className="muted small"> · đo lúc {fmtTime(s.measured_at)}</span>}
       </p>
       {s && (
-        <p className="muted small">
-          Nguồn dữ liệu: {COMPOSITION_LABEL[s.provenance.composition] ?? s.provenance.composition} · manifest{" "}
-          {s.provenance.manifest_id}
+        <p className="muted small" data-testid="provenance">
+          Nguồn dữ liệu:{" "}
+          {s.provenance?.composition ? (COMPOSITION_LABEL[s.provenance.composition] ?? s.provenance.composition) : "—"}
+          {" · manifest "}
+          {s.provenance?.manifest_id ?? "—"}
         </p>
       )}
-      {c.active_incident_id ? (
+      {c.active_incident ? (
         <p>
-          <Siren size={14} aria-hidden /> <Link to={`/incidents/${c.active_incident_id}`}>Có sự cố đang xử lý</Link>
+          <Siren size={14} aria-hidden /> <Link to={`/incidents/${c.active_incident.id}`}>Có sự cố đang xử lý</Link>{" "}
+          <span className={`badge state-${c.active_incident.state}`}>
+            {STATE_LABEL[c.active_incident.state] ?? c.active_incident.state}
+          </span>
         </p>
       ) : (
         <p className="muted small">Không có sự cố đang mở.</p>

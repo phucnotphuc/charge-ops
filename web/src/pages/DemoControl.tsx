@@ -4,9 +4,9 @@ import { useAuth } from "../api/auth";
 import { usePolling } from "../api/hooks";
 import { idOf, type DemoRun, type RunMode, type Scenario } from "../api/types";
 import { Async, ErrorBox } from "../components/Async";
-import { RUN_STATUS_LABEL, SCENARIO_LABEL, fmtTime } from "../lib/format";
+import { REASON_LABEL, RUN_STATUS_LABEL, SCENARIO_LABEL, fmtTime } from "../lib/format";
 
-const SCENARIOS: Scenario[] = ["healthy", "load_increase", "demand_drop", "thermal_fault"];
+const SCENARIOS: Scenario[] = ["healthy", "thermal_fault"];
 
 export function DemoControl() {
   const { role } = useAuth();
@@ -43,7 +43,6 @@ export function DemoControl() {
     void act(() => api.createRun({ scenario, seed: n, mode }));
   }
 
-  const budget = runs.data?.items.map((r) => r.datadog_budget).find((b) => b) ?? null;
   const connectorIds = connectors.data?.items.map((c) => c.connector_id) ?? [];
   const target = faultTarget || connectorIds[0] || "";
 
@@ -82,14 +81,9 @@ export function DemoControl() {
         <button type="submit" className="btn primary" disabled={!isOperator || busy}>
           Tạo run
         </button>
-        {budget && (
-          <p className="muted small" data-testid="budget">
-            Ngân sách run Datadog: đã dùng {budget.used}/{budget.limit}
-          </p>
-        )}
       </form>
 
-      {error && <ErrorBox error={error} />}
+      {error && <ErrorBox error={error} reasons={REASON_LABEL} />}
 
       <div className="card">
         <h2>Các run</h2>
@@ -172,8 +166,8 @@ function RunRow({
   onStart: () => void;
   onStop: () => void;
 }) {
-  const startable = run.status === "created" || run.status === "ready";
-  const stoppable = run.status === "active" || run.status === "pending";
+  const startable = run.status === "created";
+  const stoppable = run.status === "active" || run.status === "pending" || run.status === "created";
   return (
     <tr>
       <td className="mono">{idOf(run).slice(0, 8)}</td>
@@ -182,7 +176,11 @@ function RunRow({
       <td>{run.mode === "datadog" ? "Datadog" : "Local"}</td>
       <td>
         {RUN_STATUS_LABEL[run.status] ?? run.status}
-        {run.reason ? ` (${run.reason})` : ""}
+        {run.reason && (
+          <div className="muted small" data-testid="run-reason">
+            {REASON_LABEL[run.reason] ?? run.reason}
+          </div>
+        )}
       </td>
       <td>{fmtTime(run.created_at)}</td>
       <td className="actions">
