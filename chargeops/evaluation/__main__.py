@@ -101,7 +101,7 @@ def run(lock_path, version, out):
     (out / "summary.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     (out / "summary.md").write_text(summary.markdown(result, runtime), encoding="utf-8")
     (out / "locked-config.json").write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
-    print(summary.markdown(result, runtime))
+    print(f"wrote {out} ({result['runs']} runs, {runtime:.1f} s)")
     return result
 
 
