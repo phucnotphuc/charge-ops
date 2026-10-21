@@ -1,5 +1,6 @@
 import base64
 import hmac
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Annotated
@@ -79,7 +80,9 @@ ERROR_CODES = {
 
 
 def envelope(request, status_code, code, message):
-    request_id = request.headers.get("x-request-id") or str(uuid4())
+    request_id = request.headers.get("x-request-id", "")
+    if not re.fullmatch(r"[A-Za-z0-9-]{1,64}", request_id):
+        request_id = str(uuid4())
     body = {"error": {"code": code, "message": message, "request_id": request_id}}
     return JSONResponse(status_code=status_code, content=body, headers={"X-Request-ID": request_id})
 
@@ -366,12 +369,14 @@ def start_run(run_id: str, store=Depends(db)):
             raise ApiError(409, "trial_run_budget_exhausted", "Datadog trial budget of 20 runs is used up")
     try:
         # Worker activates the pending run and honours stop_requested; the API never writes "active".
-        store.runs.update_one(
+        claimed = store.runs.update_one(
             {"_id": run_id, "status": "created"},
             {"$set": {"status": "pending", "active_slot": "single", "start_requested_at": now()}},
         )
     except DuplicateKeyError:
         raise ApiError(409, "conflict", "A run is already pending/active. Stop it first.") from None
+    if not claimed.matched_count:
+        raise ApiError(409, "conflict", "Run changed state concurrently")
     event(logger("api"), "demo_run_start_requested", run_id=run_id)
     return run_out(get_run(store, run_id))
 
@@ -383,13 +388,19 @@ def start_run(run_id: str, store=Depends(db)):
     dependencies=[Depends(operator_auth)],
 )
 def stop_run(run_id: str, store=Depends(db)):
-    run = get_run(store, run_id)
-    if run["status"] == "created":
-        store.runs.update_one({"_id": run_id}, {"$set": {"status": "cancelled", "stopped_at": now()}})
-    elif run["status"] in ("pending", "active"):
-        store.runs.update_one({"_id": run_id}, {"$set": {"stop_requested": True}})
+    get_run(store, run_id)
+    # Conditional updates only: a run the worker activates meanwhile falls through to stop_requested.
+    # Cancelling before activation keeps a Datadog run from being charged against the trial budget.
+    cancel = {"$set": {"status": "cancelled", "stopped_at": now()}, "$unset": {"active_slot": ""}}
+    for status, change in (
+        ("created", cancel),
+        ("pending", cancel),
+        ("active", {"$set": {"stop_requested": True}}),
+    ):
+        if store.runs.update_one({"_id": run_id, "status": status}, change).matched_count:
+            break
     else:
-        raise ApiError(409, "conflict", f"Run is already {run['status']}")
+        raise ApiError(409, "conflict", "Run is already finished")
     event(logger("api"), "demo_run_stop_requested", run_id=run_id)
     return run_out(get_run(store, run_id))
 
@@ -535,7 +546,10 @@ def encode_cursor(row):
 def decode_cursor(cursor):
     try:
         stamp, sample_id = base64.urlsafe_b64decode(cursor.encode()).decode().split("|", 1)
-        return datetime.fromisoformat(stamp), sample_id
+        moment = datetime.fromisoformat(stamp)
+        if moment.tzinfo is None:
+            raise ValueError("naive")
+        return moment, sample_id
     except (ValueError, UnicodeDecodeError):
         raise ApiError(422, "validation_error", "cursor: invalid") from None
 

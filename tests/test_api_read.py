@@ -218,8 +218,8 @@ def test_demo_run_lifecycle(client, store):
     assert client.get(f"/api/v1/demo-runs/{run_id}").json()["status"] == "pending"
 
     stopped = client.post(f"/api/v1/demo-runs/{run_id}/stop", headers=OPERATOR)
-    assert stopped.status_code == 202 and stopped.json()["stop_requested"] is True
-    assert store.runs.find_one({"_id": run_id})["stop_requested"] is True
+    assert stopped.status_code == 202 and stopped.json()["status"] == "cancelled"
+    assert "active_slot" not in store.runs.find_one({"_id": run_id})
 
 
 def test_start_second_run_conflicts_with_single_active_slot(client):
@@ -329,3 +329,67 @@ def test_routes_in_openapi_with_response_models():
         if method != "post" or "logout" not in path:
             content = operation["responses"][ok[0]].get("content", {})
             assert "$ref" in content["application/json"]["schema"], (path, method)
+
+
+def test_start_loses_race_to_concurrent_change(client, store, monkeypatch):
+    run_id = create(client).json()["id"]
+    stale = store.runs.find_one({"_id": run_id})
+    store.runs.update_one({"_id": run_id}, {"$set": {"status": "cancelled"}})
+    monkeypatch.setattr("chargeops.api.get_run", lambda *_: stale)
+    response = client.post(f"/api/v1/demo-runs/{run_id}/start", headers=OPERATOR)
+    assert response.status_code == 409 and response.json()["error"]["code"] == "conflict"
+    assert store.runs.find_one({"_id": run_id})["status"] == "cancelled"
+
+
+def test_stop_after_concurrent_finish_is_409_and_does_not_rewrite(client, store, monkeypatch):
+    run_id = create(client).json()["id"]
+    stale = store.runs.find_one({"_id": run_id})
+    store.runs.update_one({"_id": run_id}, {"$set": {"status": "stopped"}})
+    monkeypatch.setattr("chargeops.api.get_run", lambda *_: stale)
+    response = client.post(f"/api/v1/demo-runs/{run_id}/stop", headers=OPERATOR)
+    assert response.status_code == 409
+    assert store.runs.find_one({"_id": run_id})["status"] == "stopped"
+
+
+def test_stop_pending_run_cancels_and_frees_slot_without_budget(client, store):
+    run_id = create(client, mode="local").json()["id"]
+    client.post(f"/api/v1/demo-runs/{run_id}/start", headers=OPERATOR)
+    response = client.post(f"/api/v1/demo-runs/{run_id}/stop", headers=OPERATOR)
+    assert response.status_code == 202 and response.json()["status"] == "cancelled"
+    stored = store.runs.find_one({"_id": run_id})
+    assert "active_slot" not in stored and not stored["stop_requested"]
+    next_id = create(client).json()["id"]  # slot is free again
+    assert client.post(f"/api/v1/demo-runs/{next_id}/start", headers=OPERATOR).status_code == 202
+
+
+def test_stop_created_run_unsets_active_slot(client, store):
+    run_id = create(client).json()["id"]
+    client.post(f"/api/v1/demo-runs/{run_id}/stop", headers=OPERATOR)
+    assert "active_slot" not in store.runs.find_one({"_id": run_id})
+
+
+def test_stop_active_run_requests_stop(client, store):
+    active_run(store)
+    response = client.post(f"/api/v1/demo-runs/{RUN}/stop", headers=OPERATOR)
+    assert response.status_code == 202 and response.json()["stop_requested"] is True
+    assert store.runs.find_one({"_id": RUN})["status"] == "active"
+
+
+def test_naive_cursor_is_422(client, store):
+    import base64
+
+    seed_series(store)
+    cursor = base64.urlsafe_b64encode(b"2026-10-21T08:00:00|abc").decode()
+    response = client.get(
+        "/api/v1/connectors/connector-1/telemetry",
+        params={"run_id": RUN, **window(T0 - timedelta(minutes=5), T0), "cursor": cursor},
+    )
+    assert response.status_code == 422 and response.json()["error"]["code"] == "validation_error"
+
+
+def test_request_id_is_sanitised(client):
+    ok = client.get("/api/v1/demo-runs/missing", headers={"X-Request-ID": "abc-123"})
+    assert ok.json()["error"]["request_id"] == "abc-123"
+    for bad in ("x" * 65, "bad id!", "a.b"):
+        body = client.get("/api/v1/demo-runs/missing", headers={"X-Request-ID": bad}).json()
+        assert body["error"]["request_id"] != bad and len(body["error"]["request_id"]) == 36

@@ -107,3 +107,14 @@ def test_viewer_cannot_mutate(client):
 def test_operator_secret_header_still_works(client):
     assert mutate(client, SECRET).status_code == 201
     assert mutate(client, {"X-Operator-Secret": "x" * 32}).status_code == 401
+
+
+def test_incident_command_with_session_cookie_and_origin(client, store):
+    store.incidents.insert_one({"_id": "inc-1", "run_id": "r1", "state": "open"})
+    login(client)
+    url = "/api/v1/incidents/inc-1/commands"
+    headers = {"Idempotency-Key": "k1"}
+    good = client.post(url, json={"type": "acknowledge"}, headers={**headers, **ORIGIN})
+    assert good.status_code == 202
+    bad = client.post(url, json={"type": "acknowledge"}, headers={**headers, "Origin": "http://evil.example"})
+    assert bad.status_code == 403
