@@ -17,7 +17,7 @@ from chargeops.domain import (
 from chargeops.evaluation.rules import ALERT_C
 from chargeops.model import ORIGINAL_LIMIT_A, draw_exogenous
 
-PROTOCOL_VERSION = "b1-eval-v2"  # v2: CONTRACT §3 maintenance-after-ineffective, trip windows excluded
+PROTOCOL_VERSION = "b1-eval-v3"  # v3: maintenance unlocks only on residual_not_recovered (CONTRACT §3)
 DURATION_S = RUN_MAX_S  # 30 simulated minutes per run, the product's run cap
 TRIP_C = 100.0  # simulation-only protective trip on true connector temperature
 RESTART_C = 60.0
@@ -67,6 +67,8 @@ SOURCES = [
     "evaluation/summary.py",
     "model.py",
     "lifecycle.py",
+    "domain.py",
+    "evaluation/__main__.py",
 ]
 
 

@@ -7,16 +7,18 @@ Only this module changes evaluation incident state, as the worker is the single 
 from chargeops.domain import ALERT_RESIDUAL_C, target_current
 from chargeops.lifecycle import (
     CURRENT_TOLERANCE,
+    CYCLE_FIELDS,
     LOAD_FLOOR,
     RECOVERED_C,
     REDUCTION_CHECK_S,
+    RESIDUAL_NOT_RECOVERED,
     RETEST_S,
     charging,
     maintenance_unlocked,
 )
 
 ALERT_C = ALERT_RESIDUAL_C
-CYCLE = ["load_reduction_verified_at", "reduction_check", "maintenance_applied_at", "verifying_since"]
+CYCLE = CYCLE_FIELDS
 
 
 def mean(values):
@@ -153,8 +155,17 @@ class Lifecycle:
         return max(matches, key=lambda c: c["applied_at"], default=None)
 
     def record_maintenance(self, incident, at):
+        """lifecycle.record_maintenance: matched by handling cycle, not state_since."""
         if not incident.get("maintenance_applied_at"):
-            command = self.applied(incident, "maintenance")
+            matches = [
+                c
+                for c in self.commands
+                if c["incident_id"] == incident["_id"]
+                and c["type"] == "maintenance"
+                and c["status"] == "applied"
+                and c["cycle"] == incident["cycle"]
+            ]
+            command = max(matches, key=lambda c: c["applied_at"], default=None)
             if command:
                 incident["maintenance_applied_at"] = command["applied_at"]
                 self.note(incident, "maintenance_applied", at)
@@ -184,15 +195,24 @@ class Lifecycle:
                     incident, "mitigated", at, "mitigated", mitigated_at=window["end"], evidence_after=after
                 )
                 return
-        if not incident.get("reduction_check") and (at - ack).total_seconds() >= REDUCTION_CHECK_S:
-            if incident.get("load_reduction_verified_at"):
-                name, reason = "load_reduction_ineffective", "residual_not_recovered"
-            elif eligible:
-                name, reason = "load_reduction_ineffective", "load_not_reduced"
-            else:
-                name, reason = "load_reduction_unverified", "insufficient_data"
-            incident["reduction_check"] = name
-            self.note(incident, name, at, reason=reason)
+        verified = incident.get("load_reduction_verified_at")
+        if not verified:
+            if incident.get("reduction_check") or (at - ack).total_seconds() < REDUCTION_CHECK_S:
+                return
+            name, reason = (
+                ("load_reduction_ineffective", "load_not_reduced")
+                if eligible
+                else ("load_reduction_unverified", "insufficient_data")
+            )
+        elif (
+            incident.get("reduction_check_reason") == RESIDUAL_NOT_RECOVERED
+            or (at - verified).total_seconds() < REDUCTION_CHECK_S
+        ):
+            return
+        else:
+            name, reason = "load_reduction_ineffective", RESIDUAL_NOT_RECOVERED
+        incident.update(reduction_check=name, reduction_check_reason=reason)
+        self.note(incident, name, at, reason=reason)
 
     def check_mitigated(self, incident, at):
         self.record_maintenance(incident, at)

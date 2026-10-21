@@ -135,6 +135,9 @@ def test_c_detects_like_b_and_full_loop_resolves_mild_fault():
     assert c["final_state"] == "resolved" and c["duplicate_commands"] == 0
     assert c["effective_mitigation_s"] <= c["mitigated_s"] <= c["maintenance_s"] <= c["resolved_s"]
     assert out["detectors"]["residual"]["first_s"] == c["first_s"]
+    timeline = records["C"]["incidents"][0]["timeline"]  # runs.jsonl keeps at and reason
+    assert timeline[0]["at"].endswith("Z") and timeline[0]["t"] == c["first_s"]
+    assert all("reason" in e for e in timeline)
 
 
 def test_lead_time_undefined_when_b_does_not_trip():
@@ -216,14 +219,14 @@ def test_protocol_doc_matches_code():
         f"phản ứng sau **{p.OPERATOR_DELAY_S} s** mỗi bước",
         f"mở incident (chu kỳ hiện tại) + **{p.MAINTENANCE_AFTER_OPEN_S} s**",
         f"lượt poll tiếp theo (**{p.SIM_APPLY_S} s**",
-        f"tối đa **{p.FALSE_ALERT_BUDGET} lượt khỏe có incident trên 20 lượt khỏe tuning**",
+        f"tối đa **{p.FALSE_ALERT_BUDGET} lượt khỏe có incident trên {len(seeds['tuning']['healthy'])} lượt khỏe tuning**",
         f"lưới {p.A_GRID[0]:.1f}–{p.A_GRID[-1]:.1f} °C bước {p.A_GRID[1] - p.A_GRID[0]:.1f} °C".replace(
             ".", ","
         ),
         f"Nền đều {vn(r['ambient_c'][0])}–{vn(r['ambient_c'][1])} °C",
         f"biên độ đều {vn(r['drift_c'][0])}–{vn(r['drift_c'][1])} °C",
-        f"0,0013 × đều({vn(r['k_scale'][0])}–{vn(r['k_scale'][1])})",
-        f"60 s × đều({vn(r['tau_scale'][0])}–{vn(r['tau_scale'][1])})",
+        f"{vn(domain.THERMAL_K)} × đều({vn(r['k_scale'][0])}–{vn(r['k_scale'][1])})",
+        f"{vn(domain.THERMAL_TAU_S)} s × đều({vn(r['tau_scale'][0])}–{vn(r['tau_scale'][1])})",
         f"Gauss σ {vn(r['noise_c'])} °C",
         f"thời điểm đều {r['change_s'][0]}–{r['change_s'][1]} s",
         f"min(nền × đều({vn(r['load_factor'][0])}–{vn(r['load_factor'][1])}), {vn(r['load_cap_a'])} A)",
@@ -277,6 +280,8 @@ FIELDS = [
     "target_current_a",
     "load_reduction_verified_at",
     "reduction_check",
+    "reduction_check_reason",
+    "cycle",
     "mitigated_at",
     "maintenance_applied_at",
     "verifying_since",
@@ -408,16 +413,45 @@ def test_parity_full_loop_with_retest_reset(store):
     )
 
 
+def hot_then_maintenance(twin, verified_s):
+    """Still hot: unlock exactly REDUCTION_CHECK_S after verification, then maintenance to resolution."""
+    hot = verified_s + lifecycle.REDUCTION_CHECK_S
+    twin.window(hot - 5, residual=5).advance(hot - 1).command("maintenance", hot - 1)  # rejected: too early
+    twin.advance(hot)
+    assert twin.final()["reduction_check_reason"] == "residual_not_recovered"
+    twin.command("maintenance", hot + 5).apply(hot + 10)
+    assert twin.final()["state"] == "mitigating" and twin.final()["maintenance_applied_at"]
+    twin.window(hot + 75, residual=1).advance(hot + 76).command("verify_recovery", hot + 80).apply(hot + 85)
+    retest_passes(twin, hot + 150)
+    assert twin.final()["state"] == "resolved"
+    return twin
+
+
 def test_parity_ineffective_derating_unlocks_maintenance(store):
     twin = derated(Twin(store))
     twin.window(195, residual=5).advance(196).command("maintenance", 200)  # rejected: not yet ineffective
-    twin.window(240, residual=5).advance(245)  # 120 s after ACK at 125
-    assert twin.final()["reduction_check"] == "load_reduction_ineffective"
-    twin.command("maintenance", 250).apply(255)
-    assert twin.final()["state"] == "mitigating" and twin.final()["maintenance_applied_at"]
-    twin.window(315, residual=1).advance(316).command("verify_recovery", 320).apply(325)
-    retest_passes(twin, 390)
-    assert twin.final()["state"] == "resolved"
+    twin.window(240, residual=5).advance(245)  # 120 s after ACK: verified, so no check event yet
+    assert twin.final().get("reduction_check") is None
+    hot_then_maintenance(twin, 195)
+
+
+def test_parity_load_not_reduced_then_verified_hot_unlocks(store):
+    twin = derated(Twin(store))
+    twin.window(195, current=60, limit=30, residual=5).advance(245)  # 120 s after ACK, load not reduced
+    assert twin.final()["reduction_check_reason"] == "load_not_reduced"
+    twin.command("maintenance", 250)  # rejected: load_not_reduced never unlocks
+    twin.window(270, residual=5).advance(271)
+    assert twin.final()["load_reduction_verified_at"] == twin.at(270)
+    hot_then_maintenance(twin, 270)
+
+
+def test_parity_unverified_then_verified_unlocks(store):
+    twin = derated(Twin(store))
+    twin.window(195, residual=5, quality=False).advance(245)
+    assert twin.final()["reduction_check"] == "load_reduction_unverified"
+    twin.command("maintenance", 250)  # rejected
+    twin.window(270, residual=5).advance(271)
+    hot_then_maintenance(twin, 270)
 
 
 def test_parity_tripped_window_does_not_verify(store):

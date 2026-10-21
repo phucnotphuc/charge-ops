@@ -4,7 +4,13 @@ from datetime import timedelta
 
 from chargeops.domain import window_evidence, with_residuals
 from chargeops.evaluation import protocol
-from chargeops.evaluation.rules import Lifecycle, fixed_alert, maintenance_unlocked, residual_alert
+from chargeops.evaluation.rules import (
+    RESIDUAL_NOT_RECOVERED,
+    Lifecycle,
+    fixed_alert,
+    maintenance_unlocked,
+    residual_alert,
+)
 from chargeops.model import EPOCH, ORIGINAL_LIMIT_A, STEP_S, Connector
 
 # Detector and whether the operator acts on incidents.
@@ -15,6 +21,10 @@ def detector(kind, config):
     if kind == "fixed":
         return fixed_alert(config["a_threshold_c"])
     return residual_alert(config["c_alert_c"])
+
+
+def iso(at):
+    return at.isoformat().replace("+00:00", "Z")
 
 
 def seconds(at):
@@ -46,7 +56,7 @@ class Operator:
             and not incident.get("maintenance_applied_at")
         ):
             # CONTRACT §3: derating verified but the residual did not recover; maintenance on the same schedule.
-            noted = [e["at"] for e in incident["timeline"] if e["event"] == "load_reduction_ineffective"]
+            noted = [e["at"] for e in incident["timeline"] if e.get("reason") == RESIDUAL_NOT_RECOVERED]
             return "maintenance", max(noted[-1] + self.delay, self.cycle_open[key] + self.maintenance)
         return None, None  # otherwise mitigating/verifying: wait for telemetry evidence
 
@@ -124,7 +134,10 @@ def record(result):
             "mitigated_s": seconds(i.get("mitigated_at")),
             "maintenance_applied_s": seconds(i.get("maintenance_applied_at")),
             "resolved_s": seconds(i.get("resolved_at")),
-            "timeline": [{"t": seconds(e["at"]), "event": e["event"]} for e in i["timeline"]],
+            "timeline": [
+                {"t": seconds(e["at"]), "at": iso(e["at"]), "event": e["event"], "reason": e.get("reason")}
+                for e in i["timeline"]
+            ],
         }
         for i in life.incidents
     ]

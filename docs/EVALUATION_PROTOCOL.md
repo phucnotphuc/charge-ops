@@ -1,8 +1,8 @@
 # Protocol đánh giá A/B/C — ChargeOps
 
-protocol_version: `b1-eval-v2`
+protocol_version: `b1-eval-v3`
 
-**Lịch sử phiên bản.** `b1-eval-v1` (khóa 21/10/2026 04:53 UTC, file `chargeops/evaluation/locked-b1-eval-v1.json`) là lượt đầu. `b1-eval-v2` đổi quy tắc sản phẩm theo quyết định của người dùng (CONTRACT §3): (1) operator được bảo trì từ `mitigating` khi chu kỳ đã ghi `load_reduction_ineffective` sau khi giảm dòng đã được xác nhận; (2) cửa sổ có mẫu không sạc (trip) không bao giờ xác nhận giảm tải. Kèm theo: ngưỡng là hằng số `ALERT_RESIDUAL_C`/`RECOVERY_RESIDUAL_C` trong `domain.py`; fingerprint gồm SHA-256 mã nguồn đánh giá; detector-only ghép theo cạnh lên đầu tiên sau onset. Cùng seed tuning và đánh giá như v1; `tune` chạy lại trên seed tuning và khóa trước khi chạy đánh giá.
+**Lịch sử phiên bản.** `b1-eval-v1` (khóa 21/10/2026 04:53 UTC, file `chargeops/evaluation/locked-b1-eval-v1.json`) là lượt đầu. `b1-eval-v2` đổi quy tắc sản phẩm theo quyết định của người dùng (CONTRACT §3): (1) operator được bảo trì từ `mitigating` khi chu kỳ đã ghi `load_reduction_ineffective` sau khi giảm dòng đã được xác nhận; (2) cửa sổ có mẫu không sạc (trip) không bao giờ xác nhận giảm tải. Kèm theo: ngưỡng là hằng số `ALERT_RESIDUAL_C`/`RECOVERY_RESIDUAL_C` trong `domain.py`; fingerprint gồm SHA-256 mã nguồn đánh giá; detector-only ghép theo cạnh lên đầu tiên sau onset. Cùng seed tuning và đánh giá như v1; `tune` chạy lại trên seed tuning và khóa trước khi chạy đánh giá. `b1-eval-v3` sửa quy tắc mở khóa cho đúng quyết định: chỉ event `load_reduction_ineffective` reason `residual_not_recovered` (120 giây sau khi **xác nhận** giảm dòng, không phải sau ACK, residual vẫn chưa phục hồi; một lần mỗi chu kỳ) mới mở khóa bảo trì; `load_not_reduced`/`load_reduction_unverified` không mở khóa nhưng không chặn lần kiểm tra sau xác nhận. Bảo trì được ghi theo chu kỳ lúc phát lệnh. Fingerprint thêm `domain.py` và `evaluation/__main__.py`. Mỗi phiên bản có file khóa riêng; v1/v2 giữ làm lịch sử.
 
 Protocol này chốt **trước** khi chạy tập đánh giá, theo DATA_CARD.md ("Đối chứng để chứng minh giá trị") và PLAN.md ("Nghiệm thu"). Mọi giá trị dưới đây nằm trong `chargeops/evaluation/protocol.py`; thay đổi bất kỳ giá trị nào làm đổi fingerprint, và `run` từ chối chạy với cấu hình đã khóa theo protocol cũ. Muốn đổi protocol phải tăng `protocol_version`, chạy lại `tune` và ghi lý do; không chỉnh protocol sau khi đã xem kết quả đánh giá.
 
@@ -65,7 +65,7 @@ Lỗi nhiệt kiểu điện trở tiếp xúc tăng: nhiệt thêm tỷ lệ I�
 - Hằng số tăng: đều 60–600 s.
 - Bảo trì (`maintenance` đã áp dụng) xóa lỗi hoàn toàn. Lỗi không tự hết.
 
-Giảm dòng còn một nửa làm nhiệt lỗi còn một phần tư. Với lỗi lớn, phần tư này vẫn ≥ 3 °C nên không đạt `mitigated`. Ở v1 điều này chặn bảo trì; từ v2, sau 120 giây kể từ ACK mà dòng đã giảm nhưng residual chưa phục hồi, worker ghi `load_reduction_ineffective` (reason `residual_not_recovered`) và operator được bảo trì từ `mitigating` (CONTRACT §3).
+Giảm dòng còn một nửa làm nhiệt lỗi còn một phần tư. Với lỗi lớn, phần tư này vẫn ≥ 3 °C nên không đạt `mitigated`. Ở v1 điều này chặn bảo trì; từ v3, 120 giây sau thời điểm dòng được xác nhận giảm mà residual chưa phục hồi, worker ghi `load_reduction_ineffective` (reason `residual_not_recovered`) và operator được bảo trì từ `mitigating` (CONTRACT §3).
 
 ## Trip và khởi động lại (chỉ mô phỏng)
 
@@ -84,7 +84,7 @@ Operator kịch bản hóa, phản ứng sau **30 s** mỗi bước, tính từ 
 | `acknowledged` | `reduce_load` | vào `acknowledged` + 30 s |
 | `mitigated`, chưa bảo trì | `maintenance` | max(vào `mitigated` + 30 s, mở incident (chu kỳ hiện tại) + **600 s**) |
 | `mitigated`, đã bảo trì | `verify_recovery` | bảo trì áp dụng + 30 s |
-| `mitigating`, đã ghi `load_reduction_ineffective` sau khi giảm dòng đã xác nhận, chưa bảo trì | `maintenance` | max(event ineffective + 30 s, mở incident (chu kỳ hiện tại) + 600 s) |
+| `mitigating`, đã ghi `load_reduction_ineffective` reason `residual_not_recovered`, chưa bảo trì | `maintenance` | max(event đó + 30 s, mở incident (chu kỳ hiện tại) + 600 s) |
 | `mitigating` khác, `verifying` | không lệnh | chờ telemetry |
 
 Worker xác thực lệnh ngay khi nhận; simulator áp dụng lệnh ở lượt poll tiếp theo (**5 s**, nhỏ hơn timeout 30 s nên không lệnh nào timeout). Mỗi loại lệnh gửi một lần cho mỗi chu kỳ xử lý của incident; lệnh bị từ chối (ví dụ `no_valid_reference_window`) được gửi lại sau 30 s và đếm là lệnh bị từ chối. Lịch bảo trì là thao tác operator mô phỏng, không thêm tự động bảo trì vào sản phẩm. B không có operator.
@@ -110,7 +110,7 @@ Worker xác thực lệnh ngay khi nhận; simulator áp dụng lệnh ở lư�
 
 - **C**: ngưỡng alert 8 °C và phục hồi 3 °C là hằng số sản phẩm (CONTRACT §3), không tìm kiếm lại. `tune` kiểm tra chúng trên seed tuning và ghi số lượt khỏe có alert, cùng cờ `c_within_budget`.
 - **A**: ngân sách cảnh báo giả giống C: tối đa **1 lượt khỏe có incident trên 20 lượt khỏe tuning** (mục tiêu PLAN). Ngưỡng A là giá trị **thấp nhất** trong lưới 30,0–100,0 °C bước 0,5 °C sao cho số lượt khỏe tuning có cửa sổ hợp lệ với trung bình nhiệt > ngưỡng không vượt ngân sách. Chọn giá trị thấp nhất cho A độ nhạy cao nhất có thể dưới cùng ngân sách, tránh chọn ngưỡng yếu tùy ý. Vì cảnh báo giả đầu tiên luôn xảy ra trên telemetry chưa can thiệp, tune trên telemetry B tương đương với lượt A đầy đủ.
-- File khóa ghi ngưỡng, quy tắc, seed tuning/đánh giá, fingerprint protocol (gồm hằng số sản phẩm, SHA-256 file đường tải và SHA-256 đã chuẩn hóa xuống dòng của `runner.py`, `rules.py`, `summary.py`, `model.py`, `lifecycle.py`) và thời điểm khóa. File khóa được commit trước khi chạy tập đánh giá.
+- File khóa ghi ngưỡng, quy tắc, seed tuning/đánh giá, fingerprint protocol (gồm hằng số sản phẩm, SHA-256 file đường tải và SHA-256 đã chuẩn hóa xuống dòng của `runner.py`, `rules.py`, `summary.py`, `model.py`, `lifecycle.py`, `domain.py`, `evaluation/__main__.py`) và thời điểm khóa. File khóa được commit trước khi chạy tập đánh giá.
 
 ## Mục tiêu nội bộ (PLAN) và cách báo
 
