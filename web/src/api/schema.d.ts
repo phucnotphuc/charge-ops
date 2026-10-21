@@ -328,6 +328,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/simulator/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Simulator Events
+         * @description Unconsumed fault-injection events of the active run, oldest first.
+         */
+        get: operations["simulator_events_api_v1_simulator_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/simulator/events/{event_id}/consume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consume Event
+         * @description Exactly once: consumed_at is set only while null and the fault starts on that connector at that time.
+         *
+         *     A retry (lost response, simulator restart) re-applies the same timestamp, so it changes nothing.
+         */
+        post: operations["consume_event_api_v1_simulator_events__event_id__consume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/simulator/run": {
         parameters: {
             query?: never;
@@ -460,7 +502,7 @@ export interface components {
              * Scenario
              * @enum {string}
              */
-            scenario: "healthy" | "thermal_fault";
+            scenario: "healthy" | "load_increase" | "demand_drop" | "thermal_fault";
             /** Seed */
             seed: number;
         };
@@ -520,9 +562,9 @@ export interface components {
         FaultRequest: {
             /**
              * Connector Id
-             * @constant
+             * @enum {string}
              */
-            connector_id: "connector-1";
+            connector_id: "connector-1" | "connector-2" | "connector-3" | "connector-4" | "connector-5" | "connector-6";
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -542,10 +584,9 @@ export interface components {
             ambient_temperature_c: number;
             /**
              * Connector Id
-             * @default connector-1
-             * @constant
+             * @enum {string}
              */
-            connector_id: "connector-1";
+            connector_id: "connector-1" | "connector-2" | "connector-3" | "connector-4" | "connector-5" | "connector-6";
             /** Connector Temperature C */
             connector_temperature_c: number;
             /** Current A */
@@ -1269,9 +1310,75 @@ export interface operations {
             };
         };
     };
-    active_run_api_v1_simulator_run_get: {
+    simulator_events_api_v1_simulator_events_get: {
         parameters: {
             query?: never;
+            header?: {
+                "x-simulator-secret"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    consume_event_api_v1_simulator_events__event_id__consume_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-simulator-secret"?: string;
+            };
+            path: {
+                event_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    active_run_api_v1_simulator_run_get: {
+        parameters: {
+            query?: {
+                resume?: boolean;
+            };
             header?: {
                 "x-simulator-secret"?: string;
             };

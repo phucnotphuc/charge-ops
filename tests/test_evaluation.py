@@ -314,8 +314,9 @@ class Twin:
             for i in range(12)
         ]
         doc = {
-            "_id": f"{RUN}:{end.isoformat()}",
+            "_id": f"{RUN}:connector-1:{end.isoformat()}",
             "run_id": RUN,
+            "connector_id": "connector-1",
             "start": end - timedelta(seconds=60),
             "end": end,
             "quality": quality,
@@ -470,3 +471,37 @@ def test_parity_recurrence_during_retest(store):
     assert twin.final()["state"] == "open" and twin.life.incidents[0]["cycle"] == 1
     twin.command("acknowledge", 300).command("reduce_load", 310).apply(315)
     assert twin.final()["state"] == "mitigating" and twin.final()["target_current_a"] == 30.0
+
+
+# Normalised SHA-256 of `run --protocol b1-eval-v3` output, recorded at the v3 lock commit 9e9e159 (identical
+# at 6088dec): records without protocol_version; summary without version/fingerprint/lock/runtime.
+V3_RUNS_SHA256 = "d8cec695f4ca343c90dc69120056f22e8e8dbeea82e1bba9842fad55caa0093a"
+V3_SUMMARY_SHA256 = "c83c9a6ceed8eb2f0635bd684934b7c98a244de136d97f169b14c6d01f3e7bd6"
+
+
+def test_relocked_v3_1_reproduces_v3_results_exactly(tmp_path):
+    """b1-eval-v3.1 is a fingerprint-only re-lock: same thresholds, same 120 runs, same summary."""
+    import hashlib
+
+    from chargeops.evaluation.__main__ import LOCK, run
+
+    lock = json.loads(LOCK.read_text(encoding="utf-8"))
+    v3 = json.loads((LOCK.parent / "locked-b1-eval-v3.json").read_text(encoding="utf-8"))
+    assert protocol.PROTOCOL_VERSION == lock["protocol_version"] == "b1-eval-v3.1"
+
+    def content(doc):  # everything except version metadata
+        meta = ("protocol_version", "fingerprint", "locked_at")
+        return {k: v for k, v in doc.items() if k not in meta and not k.startswith("relock_")}
+
+    assert content(lock) == content(v3)
+    assert lock["relock_of"]["fingerprint"] == v3["fingerprint"]
+    result = run(LOCK, protocol.PROTOCOL_VERSION, tmp_path)
+    runs = hashlib.sha256()
+    for line in (tmp_path / "runs.jsonl").read_text(encoding="utf-8").splitlines():
+        record = json.loads(line)
+        assert record.pop("protocol_version") == "b1-eval-v3.1"
+        runs.update(json.dumps(record, sort_keys=True).encode())
+    assert runs.hexdigest() == V3_RUNS_SHA256
+    skip = ("protocol_version", "fingerprint", "locked", "runtime_s")
+    core = {k: v for k, v in result.items() if k not in skip}
+    assert hashlib.sha256(json.dumps(core, sort_keys=True).encode()).hexdigest() == V3_SUMMARY_SHA256

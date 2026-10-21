@@ -18,7 +18,8 @@ from chargeops.auth import SESSION_COOKIE, SESSION_TTL_S, new_token, token_diges
 from chargeops.config import settings
 from chargeops.domain import (
     BASELINE_VERSION,
-    CONNECTOR,
+    CONNECTORS,
+    LOCATION,
     MANIFEST,
     Batch,
     CommandRequest,
@@ -37,7 +38,7 @@ from chargeops.domain import (
     with_residuals,
 )
 from chargeops.logging import event, logger
-from chargeops.simulator import DEMO_PROFILE, PROFILES
+from chargeops.model import PROFILES
 from chargeops.storage import database, initialize
 
 
@@ -138,16 +139,60 @@ def ready(store=Depends(db)):
 
 
 @app.get("/api/v1/simulator/run", dependencies=[Depends(simulator_auth)])
-def active_run(store=Depends(db)):
+def active_run(resume: bool = False, store=Depends(db)):
     run = store.runs.find_one({"status": "active"})
-    if run:
-        # Lets a restarted simulator resume its thermal state instead of jumping to equilibrium.
-        run["last_sample"] = store.telemetry.find_one(
-            {"meta.run_id": run["_id"]},
-            {"_id": 0, "measured_at": 1, "connector_temperature_c": 1},
-            sort=[("measured_at", -1)],
-        )
+    if run and resume:
+        # Lets a restarted simulator resume each connector's thermal state instead of jumping to equilibrium.
+        pipeline = [
+            {"$match": {"meta.run_id": run["_id"]}},
+            {"$sort": {"measured_at": -1}},
+            {"$group": {"_id": "$meta.connector_id", "latest": {"$first": "$$ROOT"}}},
+        ]
+        run["last_samples"] = {
+            row["_id"]: {
+                "measured_at": row["latest"]["measured_at"],
+                "connector_temperature_c": row["latest"]["connector_temperature_c"],
+            }
+            for row in store.telemetry.aggregate(pipeline)
+        }
     return jsonable_encoder(run)
+
+
+@app.get("/api/v1/simulator/events", dependencies=[Depends(simulator_auth)])
+def simulator_events(store=Depends(db)):
+    """Unconsumed fault-injection events of the active run, oldest first."""
+    run = store.runs.find_one({"status": "active"}, {"_id": 1})
+    if not run:
+        return []
+    query = {"run_id": run["_id"], "type": "inject_fault", "consumed_at": None}
+    return jsonable_encoder(list(store.run_events.find(query).sort("requested_at", 1)))
+
+
+@app.post(
+    "/api/v1/simulator/events/{event_id}/consume", status_code=202, dependencies=[Depends(simulator_auth)]
+)
+def consume_event(event_id: str, store=Depends(db)):
+    """Exactly once: consumed_at is set only while null and the fault starts on that connector at that time.
+
+    A retry (lost response, simulator restart) re-applies the same timestamp, so it changes nothing."""
+    found = store.run_events.find_one({"_id": event_id, "type": "inject_fault"})
+    if not found:
+        raise ApiError(404, "not_found", "Event not found")
+    first = store.run_events.update_one(
+        {"_id": event_id, "consumed_at": None}, {"$set": {"consumed_at": now()}}
+    )
+    consumed = store.run_events.find_one({"_id": event_id})["consumed_at"]
+    key = f"sim.{found['connector_id']}"
+    store.runs.update_one(
+        {"_id": found["run_id"], f"{key}.fault_injected_at": {"$ne": consumed}},
+        {"$set": {f"{key}.fault_injected_at": consumed}},
+    )
+    if not first.modified_count:
+        return {"status": "duplicate"}
+    event(
+        logger("api"), "fault_injection_consumed", run_id=found["run_id"], connector_id=found["connector_id"]
+    )
+    return {"status": "consumed"}
 
 
 @app.post("/api/v1/telemetry/batch", status_code=202, dependencies=[Depends(simulator_auth)])
@@ -163,14 +208,15 @@ def ingest(batch: Batch, store=Depends(db)):
         ):
             raise HTTPException(422, "Sample outside active run or future timestamp")
         document = sample.model_dump(mode="json")
+        station_id, charger_id = LOCATION[sample.connector_id]
         document.update(
             measured_at=sample.measured_at,
             received_at=received,
             meta={
                 "run_id": run["_id"],
                 "connector_id": sample.connector_id,
-                "station_id": "station-1",
-                "charger_id": "charger-1",
+                "station_id": station_id,
+                "charger_id": charger_id,
             },
             provenance={"composition": "hybrid", "manifest_id": MANIFEST},
         )
@@ -229,7 +275,7 @@ def create_command(
     idempotency_key: str = Header(min_length=1, max_length=200),
     store=Depends(db),
 ):
-    found = store.incidents.find_one({"_id": incident_id}, {"run_id": 1})
+    found = store.incidents.find_one({"_id": incident_id}, {"run_id": 1, "connector_id": 1})
     if not found:
         raise HTTPException(404, "Incident not found")
     command = {
@@ -237,6 +283,7 @@ def create_command(
         "idempotency_key": idempotency_key,
         "incident_id": incident_id,
         "run_id": found["run_id"],
+        "connector_id": found["connector_id"],
         "type": body.type,
         "status": "pending",
         "validated": False,
@@ -269,7 +316,7 @@ def simulator_commands(store=Depends(db)):
     if not run:
         return []
     query = {"run_id": run["_id"], "status": {"$in": ["pending", "claimed"]}, "dispatched_at": {"$ne": None}}
-    items = list(store.commands.find(query, {"type": 1, "sim": 1}))
+    items = list(store.commands.find(query, {"type": 1, "sim": 1, "connector_id": 1}))
     store.commands.update_many(
         {"_id": {"$in": [c["_id"] for c in items]}, "status": "pending"},
         {"$set": {"status": "claimed", "claimed_at": now()}},
@@ -288,8 +335,11 @@ def command_result(command_id: str, body: CommandResult, store=Depends(db)):
         return {"status": "duplicate"}
     at = now()
     if body.status == "applied":
-        # The simulator already changed its device state, even when the result arrives late.
-        changes = {f"sim.{key}": value for key, value in found["sim"].items()}
+        # The simulator already changed its device state, even when the result arrives late; only the
+        # command's own connector changes.
+        changes = {f"sim.{found['connector_id']}.{key}": value for key, value in found["sim"].items()}
+        if found["sim"].get("fault_cleared"):  # when, so an injected fault is told apart from the seeded one
+            changes[f"sim.{found['connector_id']}.fault_cleared_at"] = at
         store.runs.update_one({"_id": found["run_id"]}, {"$set": changes})
     done = store.commands.update_one(
         {"_id": command_id, "status": {"$in": ["pending", "claimed"]}},
@@ -326,8 +376,8 @@ def get_run(store, run_id):
     "/api/v1/demo-runs", status_code=201, response_model=DemoRunOut, dependencies=[Depends(operator_auth)]
 )
 def create_run(body: DemoRunCreate, store=Depends(db)):
-    profile = body.profile or DEMO_PROFILE
-    if profile not in PROFILES:
+    profile = body.profile  # None: every connector's session comes from the seed
+    if profile is not None and profile not in PROFILES:
         raise ApiError(422, "validation_error", f"Unknown profile {profile}")
     # Created runs hold no active_slot; /start claims it, like `cli start` does when it inserts "pending".
     run = {
@@ -496,10 +546,11 @@ def connector_view(store, run, connector_id, latest):
     incident = store.incidents.find_one(
         {"run_id": run["_id"], "connector_id": connector_id, "unresolved": True}, sort=[("opened_at", -1)]
     )
+    station_id, charger_id = LOCATION[connector_id]
     return ConnectorOut(
         connector_id=connector_id,
-        station_id=latest and latest["meta"].get("station_id"),
-        charger_id=latest and latest["meta"].get("charger_id"),
+        station_id=station_id,
+        charger_id=charger_id,
         run_id=run["_id"],
         run_status=run["status"],
         mode=run["mode"],
@@ -522,8 +573,7 @@ def connector_views(store):
         {"$group": {"_id": "$meta.connector_id", "latest": {"$first": "$$ROOT"}}},
     ]
     latest = {row["_id"]: row["latest"] for row in store.telemetry.aggregate(pipeline)}
-    latest.setdefault(CONNECTOR, None)
-    return [connector_view(store, run, cid, latest[cid]) for cid in sorted(latest)]
+    return [connector_view(store, run, cid, latest.get(cid)) for cid in CONNECTORS]
 
 
 @app.get("/api/v1/connectors", response_model=ConnectorList)
@@ -570,10 +620,7 @@ def connector_telemetry(
     if run_id is None:
         run = reporting_run(store)
         run_id = run["_id"] if run else None
-    known = connector_id == CONNECTOR or store.telemetry.find_one(
-        {"meta.run_id": run_id, "meta.connector_id": connector_id}, {"_id": 1}
-    )
-    if not known:
+    if connector_id not in CONNECTORS:
         raise ApiError(404, "not_found", "Connector not found")
     if run_id is None:
         return TelemetryPage(items=[])

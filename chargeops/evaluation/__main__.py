@@ -1,7 +1,7 @@
 """Offline evaluation (docs/EVALUATION_PROTOCOL.md).
 
 python -m chargeops.evaluation tune                       # tuning seeds only; writes the locked config
-python -m chargeops.evaluation run --protocol b1-eval-v3  # evaluation seeds; refuses without the lock
+python -m chargeops.evaluation run --protocol b1-eval-v3.1  # evaluation seeds; refuses without the lock
 """
 
 import argparse

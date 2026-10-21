@@ -47,6 +47,16 @@ def replay(profile, elapsed):
     return a0 + (a1 - a0) * weight, v0 + (v1 - v0) * weight
 
 
+def scenario_demand(base, t, scenario, change_s, factor, drop, cap_a):
+    """Healthy demand changes: load_increase towards min(base × factor, cap), demand_drop to base × drop."""
+    weight = min(1.0, max(0.0, (t - change_s) / 60))  # 60-second ramp into the new demand
+    if scenario == "load_increase":
+        base += (max(base, min(base * factor, cap_a)) - base) * weight
+    elif scenario == "demand_drop":
+        base *= 1 - (1 - drop) * weight
+    return base
+
+
 def fault_multiplier(elapsed, onset_s, severity_c, ramp_s, onset_a, k):
     """Extra I²R heating sized in °C at the onset load, so severity does not depend on the session's current."""
     if elapsed < onset_s or onset_a <= 0:
@@ -56,7 +66,7 @@ def fault_multiplier(elapsed, onset_s, severity_c, ramp_s, onset_a, k):
 
 
 def physics(elapsed, scenario, sim, profile):
-    """Live simulator: demand, current, limit, voltage and steady-state temperature; `sim` holds commands."""
+    """Single-connector demo calibration (fixed onset/severity); the live fleet uses chargeops.fleet.physics."""
     demand, voltage = replay(profile, elapsed)
     limit = sim.get("current_limit_a", ORIGINAL_LIMIT_A)
     current = min(demand, limit)
@@ -118,12 +128,7 @@ def draw_exogenous(seed, scenario, duration_s, ranges):
     demand, voltage = [], []
     for t in times:
         base, volts = replay(profile, t)
-        weight = min(1.0, max(0.0, (t - change) / 60))  # 60-second ramp into the new demand
-        if scenario == "load_increase":
-            base += (max(base, min(base * factor, ranges["load_cap_a"])) - base) * weight
-        elif scenario == "demand_drop":
-            base *= 1 - (1 - drop) * weight
-        demand.append(base)
+        demand.append(scenario_demand(base, t, scenario, change, factor, drop, ranges["load_cap_a"]))
         voltage.append(volts)
     fault = None
     if scenario == "thermal_fault":

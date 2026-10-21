@@ -6,7 +6,7 @@ import { idOf, type DemoRun, type RunMode, type Scenario } from "../api/types";
 import { Async, ErrorBox } from "../components/Async";
 import { REASON_LABEL, RUN_STATUS_LABEL, SCENARIO_LABEL, fmtTime } from "../lib/format";
 
-const SCENARIOS: Scenario[] = ["healthy", "thermal_fault"];
+const SCENARIOS: Scenario[] = ["healthy", "load_increase", "demand_drop", "thermal_fault"];
 
 export function DemoControl() {
   const { role } = useAuth();

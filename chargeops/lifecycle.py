@@ -2,7 +2,7 @@
 
 from uuid import uuid4
 
-from chargeops.domain import CONNECTOR, RECOVERY_RESIDUAL_C, target_current
+from chargeops.domain import RECOVERY_RESIDUAL_C, target_current
 
 # Demo policy, locked before evaluation.
 COMMAND_TIMEOUT_S = 30
@@ -33,8 +33,23 @@ def transition(db, incident, state, at, name, details=None, **fields):
     )
 
 
+def connector_windows(incident):
+    """Evidence windows of the incident's own connector only."""
+    return {"run_id": incident["run_id"], "connector_id": incident["connector_id"]}
+
+
+def incident_key(run, evidence):
+    """At most one unresolved thermal incident per (run, connector); the connector comes from the evidence."""
+    return {
+        "run_id": run["_id"],
+        "connector_id": evidence["connector_id"],
+        "kind": "thermal_anomaly",
+        "unresolved": True,
+    }
+
+
 def open_incident(db, run, evidence, source, at, event_id):
-    key = {"run_id": run["_id"], "connector_id": CONNECTOR, "kind": "thermal_anomaly", "unresolved": True}
+    key = incident_key(run, evidence)
     db.incidents.update_one(
         key,
         {
@@ -58,9 +73,7 @@ def open_incident(db, run, evidence, source, at, event_id):
 
 def on_alert(db, run, evidence, source, at, event_id, alert_at):
     """Open an incident, or reopen one under retest; earlier states are already handling the fault."""
-    incident = db.incidents.find_one(
-        {"run_id": run["_id"], "connector_id": CONNECTOR, "kind": "thermal_anomaly", "unresolved": True}
-    )
+    incident = db.incidents.find_one(incident_key(run, evidence))
     if incident is None:
         open_incident(db, run, evidence, source, at, event_id)
         return "incident_opened"
@@ -107,7 +120,7 @@ def handle_command(db, incident, command, at):
         if incident.get("target_current_a") is None:
             # Frozen once from the newest valid pre-derating window; retries reuse it, never halve again.
             window = db.windows.find_one(
-                {"run_id": incident["run_id"], "quality": True, "end": {"$lte": at}}, sort=[("end", -1)]
+                {**connector_windows(incident), "quality": True, "end": {"$lte": at}}, sort=[("end", -1)]
             )
             reference = window and mean([s["current_a"] for s in window["samples"]])
             if not reference:
@@ -238,7 +251,7 @@ def check_mitigation(db, incident, at):
         return
     ack, target = command["applied_at"], incident["target_current_a"]
     windows = list(
-        db.windows.find({"run_id": incident["run_id"], "quality": True, "start": {"$gte": ack}}).sort(
+        db.windows.find({**connector_windows(incident), "quality": True, "start": {"$gte": ack}}).sort(
             "end", 1
         )
     )
@@ -324,7 +337,7 @@ def check_retest(db, incident, at):
     started, checked = incident["retest_started_at"], incident["retest_checked_until"]
     windows = db.windows.find(
         {
-            "run_id": incident["run_id"],
+            **connector_windows(incident),
             "start": {"$gte": incident["verifying_since"]},
             "end": {"$gt": checked},
         }

@@ -66,8 +66,9 @@ def test_connector_latest_uses_measured_at_not_arrival(client, store):
     older_but_late = sample(T0 - timedelta(seconds=20), received_at=T0, current_a=99.0)
     store.telemetry.insert_many([newest, older_but_late])
     items = client.get("/api/v1/connectors").json()["items"]
-    assert [c["connector_id"] for c in items] == ["connector-1"]
+    assert [c["connector_id"] for c in items] == [f"connector-{i}" for i in range(1, 7)]  # whole fleet
     connector = items[0]
+    assert items[1]["latest"] is None and items[1]["stale"] is True  # no data is null, not zero
     assert connector["latest"]["current_a"] == 111.0
     assert connector["mode"] == "local" and connector["run_id"] == RUN
     assert connector["stale"] is False and 4 <= connector["freshness_s"] < 15

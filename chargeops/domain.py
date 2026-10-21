@@ -1,12 +1,21 @@
 import math
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
-from typing import Literal
+from typing import Literal, get_args
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, FiniteFloat, field_validator
 
-CONNECTOR = "connector-1"
+# Demo fleet (synthetic IDs): two stations, one charger each, three connectors per charger.
+ConnectorId = Literal[
+    "connector-1", "connector-2", "connector-3", "connector-4", "connector-5", "connector-6"
+]
+CONNECTORS = get_args(ConnectorId)
+LOCATION = {
+    c: ("station-1", "charger-1") if i < 3 else ("station-2", "charger-2") for i, c in enumerate(CONNECTORS)
+}
+Scenario = Literal["healthy", "load_increase", "demand_drop", "thermal_fault"]
+SCENARIOS = get_args(Scenario)
 MANIFEST = "autosun-replay-v1"
 RUN_MAX_S = 1800
 # Healthy thermal model shared by simulator and detector baseline (calibrated, not ground truth).
@@ -28,7 +37,7 @@ class Sample(BaseModel):
     model_config = ConfigDict(extra="forbid")
     sample_id: UUID
     run_id: UUID
-    connector_id: Literal["connector-1"] = CONNECTOR
+    connector_id: ConnectorId
     measured_at: AwareDatetime
     current_a: FiniteFloat = Field(ge=0)
     voltage_v: FiniteFloat = Field(ge=0)
@@ -52,7 +61,7 @@ class Webhook(BaseModel):
     event_id: str = Field(min_length=1, max_length=200)
     monitor_id: str = Field(min_length=1, max_length=100)
     run_id: UUID
-    connector_id: Literal["connector-1"]
+    connector_id: ConnectorId
     occurred_at: AwareDatetime
     status: Literal["alert", "recovery"]
     message: str = Field(default="", max_length=2000)
@@ -202,7 +211,7 @@ class ConnectorList(BaseModel):
 
 class DemoRunCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    scenario: Literal["healthy", "thermal_fault"]
+    scenario: Scenario
     seed: int
     mode: Literal["local", "datadog"] = "datadog"
     profile: str | None = None
@@ -225,7 +234,7 @@ class DemoRunOut(BaseModel):
 
 class FaultRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    connector_id: Literal["connector-1"]
+    connector_id: ConnectorId
 
 
 class FaultEventOut(BaseModel):

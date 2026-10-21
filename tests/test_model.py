@@ -25,7 +25,7 @@ RANGES = {
 
 
 def test_simulator_uses_model_physics_unchanged():
-    assert simulator.physics is model.physics and simulator.PROFILES is model.PROFILES
+    assert simulator.PROFILES is model.PROFILES  # the live fleet's physics is chargeops.fleet.physics
     assert simulator.replay is model.replay and simulator.DEMO_PROFILE == model.DEMO_PROFILE
     profile = model.PROFILES[model.DEMO_PROFILE]
     # Golden values captured from the inline simulator physics before extraction.

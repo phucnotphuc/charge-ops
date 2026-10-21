@@ -177,7 +177,9 @@ describe("demo control and evaluations", () => {
     expect(await screen.findByTestId("run-reason")).toHaveTextContent("20 run ID Datadog");
     expect(screen.getByText("Đã hủy")).toBeInTheDocument();
     const scenarios = Array.from(screen.getByLabelText("Kịch bản").querySelectorAll("option")).map((o) => o.value);
-    expect(scenarios).toEqual(["healthy", "thermal_fault"]);
+    expect(scenarios).toEqual(["healthy", "load_increase", "demand_drop", "thermal_fault"]);
+    const labels = Array.from(screen.getByLabelText("Kịch bản").querySelectorAll("option")).map((o) => o.textContent);
+    expect(labels).toEqual(["Khỏe mạnh", "Tăng tải", "Giảm nhu cầu", "Lỗi nhiệt"]);
     expect(screen.getByRole("button", { name: "Tạo run" })).toBeDisabled();
     screen.getAllByRole("button", { name: "Dừng" }).forEach((b) => expect(b).toBeDisabled());
     expect(screen.getByRole("button", { name: "Chèn lỗi" })).toBeDisabled();
