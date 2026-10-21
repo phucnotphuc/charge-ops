@@ -5,7 +5,7 @@ from datadog import DogStatsd
 from pymongo.errors import PyMongoError
 
 from chargeops.config import settings
-from chargeops.domain import CONNECTOR, RUN_MAX_S, block_end, now, window_evidence
+from chargeops.domain import ALERT_RESIDUAL_C, CONNECTOR, RUN_MAX_S, block_end, now, window_evidence
 from chargeops.lifecycle import advance_incidents, expire_commands, on_alert, process_commands
 from chargeops.logging import event, logger
 from chargeops.storage import database, initialize, window_rows
@@ -35,7 +35,7 @@ def process_event(db, item, at, monitor_id):
         )
         if item["status"] == "recovery":
             reason = "recovery_recorded_not_resolved"
-        elif not evidence or not evidence["quality"] or evidence["residual_mean"] <= 8:
+        elif not evidence or not evidence["quality"] or evidence["residual_mean"] <= ALERT_RESIDUAL_C:
             reason = "insufficient_alert_evidence"
         else:
             reason = on_alert(db, run, evidence, "datadog", at, item["_id"], item["occurred_at"])
@@ -112,7 +112,7 @@ def tick(db, stats, log):
             evidence.update(_id=window_id, run_id=run["_id"], created_at=at)
             db.windows.insert_one(evidence)
             if run["mode"] == "local":
-                if evidence["quality"] and evidence["residual_mean"] > 8:
+                if evidence["quality"] and evidence["residual_mean"] > ALERT_RESIDUAL_C:
                     on_alert(db, run, evidence, "local", at, window_id, end)
             else:
                 tags = [f"run_id:{run['_id']}", f"connector_id:{CONNECTOR}", "env:hackathon"]

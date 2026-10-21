@@ -36,7 +36,11 @@ def detection(opened, onset, trip):
 
 
 def first_alert(windows, key, after=0):
-    return next((w["end_s"] for w in windows if w[key] and w["end_s"] >= after), None)
+    """First rising edge at or after `after`; an alert already active before onset is not a detection."""
+    for prev, w in zip([None, *windows], windows, strict=False):
+        if w["end_s"] >= after and w[key] and not (prev and prev[key]):
+            return w["end_s"]
+    return None
 
 
 def episodes(windows, key):
@@ -138,7 +142,7 @@ def aggregate(outcomes, lock):
                 "mitigated_s": stats([r["mitigated_s"] for r in f]),
                 "maintenance_applied": sum(r["maintenance_s"] is not None for r in f),
                 "resolved": sum(r["resolved_s"] is not None for r in f),
-                "final_states": dict(Counter(str(r["final_state"]) for r in f)),
+                "final_states": dict(Counter(r["final_state"] or "undetected" for r in f)),
                 "trips": sum(r["trips"] for r in f),
                 "seeds_tripped": sum(r["trips"] > 0 for r in f),
                 "interruption_min": sum(r["interruption_min"] for r in f),
@@ -294,7 +298,9 @@ def markdown(summary, runtime_s):
         "",
         f"- C detects ≥18/20 faults before B trip: **{'met' if t['c_recall_before_trip_ge_18_of_20'] else 'missed'}**",
         f"- C ≤1 false incident in 20 healthy runs: **{'met' if t['c_healthy_runs_with_incident_le_1'] else 'missed'}**",
-        f"- No duplicate commands: **{'met' if t['duplicate_commands_zero'] else 'missed'}**",
+        f"- No duplicate commands: **{'met' if t['duplicate_commands_zero'] else 'missed'}** — holds by "
+        "construction of the scripted operator (one command per type and handling cycle); it is not evidence "
+        "of product idempotency or deduplication.",
         "",
         "Simulation only: thresholds, trip temperature and operator timings are simulated assumptions, "
         "not equipment safety limits; no extrapolation to real stations.",

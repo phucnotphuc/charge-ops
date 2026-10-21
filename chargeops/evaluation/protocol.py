@@ -6,11 +6,18 @@ import json
 from pathlib import Path
 
 from chargeops import lifecycle
-from chargeops.domain import AMBIENT_C, BASELINE_VERSION, RUN_MAX_S, THERMAL_K, THERMAL_TAU_S
+from chargeops.domain import (
+    AMBIENT_C,
+    BASELINE_VERSION,
+    RECOVERY_RESIDUAL_C,
+    RUN_MAX_S,
+    THERMAL_K,
+    THERMAL_TAU_S,
+)
 from chargeops.evaluation.rules import ALERT_C
 from chargeops.model import ORIGINAL_LIMIT_A, draw_exogenous
 
-PROTOCOL_VERSION = "b1-eval-v1"
+PROTOCOL_VERSION = "b1-eval-v2"  # v2: CONTRACT §3 maintenance-after-ineffective, trip windows excluded
 DURATION_S = RUN_MAX_S  # 30 simulated minutes per run, the product's run cap
 TRIP_C = 100.0  # simulation-only protective trip on true connector temperature
 RESTART_C = 60.0
@@ -53,8 +60,23 @@ def exogenous(seed, scenario):
     return draw_exogenous(seed, scenario, DURATION_S, RANGES)
 
 
+PACKAGE = Path(__file__).resolve().parent.parent
+SOURCES = [
+    "evaluation/runner.py",
+    "evaluation/rules.py",
+    "evaluation/summary.py",
+    "model.py",
+    "lifecycle.py",
+]
+
+
+def source_sha256(relative):
+    """Line-ending-normalised, so the fingerprint is identical on LF and CRLF checkouts."""
+    return hashlib.sha256((PACKAGE / relative).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def definition():
-    profiles = Path(__file__).resolve().parent.parent / "profiles" / "autosun_v3.csv"
+    profiles = PACKAGE / "profiles" / "autosun_v3.csv"
     return {
         "protocol_version": PROTOCOL_VERSION,
         "duration_s": DURATION_S,
@@ -76,7 +98,7 @@ def definition():
             "thermal_tau_s": THERMAL_TAU_S,
             "original_limit_a": ORIGINAL_LIMIT_A,
             "alert_c": ALERT_C,
-            "recovered_c": lifecycle.RECOVERED_C,
+            "recovered_c": RECOVERY_RESIDUAL_C,
             "current_tolerance": lifecycle.CURRENT_TOLERANCE,
             "load_floor": lifecycle.LOAD_FLOOR,
             "retest_s": lifecycle.RETEST_S,
@@ -84,6 +106,7 @@ def definition():
             "command_timeout_s": lifecycle.COMMAND_TIMEOUT_S,
         },
         "profiles_sha256": hashlib.sha256(profiles.read_bytes()).hexdigest(),
+        "sources_sha256": {name: source_sha256(name) for name in SOURCES},
     }
 
 

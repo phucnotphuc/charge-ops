@@ -1,6 +1,5 @@
 """Offline A/B/C evaluation: protocol invariants, product-rule parity, lock enforcement."""
 
-import inspect
 import json
 from dataclasses import replace
 from datetime import timedelta
@@ -51,9 +50,13 @@ def test_rules_pinned_to_product_constants():
     assert rules.RECOVERED_C == lifecycle.RECOVERED_C and rules.RETEST_S == lifecycle.RETEST_S
     assert rules.CURRENT_TOLERANCE == lifecycle.CURRENT_TOLERANCE and rules.LOAD_FLOOR == lifecycle.LOAD_FLOOR
     assert rules.REDUCTION_CHECK_S == lifecycle.REDUCTION_CHECK_S
-    # The worker hard-codes its alert threshold; fail loudly if it drifts from the evaluation copy.
-    assert 'evidence["residual_mean"] > 8' in inspect.getsource(worker.tick)
-    assert rules.ALERT_C == 8.0
+    assert (
+        rules.ALERT_C == domain.ALERT_RESIDUAL_C == 8.0 and worker.ALERT_RESIDUAL_C is domain.ALERT_RESIDUAL_C
+    )
+    assert rules.RECOVERED_C == lifecycle.RECOVERED_C == domain.RECOVERY_RESIDUAL_C == 3.0
+    assert (
+        rules.charging is lifecycle.charging and rules.maintenance_unlocked is lifecycle.maintenance_unlocked
+    )
     assert protocol.SIM_APPLY_S < lifecycle.COMMAND_TIMEOUT_S  # no command ever times out in evaluation
 
 
@@ -196,10 +199,240 @@ def test_run_refuses_without_valid_lock(tmp_path):
             load_lock(lock, protocol.PROTOCOL_VERSION)
 
 
+def vn(x):
+    return f"{x:g}".replace(".", ",")
+
+
 def test_protocol_doc_matches_code():
     from pathlib import Path
 
     text = (Path(__file__).parent.parent / "docs" / "EVALUATION_PROTOCOL.md").read_text(encoding="utf-8")
-    assert f"protocol_version: `{protocol.PROTOCOL_VERSION}`" in text
-    for value in ["100 °C", "60 °C", "300 s", "30 s", "600 s", "1000–1019", "2000–2019", "2020–2039"]:
-        assert value in text
+    p, r, seeds = protocol, protocol.RANGES, protocol.SEEDS
+    expected = [
+        f"protocol_version: `{p.PROTOCOL_VERSION}`",
+        f"Mỗi lượt dài **{p.DURATION_S} s**",
+        f"*thật* > **{p.TRIP_C:g} °C**",
+        f"ít nhất **{p.LOCKOUT_S} s** kể từ trip *và* nhiệt thật ≤ **{p.RESTART_C:g} °C**",
+        f"phản ứng sau **{p.OPERATOR_DELAY_S} s** mỗi bước",
+        f"mở incident (chu kỳ hiện tại) + **{p.MAINTENANCE_AFTER_OPEN_S} s**",
+        f"lượt poll tiếp theo (**{p.SIM_APPLY_S} s**",
+        f"tối đa **{p.FALSE_ALERT_BUDGET} lượt khỏe có incident trên 20 lượt khỏe tuning**",
+        f"lưới {p.A_GRID[0]:.1f}–{p.A_GRID[-1]:.1f} °C bước {p.A_GRID[1] - p.A_GRID[0]:.1f} °C".replace(
+            ".", ","
+        ),
+        f"Nền đều {vn(r['ambient_c'][0])}–{vn(r['ambient_c'][1])} °C",
+        f"biên độ đều {vn(r['drift_c'][0])}–{vn(r['drift_c'][1])} °C",
+        f"0,0013 × đều({vn(r['k_scale'][0])}–{vn(r['k_scale'][1])})",
+        f"60 s × đều({vn(r['tau_scale'][0])}–{vn(r['tau_scale'][1])})",
+        f"Gauss σ {vn(r['noise_c'])} °C",
+        f"thời điểm đều {r['change_s'][0]}–{r['change_s'][1]} s",
+        f"min(nền × đều({vn(r['load_factor'][0])}–{vn(r['load_factor'][1])}), {vn(r['load_cap_a'])} A)",
+        f"nền × đều({vn(r['drop_factor'][0])}–{vn(r['drop_factor'][1])})",
+        f"Thời điểm bắt đầu: đều {r['onset_s'][0]}–{r['onset_s'][1]} s",
+        f"đều {vn(r['severity_c'][0])}–{vn(r['severity_c'][1])} °C",
+        f"Hằng số tăng: đều {vn(r['ramp_s'][0])}–{vn(r['ramp_s'][1])} s",
+    ]
+    for split, label in [("tuning", "Tuning"), ("evaluation", "Đánh giá")]:
+        f, h = seeds[split]["fault"], seeds[split]["healthy"]
+        expected.append(f"| {label} | {f[0]}–{f[-1]} | {h[0]}–{h[-1]} |")
+    for scenario in ["healthy", "load_increase", "demand_drop"]:
+        expected.append(f"{p.HEALTHY_MIX.count(scenario)} `{scenario}`")
+    missing = [phrase for phrase in expected if phrase not in text]
+    assert not missing
+
+
+def test_detector_match_needs_rising_edge_after_onset():
+    def w(end, on):
+        return {"end_s": end, "fixed": on}
+
+    active = [w(15, False), w(30, True), w(45, True), w(60, True)]
+    assert summary.first_alert(active, "fixed", after=40) is None  # already alerting before onset
+    again = [*active, w(75, False), w(90, True)]
+    assert summary.first_alert(again, "fixed", after=40) == 90
+    assert summary.first_alert(active, "fixed", after=0) == 30
+
+
+def test_fingerprint_covers_sources_and_tune_never_overwrites(tmp_path, monkeypatch):
+    assert set(protocol.definition()["sources_sha256"]) == set(protocol.SOURCES)
+    (tmp_path / "a.py").write_bytes(b"x = 1\r\ny = 2\r\n")
+    (tmp_path / "b.py").write_bytes(b"x = 1\ny = 2\n")
+    monkeypatch.setattr(protocol, "PACKAGE", tmp_path)
+    assert protocol.source_sha256("a.py") == protocol.source_sha256("b.py")  # CRLF and LF checkouts agree
+    monkeypatch.undo()
+    lock = tmp_path / "lock.json"
+    lock.write_text(json.dumps({"protocol_version": protocol.PROTOCOL_VERSION}), encoding="utf-8")
+    with pytest.raises(SystemExit, match="refusing to overwrite"):
+        main(["tune", "--lock", str(lock)])
+    assert json.loads(lock.read_text(encoding="utf-8")) == {"protocol_version": protocol.PROTOCOL_VERSION}
+
+
+# Parity: the same window/command sequence through lifecycle.py (mongomock) and rules.Lifecycle.
+RUN = "00000000-0000-4000-8000-0000000000e1"
+FIELDS = [
+    "state",
+    "state_since",
+    "opened_at",
+    "reference_current_a",
+    "original_limit_a",
+    "target_current_a",
+    "load_reduction_verified_at",
+    "reduction_check",
+    "mitigated_at",
+    "maintenance_applied_at",
+    "verifying_since",
+    "retest_started_at",
+    "retest_checked_until",
+    "resolved_at",
+]
+
+
+class Twin:
+    def __init__(self, store):
+        self.db, self.life, self.windows, self.states = store, rules.Lifecycle(), [], []
+        self.t = domain.now().replace(microsecond=0)  # MongoDB keeps milliseconds
+        store.runs.insert_one({"_id": RUN, "status": "active", "mode": "local", "started_at": self.t})
+
+    def at(self, seconds):
+        return self.t + timedelta(seconds=seconds)
+
+    def window(self, end, current=30.0, limit=30.0, residual=1.0, requested=60.0, quality=True):
+        end = self.at(end)
+        samples = [
+            {
+                "measured_at": end - timedelta(seconds=60 - 5 * i),
+                "current_a": current,
+                "current_limit_a": limit,
+                "requested_current_a": requested,
+                "residual": residual,
+                "connector_temperature_c": 40.0 + residual,
+            }
+            for i in range(12)
+        ]
+        doc = {
+            "_id": f"{RUN}:{end.isoformat()}",
+            "run_id": RUN,
+            "start": end - timedelta(seconds=60),
+            "end": end,
+            "quality": quality,
+            "residual_mean": residual,
+            "samples": samples,
+        }
+        self.db.windows.insert_one(json.loads(json.dumps(doc, default=str)) | doc)
+        self.windows.append(doc)
+        return self
+
+    def alert(self, seconds):
+        evidence, at = self.windows[-1], self.at(seconds)
+        product = lifecycle.on_alert(
+            self.db, {"_id": RUN}, evidence, "local", at, evidence["_id"], evidence["end"]
+        )
+        assert product == self.life.alert(evidence, at, evidence["end"], "local")
+        return self.advance(seconds)
+
+    def command(self, kind, seconds):
+        at = self.at(seconds)
+        incident = self.db.incidents.find_one({"unresolved": True})
+        number = self.db.commands.count_documents({})
+        self.db.commands.insert_one(
+            {
+                "_id": f"c{number}",
+                "idempotency_key": f"k{number}",
+                "incident_id": incident["_id"],
+                "run_id": RUN,
+                "type": kind,
+                "status": "pending",
+                "validated": False,
+                "created_at": at,
+            }
+        )
+        lifecycle.process_commands(self.db, at)
+        mirror = self.life.command(self.life.unresolved(), kind, at, self.windows)
+        product = self.db.commands.find_one({"_id": f"c{number}"})
+        assert (product["status"], product.get("error"), product.get("sim")) == (
+            mirror["status"],
+            mirror.get("error"),
+            mirror.get("sim"),
+        )
+        return self.advance(seconds)
+
+    def apply(self, seconds):  # simulator applies every dispatched command
+        at = self.at(seconds)
+        for command in self.db.commands.find({"status": "pending", "dispatched_at": {"$ne": None}}):
+            self.db.commands.update_one(
+                {"_id": command["_id"]}, {"$set": {"status": "applied", "applied_at": at}}
+            )
+        for command in self.life.dispatched(at):
+            command.update(status="applied", applied_at=at)
+        return self.advance(seconds)
+
+    def advance(self, seconds):
+        at = self.at(seconds)
+        lifecycle.advance_incidents(self.db, at)
+        self.life.advance(at, self.windows)
+        product = list(self.db.incidents.find().sort("opened_at", 1))
+        assert len(product) == len(self.life.incidents)
+        for p, m in zip(product, self.life.incidents, strict=True):
+            assert {f: p.get(f) for f in FIELDS} == {f: m.get(f) for f in FIELDS}
+            assert ("unresolved" in p) == m["unresolved"]
+            assert [e["event"] for e in p["timeline"]] == [e["event"] for e in m["timeline"]]
+        self.states.append(product[-1]["state"] if product else None)
+        return self
+
+    def final(self):
+        return self.db.incidents.find().sort("opened_at", -1)[0]
+
+
+def derated(twin, start=0):
+    """Alert at a 60 A / 200 A reference window, acknowledge, reduce load to 30 A, simulator ACK."""
+    twin.window(start + 60, current=60, limit=200, residual=10).alert(start + 62)
+    return twin.command("acknowledge", start + 90).command("reduce_load", start + 120).apply(start + 125)
+
+
+def retest_passes(twin, first_end, count=5):
+    for end in range(first_end, first_end + 15 * count, 15):
+        twin.window(end, current=60, limit=200, residual=1).advance(end + 1)
+    return twin
+
+
+def test_parity_full_loop_with_retest_reset(store):
+    twin = derated(Twin(store))
+    twin.window(195, residual=5).advance(196).window(210, residual=2).advance(211)
+    twin.command("maintenance", 240).apply(245).command("verify_recovery", 275).apply(280)
+    twin.window(345, current=60, limit=200, residual=1).advance(346)
+    twin.window(360, current=60, limit=200, residual=4).advance(361)  # hot: retest resets
+    retest_passes(twin, 375)
+    assert twin.final()["state"] == "resolved"
+    assert [e["reason"] for e in twin.final()["timeline"] if e["event"] == "retest_reset"] == ["hot"]
+    assert ["open", "acknowledged", "mitigating", "mitigated", "verifying", "resolved"] == list(
+        dict.fromkeys(twin.states)
+    )
+
+
+def test_parity_ineffective_derating_unlocks_maintenance(store):
+    twin = derated(Twin(store))
+    twin.window(195, residual=5).advance(196).command("maintenance", 200)  # rejected: not yet ineffective
+    twin.window(240, residual=5).advance(245)  # 120 s after ACK at 125
+    assert twin.final()["reduction_check"] == "load_reduction_ineffective"
+    twin.command("maintenance", 250).apply(255)
+    assert twin.final()["state"] == "mitigating" and twin.final()["maintenance_applied_at"]
+    twin.window(315, residual=1).advance(316).command("verify_recovery", 320).apply(325)
+    retest_passes(twin, 390)
+    assert twin.final()["state"] == "resolved"
+
+
+def test_parity_tripped_window_does_not_verify(store):
+    twin = derated(Twin(store))
+    twin.window(195, current=0.0, residual=1).advance(196)
+    assert twin.final()["state"] == "mitigating" and not twin.final().get("load_reduction_verified_at")
+    twin.window(210, residual=1).advance(211)
+    assert twin.final()["state"] == "mitigated"
+
+
+def test_parity_recurrence_during_retest(store):
+    twin = derated(Twin(store))
+    twin.window(195, residual=2).advance(196)
+    twin.command("maintenance", 200).apply(205).command("verify_recovery", 210).apply(215)
+    twin.window(285, current=60, limit=200, residual=10).alert(286)  # hot again under retest
+    assert twin.final()["state"] == "open" and twin.life.incidents[0]["cycle"] == 1
+    twin.command("acknowledge", 300).command("reduce_load", 310).apply(315)
+    assert twin.final()["state"] == "mitigating" and twin.final()["target_current_a"] == 30.0

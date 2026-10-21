@@ -1,7 +1,7 @@
 """Offline evaluation (docs/EVALUATION_PROTOCOL.md).
 
 python -m chargeops.evaluation tune                       # tuning seeds only; writes the locked config
-python -m chargeops.evaluation run --protocol b1-eval-v1  # evaluation seeds; refuses without the lock
+python -m chargeops.evaluation run --protocol b1-eval-v2  # evaluation seeds; refuses without the lock
 """
 
 import argparse
@@ -15,7 +15,7 @@ from chargeops.evaluation import protocol, summary
 from chargeops.evaluation.rules import ALERT_C, RECOVERED_C
 from chargeops.evaluation.runner import detector_windows, record, run_arm, run_seed
 
-LOCK = Path(__file__).parent / "locked-config.json"
+LOCK = Path(__file__).parent / f"locked-{protocol.PROTOCOL_VERSION}.json"
 
 
 def choose_threshold(healthy_maxima, grid, budget):
@@ -27,6 +27,12 @@ def choose_threshold(healthy_maxima, grid, budget):
 
 
 def tune(lock_path):
+    if lock_path.exists():
+        existing = json.loads(lock_path.read_text(encoding="utf-8")).get("protocol_version")
+        if existing == protocol.PROTOCOL_VERSION:
+            raise SystemExit(
+                f"refusing to overwrite the {existing} lock at {lock_path}; bump protocol_version"
+            )
     config = {"a_threshold_c": float("inf"), "c_alert_c": ALERT_C}
     healthy_maxima, c_alerting, detail = [], 0, []
     for seed, kind, scenario in protocol.scenarios("tuning"):

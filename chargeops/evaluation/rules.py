@@ -1,12 +1,21 @@
 """In-memory mirror of the worker's incident rules (lifecycle.py is MongoDB-bound) for offline evaluation.
 
-Constants are imported from the product; ALERT_C mirrors the literal in worker.tick and is pinned by a test.
+Thresholds and pure predicates are imported from the product; tests/test_evaluation.py replays the same
+window/command sequences through lifecycle.py (mongomock) and this mirror and compares states and timestamps.
 Only this module changes evaluation incident state, as the worker is the single writer in the product."""
 
-from chargeops.domain import target_current
-from chargeops.lifecycle import CURRENT_TOLERANCE, LOAD_FLOOR, RECOVERED_C, REDUCTION_CHECK_S, RETEST_S
+from chargeops.domain import ALERT_RESIDUAL_C, target_current
+from chargeops.lifecycle import (
+    CURRENT_TOLERANCE,
+    LOAD_FLOOR,
+    RECOVERED_C,
+    REDUCTION_CHECK_S,
+    RETEST_S,
+    charging,
+    maintenance_unlocked,
+)
 
-ALERT_C = 8.0  # worker.tick: `evidence["residual_mean"] > 8`
+ALERT_C = ALERT_RESIDUAL_C
 CYCLE = ["load_reduction_verified_at", "reduction_check", "maintenance_applied_at", "verifying_since"]
 
 
@@ -91,10 +100,12 @@ class Lifecycle:
                 }
             target = frozen.get("target_current_a", incident.get("target_current_a"))
             return None, {"state": "mitigating", **frozen}, {"current_limit_a": target}
+        if kind == "maintenance":
+            if state == "mitigated" or (state == "mitigating" and maintenance_unlocked(incident)):
+                return None, {}, {"fault_cleared": True}
+            return f"invalid_state:{state}", None, None
         if state != "mitigated":
             return f"invalid_state:{state}", None, None
-        if kind == "maintenance":
-            return None, {}, {"fault_cleared": True}
         if not incident.get("maintenance_applied_at"):
             return "maintenance_not_applied", None, None
         return None, {}, {"current_limit_a": incident["original_limit_a"]}  # verify_recovery
@@ -141,7 +152,15 @@ class Lifecycle:
         ]
         return max(matches, key=lambda c: c["applied_at"], default=None)
 
+    def record_maintenance(self, incident, at):
+        if not incident.get("maintenance_applied_at"):
+            command = self.applied(incident, "maintenance")
+            if command:
+                incident["maintenance_applied_at"] = command["applied_at"]
+                self.note(incident, "maintenance_applied", at)
+
     def check_mitigation(self, incident, at, windows):
+        self.record_maintenance(incident, at)
         command = self.applied(incident, "reduce_load")
         if not command:
             return
@@ -149,8 +168,10 @@ class Lifecycle:
         eligible = [w for w in windows if w["quality"] and w["start"] >= ack]
         for window in eligible:
             samples = window["samples"]
-            load_ok = mean([s["current_a"] for s in samples]) <= CURRENT_TOLERANCE * target and all(
-                s["current_limit_a"] <= target for s in samples
+            load_ok = (
+                all(charging(s) for s in samples)
+                and mean([s["current_a"] for s in samples]) <= CURRENT_TOLERANCE * target
+                and all(s["current_limit_a"] <= target for s in samples)
             )
             if not load_ok:
                 continue
@@ -163,21 +184,18 @@ class Lifecycle:
                     incident, "mitigated", at, "mitigated", mitigated_at=window["end"], evidence_after=after
                 )
                 return
-        if (
-            not incident.get("load_reduction_verified_at")
-            and not incident.get("reduction_check")
-            and (at - ack).total_seconds() >= REDUCTION_CHECK_S
-        ):
-            name = "load_reduction_ineffective" if eligible else "load_reduction_unverified"
+        if not incident.get("reduction_check") and (at - ack).total_seconds() >= REDUCTION_CHECK_S:
+            if incident.get("load_reduction_verified_at"):
+                name, reason = "load_reduction_ineffective", "residual_not_recovered"
+            elif eligible:
+                name, reason = "load_reduction_ineffective", "load_not_reduced"
+            else:
+                name, reason = "load_reduction_unverified", "insufficient_data"
             incident["reduction_check"] = name
-            self.note(incident, name, at)
+            self.note(incident, name, at, reason=reason)
 
     def check_mitigated(self, incident, at):
-        if not incident.get("maintenance_applied_at"):
-            command = self.applied(incident, "maintenance")
-            if command:
-                incident["maintenance_applied_at"] = command["applied_at"]
-                self.note(incident, "maintenance_applied", at)
+        self.record_maintenance(incident, at)
         command = incident.get("maintenance_applied_at") and self.applied(incident, "verify_recovery")
         if command:
             self.transition(

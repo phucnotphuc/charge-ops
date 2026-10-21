@@ -1,6 +1,8 @@
 # Protocol đánh giá A/B/C — ChargeOps
 
-protocol_version: `b1-eval-v1`
+protocol_version: `b1-eval-v2`
+
+**Lịch sử phiên bản.** `b1-eval-v1` (khóa 21/10/2026 04:53 UTC, file `chargeops/evaluation/locked-b1-eval-v1.json`) là lượt đầu. `b1-eval-v2` đổi quy tắc sản phẩm theo quyết định của người dùng (CONTRACT §3): (1) operator được bảo trì từ `mitigating` khi chu kỳ đã ghi `load_reduction_ineffective` sau khi giảm dòng đã được xác nhận; (2) cửa sổ có mẫu không sạc (trip) không bao giờ xác nhận giảm tải. Kèm theo: ngưỡng là hằng số `ALERT_RESIDUAL_C`/`RECOVERY_RESIDUAL_C` trong `domain.py`; fingerprint gồm SHA-256 mã nguồn đánh giá; detector-only ghép theo cạnh lên đầu tiên sau onset. Cùng seed tuning và đánh giá như v1; `tune` chạy lại trên seed tuning và khóa trước khi chạy đánh giá.
 
 Protocol này chốt **trước** khi chạy tập đánh giá, theo DATA_CARD.md ("Đối chứng để chứng minh giá trị") và PLAN.md ("Nghiệm thu"). Mọi giá trị dưới đây nằm trong `chargeops/evaluation/protocol.py`; thay đổi bất kỳ giá trị nào làm đổi fingerprint, và `run` từ chối chạy với cấu hình đã khóa theo protocol cũ. Muốn đổi protocol phải tăng `protocol_version`, chạy lại `tune` và ghi lý do; không chỉnh protocol sau khi đã xem kết quả đánh giá.
 
@@ -10,10 +12,10 @@ Toàn bộ là **mô phỏng**: nhiệt độ trip, ngưỡng, độ trễ opera
 
 ```
 uv run python -m chargeops.evaluation tune
-uv run python -m chargeops.evaluation run --protocol b1-eval-v1 --out artifacts/evaluation/<timestamp>/
+uv run python -m chargeops.evaluation run --protocol b1-eval-v2 --out artifacts/evaluation/<timestamp>/
 ```
 
-`tune` chỉ dùng seed tuning, ghi `chargeops/evaluation/locked-config.json` (version, fingerprint, seed, ngưỡng, thời điểm khóa). `run` từ chối nếu không có file khóa, khác version, khác fingerprint, hoặc seed đánh giá trùng/khác với seed đã khóa. Chạy hoàn toàn trong tiến trình: không MongoDB, không Datadog, không mạng. Kết quả ở `artifacts/` (Git ignore): `runs.jsonl` (mỗi dòng một lượt), `summary.json`, `summary.md`, bản sao cấu hình khóa.
+`tune` chỉ dùng seed tuning, ghi `chargeops/evaluation/locked-<protocol_version>.json` (version, fingerprint, seed, ngưỡng, thời điểm khóa) và từ chối ghi đè file khóa đã có cùng version. `run` từ chối nếu không có file khóa, khác version, khác fingerprint, hoặc seed đánh giá trùng/khác với seed đã khóa. Chạy hoàn toàn trong tiến trình: không MongoDB, không Datadog, không mạng. Kết quả ở `artifacts/` (Git ignore): `runs.jsonl` (mỗi dòng một lượt), `summary.json`, `summary.md`, bản sao cấu hình khóa.
 
 ## Ba phương án
 
@@ -25,7 +27,7 @@ uv run python -m chargeops.evaluation run --protocol b1-eval-v1 --out artifacts/
 
 A và C chỉ khác nhau ở detector mở incident (kể cả alert tái phát khi `verifying`). Các cổng sau đó — kiểm chứng giảm tải (dòng ≤110 % mục tiêu, giới hạn ≤ mục tiêu), `mitigated` khi residual < 3 °C, retest 120 giây — giữ nguyên quy tắc sản phẩm cho cả hai, để so sánh tách riêng giá trị của detector. Cả hai detector dùng cùng cửa sổ 60 giây `[end − 60 s, end)`, cùng quality gate (`domain.window_evidence`) và cửa sổ kết thúc trên mốc 15 giây.
 
-Detector và quy tắc dùng lại hàm sản phẩm: `with_residuals`, `window_evidence`, `target_current` (200 A/60 A → 30 A) từ `domain.py`; hằng số `RECOVERED_C`, `CURRENT_TOLERANCE`, `LOAD_FLOOR`, `RETEST_S`, `REDUCTION_CHECK_S` từ `lifecycle.py`. Vì `lifecycle.py` gắn với MongoDB, `chargeops/evaluation/rules.py` viết lại tối thiểu các quy tắc trạng thái trong bộ nhớ; test ghim chúng vào cùng hằng số. Ngưỡng alert 8 °C là literal trong `worker.tick`; test kiểm tra literal này.
+Detector và quy tắc dùng lại hàm sản phẩm: `with_residuals`, `window_evidence`, `target_current` (200 A/60 A → 30 A) từ `domain.py`; hằng số `RECOVERED_C`, `CURRENT_TOLERANCE`, `LOAD_FLOOR`, `RETEST_S`, `REDUCTION_CHECK_S` từ `lifecycle.py`. Vì `lifecycle.py` gắn với MongoDB, `chargeops/evaluation/rules.py` viết lại tối thiểu các quy tắc trạng thái trong bộ nhớ; test ghim chúng vào cùng hằng số. Ngưỡng alert 8 °C và phục hồi 3 °C là hằng số `domain.ALERT_RESIDUAL_C`/`RECOVERY_RESIDUAL_C`, dùng chung bởi worker, `lifecycle.py` và `rules.py`. Các vị từ thuần `charging` và `maintenance_unlocked` được import trực tiếp từ `lifecycle.py`. Test parity chạy cùng chuỗi cửa sổ/lệnh qua `lifecycle.py` (mongomock) và `rules.py`, so sánh trạng thái, các trường `*_at` và timeline (vòng đầy đủ, bảo trì sau ineffective, cửa sổ trip, reset retest, tái phát).
 
 ## Seed và kịch bản
 
@@ -63,12 +65,12 @@ Lỗi nhiệt kiểu điện trở tiếp xúc tăng: nhiệt thêm tỷ lệ I�
 - Hằng số tăng: đều 60–600 s.
 - Bảo trì (`maintenance` đã áp dụng) xóa lỗi hoàn toàn. Lỗi không tự hết.
 
-Giảm dòng còn một nửa làm nhiệt lỗi còn một phần tư. Với lỗi lớn, phần tư này vẫn ≥ 3 °C nên quy tắc sản phẩm không cho `mitigated`, do đó không thể bảo trì trong lượt. Đây là hệ quả của quy tắc sản phẩm, được báo cáo như kết quả, không được nới lỏng trong evaluation.
+Giảm dòng còn một nửa làm nhiệt lỗi còn một phần tư. Với lỗi lớn, phần tư này vẫn ≥ 3 °C nên không đạt `mitigated`. Ở v1 điều này chặn bảo trì; từ v2, sau 120 giây kể từ ACK mà dòng đã giảm nhưng residual chưa phục hồi, worker ghi `load_reduction_ineffective` (reason `residual_not_recovered`) và operator được bảo trì từ `mitigating` (CONTRACT §3).
 
 ## Trip và khởi động lại (chỉ mô phỏng)
 
 - **Trip** khi nhiệt connector *thật* > **100 °C**. Giá trị này chọn trước, chỉ dùng trong mô phỏng: cao hơn trạng thái ổn định khỏe nóng nhất (≈ 93,7 °C) khoảng 6 °C để lượt khỏe không trip theo cấu trúc, và gần mức cắt bảo vệ nhiệt thường gặp ở đầu nối DC (khoảng 90–100 °C). Không phải ngưỡng an toàn thiết bị thật.
-- Khi trip: dòng = 0 (phiên bị gián đoạn), nhu cầu xe vẫn tiếp tục theo đường tải, giới hạn dòng giữ nguyên.
+- Khi trip: dòng = 0 (phiên bị gián đoạn), nhu cầu xe vẫn tiếp tục theo đường tải, giới hạn dòng giữ nguyên. Từ v2, cửa sổ có mẫu không sạc không xác nhận giảm tải: trip chỉ được tính là gián đoạn.
 - **Khởi động lại** tự động khi đã qua ít nhất **300 s** kể từ trip *và* nhiệt thật ≤ **60 °C**; chạy lại với giới hạn đang áp dụng. Nếu lỗi còn, có thể trip lại; mọi lần trip đều được đếm.
 - Phút gián đoạn = thời gian đang trip mà nhu cầu xe > 0.
 
@@ -82,7 +84,8 @@ Operator kịch bản hóa, phản ứng sau **30 s** mỗi bước, tính từ 
 | `acknowledged` | `reduce_load` | vào `acknowledged` + 30 s |
 | `mitigated`, chưa bảo trì | `maintenance` | max(vào `mitigated` + 30 s, mở incident (chu kỳ hiện tại) + **600 s**) |
 | `mitigated`, đã bảo trì | `verify_recovery` | bảo trì áp dụng + 30 s |
-| `mitigating`, `verifying` | không lệnh | chờ telemetry |
+| `mitigating`, đã ghi `load_reduction_ineffective` sau khi giảm dòng đã xác nhận, chưa bảo trì | `maintenance` | max(event ineffective + 30 s, mở incident (chu kỳ hiện tại) + 600 s) |
+| `mitigating` khác, `verifying` | không lệnh | chờ telemetry |
 
 Worker xác thực lệnh ngay khi nhận; simulator áp dụng lệnh ở lượt poll tiếp theo (**5 s**, nhỏ hơn timeout 30 s nên không lệnh nào timeout). Mỗi loại lệnh gửi một lần cho mỗi chu kỳ xử lý của incident; lệnh bị từ chối (ví dụ `no_valid_reference_window`) được gửi lại sau 30 s và đếm là lệnh bị từ chối. Lịch bảo trì là thao tác operator mô phỏng, không thêm tự động bảo trì vào sản phẩm. B không có operator.
 
@@ -100,14 +103,14 @@ Worker xác thực lệnh ngay khi nhận; simulator áp dụng lệnh ở lư�
 - **Thời gian hành động có tác dụng**: mở incident → cuối cửa sổ đầu tiên xác nhận giảm dòng (`load_reduction_verified_at`). Báo thêm → `mitigated`, → bảo trì, → `resolved`. B: không áp dụng.
 - **False alerts/connector-hour**: số incident trên seed khỏe ÷ tổng giờ connector khỏe mô phỏng (20 × 0,5 h = 10 h). Báo thêm số lượt khỏe có ít nhất một incident (mục tiêu ≤ 1/20) và phân theo kịch bản.
 - **Trip, phút gián đoạn, kWh phục vụ**: kWh = Σ V × I × 5 s trên cùng 1800 s, tính cả giai đoạn gián đoạn. **Chênh lệch kWh có dấu** so với B cùng seed; phần năng lượng chênh trong các bước đang giảm tải (giới hạn < 250 A) báo riêng. Chênh lệch âm nghĩa là phục vụ ít hơn B; không gán mọi chênh lệch là lợi ích.
-- **Command trùng**: lệnh cùng loại, cùng incident, cùng chu kỳ được chấp nhận lần thứ hai trở lên. Mục tiêu 0.
-- **Chất lượng detector riêng**: chạy cả detector ngưỡng cố định và residual trên cùng cửa sổ telemetry chưa can thiệp của B: phát hiện trước trip, latency, lead time, cảnh báo trước onset, số lượt khỏe có alert, số đợt alert (cạnh lên)/connector-hour, theo kịch bản. Không dùng các đường nhiệt đã khác nhau sau can thiệp để so detector.
+- **Command trùng**: lệnh cùng loại, cùng incident, cùng chu kỳ được chấp nhận lần thứ hai trở lên. Mục tiêu 0. Giá trị 0 đúng **theo cấu trúc** của operator kịch bản (mỗi loại lệnh một lần mỗi chu kỳ); đây không phải bằng chứng sản phẩm chống trùng (idempotency được test riêng trong `tests/test_lifecycle.py`).
+- **Chất lượng detector riêng**: chạy cả detector ngưỡng cố định và residual trên cùng cửa sổ telemetry chưa can thiệp của B; phát hiện là **cạnh lên đầu tiên** của alert có cuối cửa sổ ≥ onset (alert đang bật từ trước onset không được tính là phát hiện lỗi): phát hiện trước trip, latency, lead time, cảnh báo trước onset, số lượt khỏe có alert, số đợt alert (cạnh lên)/connector-hour, theo kịch bản. Không dùng các đường nhiệt đã khác nhau sau can thiệp để so detector.
 
 ## Khóa ngưỡng trên tập tuning
 
 - **C**: ngưỡng alert 8 °C và phục hồi 3 °C là hằng số sản phẩm (CONTRACT §3), không tìm kiếm lại. `tune` kiểm tra chúng trên seed tuning và ghi số lượt khỏe có alert, cùng cờ `c_within_budget`.
 - **A**: ngân sách cảnh báo giả giống C: tối đa **1 lượt khỏe có incident trên 20 lượt khỏe tuning** (mục tiêu PLAN). Ngưỡng A là giá trị **thấp nhất** trong lưới 30,0–100,0 °C bước 0,5 °C sao cho số lượt khỏe tuning có cửa sổ hợp lệ với trung bình nhiệt > ngưỡng không vượt ngân sách. Chọn giá trị thấp nhất cho A độ nhạy cao nhất có thể dưới cùng ngân sách, tránh chọn ngưỡng yếu tùy ý. Vì cảnh báo giả đầu tiên luôn xảy ra trên telemetry chưa can thiệp, tune trên telemetry B tương đương với lượt A đầy đủ.
-- File khóa ghi ngưỡng, quy tắc, seed tuning/đánh giá, fingerprint protocol (gồm hằng số sản phẩm và SHA-256 file đường tải) và thời điểm khóa. File khóa được commit trước khi chạy tập đánh giá.
+- File khóa ghi ngưỡng, quy tắc, seed tuning/đánh giá, fingerprint protocol (gồm hằng số sản phẩm, SHA-256 file đường tải và SHA-256 đã chuẩn hóa xuống dòng của `runner.py`, `rules.py`, `summary.py`, `model.py`, `lifecycle.py`) và thời điểm khóa. File khóa được commit trước khi chạy tập đánh giá.
 
 ## Mục tiêu nội bộ (PLAN) và cách báo
 

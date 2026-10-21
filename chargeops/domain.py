@@ -15,6 +15,9 @@ AMBIENT_C = 25.0
 THERMAL_K = 0.0013  # °C per A² at steady state
 THERMAL_TAU_S = 60.0
 BASELINE_VERSION = "ema-tau60-k0013-v2"
+# CONTRACT §3 detector thresholds on the 60-second residual mean (simulation values, not safety limits).
+ALERT_RESIDUAL_C = 8.0
+RECOVERY_RESIDUAL_C = 3.0
 
 
 def now():

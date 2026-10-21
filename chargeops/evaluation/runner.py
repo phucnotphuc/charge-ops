@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from chargeops.domain import window_evidence, with_residuals
 from chargeops.evaluation import protocol
-from chargeops.evaluation.rules import Lifecycle, fixed_alert, residual_alert
+from chargeops.evaluation.rules import Lifecycle, fixed_alert, maintenance_unlocked, residual_alert
 from chargeops.model import EPOCH, ORIGINAL_LIMIT_A, STEP_S, Connector
 
 # Detector and whether the operator acts on incidents.
@@ -40,7 +40,15 @@ class Operator:
             return "maintenance", max(since + self.delay, self.cycle_open[key] + self.maintenance)
         if state == "mitigated":
             return "verify_recovery", incident["maintenance_applied_at"] + self.delay
-        return None, None  # mitigating/verifying: wait for telemetry evidence
+        if (
+            state == "mitigating"
+            and maintenance_unlocked(incident)
+            and not incident.get("maintenance_applied_at")
+        ):
+            # CONTRACT §3: derating verified but the residual did not recover; maintenance on the same schedule.
+            noted = [e["at"] for e in incident["timeline"] if e["event"] == "load_reduction_ineffective"]
+            return "maintenance", max(noted[-1] + self.delay, self.cycle_open[key] + self.maintenance)
+        return None, None  # otherwise mitigating/verifying: wait for telemetry evidence
 
     def act(self, life, at, windows):
         incident = life.unresolved()

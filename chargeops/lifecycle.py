@@ -2,14 +2,14 @@
 
 from uuid import uuid4
 
-from chargeops.domain import CONNECTOR, target_current
+from chargeops.domain import CONNECTOR, RECOVERY_RESIDUAL_C, target_current
 
 # Demo policy, locked before evaluation.
 COMMAND_TIMEOUT_S = 30
 REDUCTION_CHECK_S = 120
 RETEST_S = 120
 CURRENT_TOLERANCE = 1.10
-RECOVERED_C = 3.0
+RECOVERED_C = RECOVERY_RESIDUAL_C
 LOAD_FLOOR = 0.90
 
 
@@ -69,6 +69,18 @@ def mean(values):
     return sum(values) / len(values)
 
 
+def charging(sample):
+    """A tripped or faulted connector (no current) is an interruption, never evidence of mitigation."""
+    return sample["current_a"] > 0 and sample.get("connector_status") != "faulted"
+
+
+def maintenance_unlocked(incident):
+    """Derating verified but the residual did not recover within REDUCTION_CHECK_S: maintenance may proceed."""
+    return incident.get("reduction_check") == "load_reduction_ineffective" and bool(
+        incident.get("load_reduction_verified_at")
+    )
+
+
 def handle_command(db, incident, command, at):
     """Validate an operator command against incident state: (error, incident fields, simulator payload)."""
     state, kind = incident["state"], command["type"]
@@ -101,10 +113,12 @@ def handle_command(db, incident, command, at):
             }
         target = frozen.get("target_current_a", incident.get("target_current_a"))
         return None, {"state": "mitigating", **frozen}, {"current_limit_a": target}
+    if kind == "maintenance":
+        if state == "mitigated" or (state == "mitigating" and maintenance_unlocked(incident)):
+            return None, {}, {"fault_cleared": True}
+        return f"invalid_state:{state}", None, None
     if state != "mitigated":
         return f"invalid_state:{state}", None, None
-    if kind == "maintenance":
-        return None, {}, {"fault_cleared": True}
     if not incident.get("maintenance_applied_at"):
         return "maintenance_not_applied", None, None
     return None, {}, {"current_limit_a": incident["original_limit_a"]}  # verify_recovery
@@ -177,7 +191,22 @@ def applied(db, incident, kind):
     )
 
 
+def record_maintenance(db, incident, at):
+    if not incident.get("maintenance_applied_at"):
+        command = applied(db, incident, "maintenance")
+        if command:
+            incident["maintenance_applied_at"] = command["applied_at"]
+            db.incidents.update_one(
+                {"_id": incident["_id"]},
+                {
+                    "$set": {"maintenance_applied_at": command["applied_at"]},
+                    **note("maintenance_applied", at),
+                },
+            )
+
+
 def check_mitigation(db, incident, at):
+    record_maintenance(db, incident, at)  # maintenance unlocked by an ineffective derating
     command = applied(db, incident, "reduce_load")
     if not command:
         return
@@ -189,8 +218,10 @@ def check_mitigation(db, incident, at):
     )
     for window in windows:
         samples = window["samples"]
-        load_ok = mean([s["current_a"] for s in samples]) <= CURRENT_TOLERANCE * target and all(
-            s["current_limit_a"] <= target for s in samples
+        load_ok = (
+            all(charging(s) for s in samples)
+            and mean([s["current_a"] for s in samples]) <= CURRENT_TOLERANCE * target
+            and all(s["current_limit_a"] <= target for s in samples)
         )
         if not load_ok:
             continue
@@ -219,29 +250,20 @@ def check_mitigation(db, incident, at):
                 evidence_after=evidence,
             )
             return
-    if (
-        not incident.get("load_reduction_verified_at")
-        and not incident.get("reduction_check")
-        and (at - ack).total_seconds() >= REDUCTION_CHECK_S
-    ):
-        name = "load_reduction_ineffective" if windows else "load_reduction_unverified"
+    if not incident.get("reduction_check") and (at - ack).total_seconds() >= REDUCTION_CHECK_S:
+        if incident.get("load_reduction_verified_at"):
+            name, reason = "load_reduction_ineffective", "residual_not_recovered"
+        elif windows:
+            name, reason = "load_reduction_ineffective", "load_not_reduced"
+        else:
+            name, reason = "load_reduction_unverified", "insufficient_data"
         db.incidents.update_one(
-            {"_id": incident["_id"]}, {"$set": {"reduction_check": name}, **note(name, at)}
+            {"_id": incident["_id"]}, {"$set": {"reduction_check": name}, **note(name, at, reason=reason)}
         )
 
 
 def check_mitigated(db, incident, at):
-    if not incident.get("maintenance_applied_at"):
-        command = applied(db, incident, "maintenance")
-        if command:
-            incident["maintenance_applied_at"] = command["applied_at"]
-            db.incidents.update_one(
-                {"_id": incident["_id"]},
-                {
-                    "$set": {"maintenance_applied_at": command["applied_at"]},
-                    **note("maintenance_applied", at),
-                },
-            )
+    record_maintenance(db, incident, at)
     command = incident.get("maintenance_applied_at") and applied(db, incident, "verify_recovery")
     if command:
         transition(
