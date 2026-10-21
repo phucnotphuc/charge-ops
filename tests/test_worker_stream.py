@@ -206,3 +206,13 @@ def test_activation_charges_budget_after_match(store, monkeypatch):
     worker.manage_run(store, now())
     assert store.runs.find_one({"_id": "r2"})["status"] == "active"
     assert store.budgets.find_one({"_id": settings().dd_trial_id})["run_ids"] == ["r2"]
+
+
+def test_reconcile_charges_started_datadog_run_missing_from_budget(store, monkeypatch):
+    monkeypatch.setenv("DD_MONITOR_ID", "123")
+    settings.cache_clear()
+    store.runs.insert_one({"_id": "r3", "status": "active", "mode": "datadog", "started_at": now()})
+    store.runs.insert_one({"_id": "r4", "status": "stopped", "mode": "local", "started_at": now()})
+    worker.manage_run(store, now())
+    worker.manage_run(store, now())
+    assert store.budgets.find_one({"_id": settings().dd_trial_id})["run_ids"] == ["r3"]

@@ -3,7 +3,7 @@ import logging
 import re
 
 import pytest
-from ddtrace import tracer
+from ddtrace import config, tracer
 
 from chargeops.config import settings
 from chargeops.logging import event, logger
@@ -49,6 +49,19 @@ def test_trace_fields_inside_span(captured):
     trace_id = row["dd.trace_id"]
     assert re.fullmatch(r"[0-9a-f]{32}", trace_id) or (trace_id.isdecimal() and int(trace_id) < 2**64)
     assert row["dd.span_id"] == span_id
-    assert all(value for key, value in row.items() if key.startswith("dd."))
+    assert "dd.trace_id" in row and "dd.span_id" in row
     event(log, "after")
     assert not any(key.startswith("dd.") for key in records[-1])
+
+
+def test_service_env_version_fields(captured, monkeypatch):
+    monkeypatch.setattr(config, "service", "chargeops-worker")
+    monkeypatch.setattr(config, "env", "hackathon")
+    monkeypatch.setattr(config, "version", "0.1.0")
+    log, records = captured
+    with tracer.trace("unit.test"):
+        event(log, "traced")
+    row = records[-1]
+    assert row["dd.service"] == "chargeops-worker"
+    assert row["dd.env"] == "hackathon"
+    assert row["dd.version"] == "0.1.0"

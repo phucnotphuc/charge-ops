@@ -161,6 +161,12 @@ def process_event(db, item, at, monitor_id):
 
 
 def manage_run(db, at):
+    # Idempotent: repairs a crash between activation and the post-activation charge.
+    started = [r["_id"] for r in db.runs.find({"mode": "datadog", "started_at": {"$exists": True}}, {"_id": 1})]
+    if started:
+        db.budgets.update_one(
+            {"_id": settings().dd_trial_id}, {"$addToSet": {"run_ids": {"$each": started}}}, upsert=True
+        )
     pending = db.runs.find_one({"status": "pending"})
     if pending:
         # Every update is filtered on status=pending so an API-side cancel wins the race.
