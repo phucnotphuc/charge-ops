@@ -419,3 +419,30 @@ def test_check_mongo_core_path_runs_on_the_fleet_scheme(store):
     store.runs.delete_many({})  # frees the single active slot for a second smoke run
     check_loop(store, "connector-6")
     assert store.incidents.count_documents({"connector_id": {"$in": ["connector-1", "connector-6"]}}) == 2
+
+
+def test_fleet_window_rows_equals_per_connector_window_rows(fleet, store):
+    """The worker's single fleet aggregation must give each connector exactly what window_rows gives it,
+    including the first-arrival dedup of a poisoned duplicate and a sample_id shared across connectors."""
+    from chargeops.storage import fleet_window_rows, window_rows
+
+    fleet.start("thermal_fault", seed=11)
+    fleet.run_until(180, worker=False)
+    end = T0 + timedelta(seconds=180)
+    original = store.telemetry.find_one(
+        {"meta.connector_id": "connector-2", "measured_at": end - timedelta(seconds=20)}
+    )
+    poisoned = {k: v for k, v in original.items() if k != "_id"}
+    poisoned.update(connector_temperature_c=999.0, received_at=original["received_at"] + timedelta(seconds=30))
+    store.telemetry.insert_one(poisoned)  # a later replay of the same sample_id must not win
+    shared = {k: v for k, v in original.items() if k != "_id"}
+    shared.update(connector_id="connector-5", meta={**original["meta"], "connector_id": "connector-5"})
+    store.telemetry.insert_one(shared)  # same sample_id on another connector is a different sample
+
+    fleet_rows = fleet_window_rows(store, RUN, end)
+    assert set(fleet_rows) == set(CONNECTORS)
+    for cid in CONNECTORS:
+        assert fleet_rows[cid] == window_rows(store, RUN, end, cid), cid
+    temps = [r["connector_temperature_c"] for r in fleet_rows["connector-2"]]
+    assert 999.0 not in temps and len(temps) == 12
+    assert sum(r["sample_id"] == original["sample_id"] for r in fleet_rows["connector-5"]) == 1
