@@ -15,12 +15,46 @@ import {
   fmtTime,
 } from "../lib/format";
 
-const COMMANDS: { type: CommandType; states: string[]; hint: string }[] = [
-  { type: "acknowledge", states: ["open"], hint: "Xác nhận đã nhận biết sự cố" },
-  { type: "reduce_load", states: ["acknowledged", "mitigating"], hint: "Đặt giới hạn dòng mục tiêu" },
-  { type: "maintenance", states: ["mitigated"], hint: "Loại nguyên nhân lỗi mô phỏng" },
-  { type: "verify_recovery", states: ["mitigated"], hint: "Khôi phục giới hạn tải gốc và kiểm tra 120 giây" },
+const COMMANDS: { type: CommandType; hint: string }[] = [
+  { type: "acknowledge", hint: "Xác nhận đã nhận biết sự cố" },
+  { type: "reduce_load", hint: "Đặt giới hạn dòng mục tiêu" },
+  { type: "maintenance", hint: "Loại nguyên nhân lỗi mô phỏng" },
+  { type: "verify_recovery", hint: "Khôi phục giới hạn tải gốc và kiểm tra 120 giây" },
 ];
+
+/** Mirrors the worker's gates in chargeops/lifecycle.py handle_command; the worker stays authoritative. */
+export function commandAllowed(incident: Incident, type: CommandType): boolean {
+  const { state } = incident;
+  switch (type) {
+    case "acknowledge":
+      return state === "open";
+    case "reduce_load":
+      return (state === "acknowledged" || state === "mitigating") && !incident.load_reduction_verified_at;
+    case "maintenance":
+      return (
+        state === "mitigated" ||
+        (state === "mitigating" && incident.reduction_check_reason === "residual_not_recovered")
+      );
+    case "verify_recovery":
+      return state === "mitigated" && !!incident.maintenance_applied_at;
+  }
+}
+
+export const REDUCTION_REASON_LABEL: Record<string, string> = {
+  residual_not_recovered: "Đã giảm dòng nhưng nhiệt chưa phục hồi sau 120 s",
+  load_not_reduced: "Dòng chưa giảm",
+  insufficient_data: "Thiếu dữ liệu để xác nhận",
+};
+
+/** Vietnamese reason for a recorded reduction check; null when the worker recorded none. */
+export function reductionCheckText(incident: Incident): string | null {
+  if (!incident.reduction_check) return null;
+  const reason = incident.reduction_check_reason;
+  if (reason && REDUCTION_REASON_LABEL[reason]) return REDUCTION_REASON_LABEL[reason];
+  return incident.reduction_check === "load_reduction_unverified"
+    ? REDUCTION_REASON_LABEL.insufficient_data
+    : REDUCTION_REASON_LABEL.load_not_reduced;
+}
 
 const TERMINAL = ["applied", "failed", "timed_out"];
 
@@ -74,14 +108,18 @@ export function IncidentView({ incident, onChanged }: { incident: Incident; onCh
               detail={
                 verifiedAt
                   ? `Cửa sổ 60 giây đạt điều kiện lúc ${fmtTime(verifiedAt)}`
-                  : incident.reduction_check === "load_reduction_ineffective"
-                    ? "Sau 120 giây dòng vẫn chưa giảm: lệnh chưa hiệu quả"
-                    : incident.reduction_check === "load_reduction_unverified"
-                      ? "Sau 120 giây dữ liệu chưa đủ để kết luận"
-                      : "Chưa có bằng chứng giảm dòng"
+                  : (reductionCheckText(incident) ?? "Chưa có bằng chứng giảm dòng")
               }
               warn={!!incident.reduction_check && !verifiedAt}
             />
+            {verifiedAt && incident.reduction_check_reason === "residual_not_recovered" && (
+              <ProofRow
+                ok={false}
+                warn
+                title="Giảm tải chưa hiệu quả"
+                detail={`${REDUCTION_REASON_LABEL.residual_not_recovered}: được phép bảo trì ngay`}
+              />
+            )}
           </div>
         </div>
 
@@ -210,8 +248,8 @@ function CommandPanel({
         </p>
       )}
       <div className="cmd-row">
-        {COMMANDS.map(({ type, states, hint }) => {
-          const allowed = states.includes(incident.state) && !resolved;
+        {COMMANDS.map(({ type, hint }) => {
+          const allowed = commandAllowed(incident, type) && !resolved;
           return (
             <button
               key={type}

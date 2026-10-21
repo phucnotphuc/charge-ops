@@ -93,6 +93,8 @@ export interface Incident {
   target_current_a?: number | null;
   load_reduction_verified_at?: string | null;
   reduction_check?: "load_reduction_ineffective" | "load_reduction_unverified" | null;
+  /** Only residual_not_recovered unlocks maintenance while still mitigating. */
+  reduction_check_reason?: "load_not_reduced" | "insufficient_data" | "residual_not_recovered" | null;
   maintenance_applied_at?: string | null;
   mitigated_at?: string | null;
   timeline: TimelineEvent[];

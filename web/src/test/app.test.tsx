@@ -9,7 +9,8 @@ import { IncidentDetail } from "../pages/IncidentDetail";
 import { Overview } from "../pages/Overview";
 import { api, MAX_TELEMETRY_PAGES } from "../api/client";
 import { downsample } from "../lib/format";
-import { latestAppliedReduction } from "../pages/IncidentDetail";
+import { commandAllowed, latestAppliedReduction, reductionCheckText } from "../pages/IncidentDetail";
+import type { Incident } from "../api/types";
 import { connector, incident } from "./fixtures";
 
 type Handler = (url: string, init?: RequestInit) => { status?: number; body?: unknown };
@@ -287,5 +288,76 @@ describe("ACK selection", () => {
       timeline: [{ at: "2026-10-20T05:00:00Z", event: "recurrence" }],
     });
     expect(latestAppliedReduction(old)).toBeUndefined();
+  });
+});
+
+describe("command gates", () => {
+  const operatorView = (over: Partial<Incident>) => {
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) return me("operator");
+      if (url.endsWith("/incidents/inc-1")) return { body: incident(over) };
+      return { status: 404 };
+    });
+    renderAt("/incidents/inc-1", <IncidentDetail />, "/incidents/:id");
+  };
+  const verified = "2026-10-20T03:05:00Z";
+
+  it("unlocks maintenance while mitigating only for residual_not_recovered", () => {
+    const check = (reason: Incident["reduction_check_reason"]) =>
+      commandAllowed(
+        incident({ state: "mitigating", reduction_check: "load_reduction_ineffective", reduction_check_reason: reason }),
+        "maintenance",
+      );
+    expect(check("residual_not_recovered")).toBe(true);
+    expect(check("load_not_reduced")).toBe(false);
+    expect(check("insufficient_data")).toBe(false);
+    expect(commandAllowed(incident({ state: "mitigating" }), "maintenance")).toBe(false);
+    expect(commandAllowed(incident({ state: "mitigated" }), "maintenance")).toBe(true);
+    expect(commandAllowed(incident({ state: "acknowledged" }), "maintenance")).toBe(false);
+  });
+
+  it("blocks verify_recovery until maintenance is applied", () => {
+    expect(commandAllowed(incident({ state: "mitigated" }), "verify_recovery")).toBe(false);
+    expect(commandAllowed(incident({ state: "mitigated", maintenance_applied_at: verified }), "verify_recovery")).toBe(true);
+    expect(commandAllowed(incident({ state: "verifying", maintenance_applied_at: verified }), "verify_recovery")).toBe(false);
+  });
+
+  it("blocks reduce_load once the reduction is verified", () => {
+    expect(commandAllowed(incident({ state: "mitigating" }), "reduce_load")).toBe(true);
+    expect(commandAllowed(incident({ state: "acknowledged" }), "reduce_load")).toBe(true);
+    expect(commandAllowed(incident({ state: "mitigating", load_reduction_verified_at: verified }), "reduce_load")).toBe(false);
+    expect(commandAllowed(incident({ state: "open" }), "reduce_load")).toBe(false);
+  });
+
+  it("enables maintenance and shows the reason for residual_not_recovered", async () => {
+    operatorView({
+      state: "mitigating",
+      load_reduction_verified_at: verified,
+      reduction_check: "load_reduction_ineffective",
+      reduction_check_reason: "residual_not_recovered",
+    });
+    const maintenance = await screen.findByRole("button", { name: "Bảo trì" });
+    await waitFor(() => expect(maintenance).toBeEnabled());
+    expect(screen.getByRole("button", { name: "Giảm tải" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Kiểm tra phục hồi" })).toBeDisabled();
+    expect(screen.getByText(/Đã giảm dòng nhưng nhiệt chưa phục hồi sau 120 s/)).toBeInTheDocument();
+  });
+
+  it("keeps maintenance disabled and shows load_not_reduced in Vietnamese", async () => {
+    operatorView({ state: "mitigating", reduction_check: "load_reduction_ineffective", reduction_check_reason: "load_not_reduced" });
+    expect(await screen.findByText("Dòng chưa giảm")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Giảm tải" })).toBeEnabled());
+    expect(screen.getByRole("button", { name: "Bảo trì" })).toBeDisabled();
+    expect(
+      reductionCheckText(incident({ reduction_check: "load_reduction_unverified", reduction_check_reason: "insufficient_data" })),
+    ).toBe("Thiếu dữ liệu để xác nhận");
+    expect(reductionCheckText(incident({ reduction_check: "load_reduction_unverified" }))).toBe("Thiếu dữ liệu để xác nhận");
+    expect(reductionCheckText(incident())).toBeNull();
+  });
+
+  it("enables verify_recovery for an operator only after maintenance", async () => {
+    operatorView({ state: "mitigated", maintenance_applied_at: "2026-10-20T03:20:00Z" });
+    const verify = await screen.findByRole("button", { name: "Kiểm tra phục hồi" });
+    await waitFor(() => expect(verify).toBeEnabled());
   });
 });
