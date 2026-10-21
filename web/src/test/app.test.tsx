@@ -11,7 +11,7 @@ import { api, MAX_TELEMETRY_PAGES } from "../api/client";
 import { downsample } from "../lib/format";
 import { commandAllowed, latestAppliedReduction, reductionCheckText } from "../pages/IncidentDetail";
 import type { Incident } from "../api/types";
-import { connector, incident } from "./fixtures";
+import { connector, evaluation, incident } from "./fixtures";
 
 type Handler = (url: string, init?: RequestInit) => { status?: number; body?: unknown };
 
@@ -191,6 +191,30 @@ describe("demo control and evaluations", () => {
     renderAt("/evaluations", <Evaluations />);
     expect(await screen.findByTestId("empty")).toHaveTextContent("Chưa có kết quả đánh giá");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByTestId("sim-disclaimer")).toHaveTextContent("Chỉ là mô phỏng");
+  });
+
+  it("renders arms, detectors and targets from the committed summary shape", async () => {
+    const ev = evaluation();
+    const { summary_markdown: _md, healthy_connector_hours: _h, arms: _a, detectors: _d, ...item } = ev;
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) return unauthenticated;
+      if (url.endsWith("/evaluations")) return { body: { items: [item], next_cursor: null } };
+      if (url.endsWith("/evaluations/b1-eval-v3.1")) return { body: ev };
+      return { status: 404 };
+    });
+    renderAt("/evaluations", <Evaluations />);
+    const arms = await screen.findByTestId("arms");
+    expect(screen.getByTestId("sim-disclaimer")).toHaveTextContent("không phải kết quả chạy thật");
+    expect(arms).toHaveTextContent("C: ChargeOps");
+    expect(arms).toHaveTextContent("155 [100–455] (n=20)");
+    expect(arms).toHaveTextContent("— (n=0)"); // B has no mitigation: missing, never 0
+    expect(arms).toHaveTextContent("-22.54");
+    const detectors = screen.getByTestId("detectors");
+    expect(detectors).toHaveTextContent("Residual theo tải");
+    expect(detectors).toHaveTextContent("415 [230–740] (n=10)");
+    expect(screen.getByTestId("targets")).toHaveTextContent("C phát hiện ≥18/20 lỗi trước khi B trip: đạt");
+    expect(screen.getByRole("button", { name: "b1-eval-v3.1" })).toBeInTheDocument();
   });
 });
 

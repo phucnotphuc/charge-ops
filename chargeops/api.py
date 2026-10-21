@@ -2,7 +2,7 @@ import base64
 import hmac
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import uuid4
 
@@ -14,6 +14,7 @@ from pydantic import AwareDatetime, ValidationError
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from chargeops import results
 from chargeops.auth import SESSION_COOKIE, SESSION_TTL_S, new_token, token_digest, verify_password
 from chargeops.config import settings
 from chargeops.domain import (
@@ -55,6 +56,28 @@ app = FastAPI(title="ChargeOps minimal loop", lifespan=lifespan)
 
 def db(request: Request):
     return request.app.state.db
+
+
+def utc_z(moment):
+    """CONTRACT: UTC ISO 8601 with `Z`; Mongo returns aware UTC (naive is treated as UTC)."""
+    aware = moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
+    return aware.isoformat().replace("+00:00", "Z")
+
+
+def encode(document):
+    """JSON-ready raw Mongo documents (endpoints without a response model), datetimes as `...Z`."""
+    return jsonable_encoder(document, custom_encoder={datetime: utc_z})
+
+
+def allowed_origins():
+    return [o.strip() for o in settings().allowed_origins.split(",") if o.strip()]
+
+
+def login_origin(request: Request):
+    """Browsers always send Origin on POST: a foreign one is refused. No Origin (curl, cli.py) is allowed."""
+    origin = request.headers.get("origin")
+    if origin is not None and origin not in allowed_origins():
+        raise ApiError(403, "forbidden", "Origin not allowed")
 
 
 def simulator_auth(x_simulator_secret: str = Header(default="")):
@@ -116,8 +139,7 @@ def operator_auth(request: Request, x_operator_secret: str = Header(default=""),
     session = session_for(request, store)
     if not session:
         raise ApiError(401, "unauthorized", "Operator login required")
-    origins = [o.strip() for o in settings().allowed_origins.split(",") if o.strip()]
-    if request.headers.get("origin") not in origins:
+    if request.headers.get("origin") not in allowed_origins():
         raise ApiError(403, "forbidden", "Origin not allowed")
     return session["username"]
 
@@ -155,7 +177,7 @@ def active_run(resume: bool = False, store=Depends(db)):
             }
             for row in store.telemetry.aggregate(pipeline)
         }
-    return jsonable_encoder(run)
+    return encode(run)
 
 
 @app.get("/api/v1/simulator/events", dependencies=[Depends(simulator_auth)])
@@ -165,7 +187,7 @@ def simulator_events(store=Depends(db)):
     if not run:
         return []
     query = {"run_id": run["_id"], "type": "inject_fault", "consumed_at": None}
-    return jsonable_encoder(list(store.run_events.find(query).sort("requested_at", 1)))
+    return encode(list(store.run_events.find(query).sort("requested_at", 1)))
 
 
 @app.post(
@@ -254,7 +276,7 @@ async def webhook(request: Request, x_webhook_secret: str = Header(default=""), 
 
 @app.get("/api/v1/incidents")
 def incidents(store=Depends(db)):
-    return jsonable_encoder(
+    return encode(
         {"items": list(store.incidents.find().sort("opened_at", -1).limit(100)), "next_cursor": None}
     )
 
@@ -265,7 +287,7 @@ def incident(incident_id: str, store=Depends(db)):
     if not found:
         raise HTTPException(404, "Incident not found")
     found["commands"] = list(store.commands.find({"incident_id": incident_id}).sort("created_at", 1))
-    return jsonable_encoder(found)
+    return encode(found)
 
 
 @app.post("/api/v1/incidents/{incident_id}/commands", status_code=202, dependencies=[Depends(operator_auth)])
@@ -307,7 +329,7 @@ def command(command_id: str, store=Depends(db)):
     found = store.commands.find_one({"_id": command_id})
     if not found:
         raise HTTPException(404, "Command not found")
-    return jsonable_encoder(found)
+    return encode(found)
 
 
 @app.get("/api/v1/simulator/commands", dependencies=[Depends(simulator_auth)])
@@ -356,9 +378,7 @@ def command_result(command_id: str, body: CommandResult, store=Depends(db)):
 
 @app.get("/api/v1/demo-runs")
 def runs(store=Depends(db)):
-    return jsonable_encoder(
-        {"items": list(store.runs.find().sort("created_at", -1).limit(100)), "next_cursor": None}
-    )
+    return encode({"items": list(store.runs.find().sort("created_at", -1).limit(100)), "next_cursor": None})
 
 
 def run_out(run):
@@ -484,7 +504,7 @@ def inject_fault(run_id: str, body: FaultRequest, store=Depends(db)):
     )
 
 
-@app.post("/api/v1/auth/login", response_model=UserOut)
+@app.post("/api/v1/auth/login", response_model=UserOut, dependencies=[Depends(login_origin)])
 def login(body: LoginRequest, response: Response, store=Depends(db)):
     config = settings()
     encoded = config.operator_password_hash.get_secret_value()
@@ -506,7 +526,7 @@ def login(body: LoginRequest, response: Response, store=Depends(db)):
     return UserOut(username=config.operator_username, role="operator")
 
 
-@app.post("/api/v1/auth/logout", status_code=204)
+@app.post("/api/v1/auth/logout", status_code=204, dependencies=[Depends(login_origin)])
 def logout(request: Request, store=Depends(db)):
     token = request.cookies.get(SESSION_COOKIE)
     if token:
@@ -643,3 +663,17 @@ def connector_telemetry(
         items=[sample_dict(r) for r in page],
         next_cursor=encode_cursor(page[-1]) if len(rows) > limit else None,
     )
+
+
+@app.get("/api/v1/evaluations", response_model=results.EvaluationList)
+def evaluations():
+    """Committed offline evaluation summaries (simulated clock), read-only and anonymous like other GETs."""
+    return results.EvaluationList(items=results.list_all())
+
+
+@app.get("/api/v1/evaluations/{evaluation_id}", response_model=results.EvaluationOut)
+def evaluation(evaluation_id: str):
+    found = results.load(evaluation_id)
+    if not found:
+        raise ApiError(404, "not_found", "Evaluation not found")
+    return found

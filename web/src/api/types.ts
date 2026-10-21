@@ -130,17 +130,12 @@ export type DemoRunOut = Schemas["DemoRunOut"];
  */
 export type DemoRun = Omit<DemoRunOut, "id" | "created_at"> & { id?: string; _id?: string; created_at?: string };
 
-/** HAND-WRITTEN: no evaluations endpoint in the OpenAPI schema. */
-export interface Evaluation {
-  id?: string;
-  _id?: string;
-  created_at?: string;
-  seed?: number | null;
-  baseline_version?: string | null;
-  config_version?: string | null;
-  summary?: string | null;
-  metrics?: Record<string, number | string | null> | null;
-}
+/** GET /evaluations: committed offline summaries (simulated clock, never live). */
+export type EvaluationItem = Schemas["EvaluationItem"];
+export type EvaluationList = Schemas["EvaluationList"];
+/** GET /evaluations/{id}: A/B/C arms, detector-only view and internal targets. */
+export type Evaluation = Schemas["EvaluationOut"];
+export type EvaluationStats = Schemas["Stats"];
 
 export type CreateRunBody = Schemas["DemoRunCreate"];
 

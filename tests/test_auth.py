@@ -120,3 +120,22 @@ def test_incident_command_with_session_cookie_and_origin(client, store):
     assert good.status_code == 202
     bad = client.post(url, json={"type": "acknowledge"}, headers={**headers, "Origin": "http://evil.example"})
     assert bad.status_code == 403
+
+
+def test_login_and_logout_refuse_a_foreign_origin(client, store):
+    evil = {"Origin": "http://evil.example"}
+    body = {"username": "ops", "password": PASSWORD}
+    response = client.post("/api/v1/auth/login", json=body, headers=evil)
+    assert response.status_code == 403 and response.json()["error"]["code"] == "forbidden"
+    assert store.sessions.count_documents({}) == 0
+    assert client.post("/api/v1/auth/login", json=body, headers=ORIGIN).status_code == 200
+    assert client.post("/api/v1/auth/logout", headers=evil).status_code == 403
+    assert store.sessions.count_documents({}) == 1
+    assert client.post("/api/v1/auth/logout", headers=ORIGIN).status_code == 204
+    assert store.sessions.count_documents({}) == 0
+
+
+def test_login_without_origin_still_works_for_cli(client, store):
+    assert login(client).status_code == 200
+    assert client.post("/api/v1/auth/logout").status_code == 204
+    assert store.sessions.count_documents({}) == 0

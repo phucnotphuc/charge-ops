@@ -7,6 +7,7 @@ import type {
   CreateRunBody,
   DemoRun,
   Evaluation,
+  EvaluationList,
   Incident,
   Me,
   Page,
@@ -118,7 +119,7 @@ export const api = {
   injectFault: (id: string, connectorId: string) =>
     post<unknown>(`/demo-runs/${encodeURIComponent(id)}/inject-fault`, { connector_id: connectorId }),
 
-  evaluations: () => request<Page<Evaluation>>("/evaluations"),
+  evaluations: () => request<EvaluationList>("/evaluations"),
   evaluation: (id: string) => request<Evaluation>(`/evaluations/${encodeURIComponent(id)}`),
 };
 

@@ -209,6 +209,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/evaluations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Evaluations
+         * @description Committed offline evaluation summaries (simulated clock), read-only and anonymous like other GETs.
+         */
+        get: operations["evaluations_api_v1_evaluations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evaluations/{evaluation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evaluation */
+        get: operations["evaluation_api_v1_evaluations__evaluation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -432,6 +469,71 @@ export interface components {
             /** State */
             state: string;
         };
+        /** Arm */
+        Arm: {
+            /** Commands */
+            commands: number;
+            /** Duplicate Commands */
+            duplicate_commands: number;
+            fault: components["schemas"]["ArmFault"];
+            healthy: components["schemas"]["ArmHealthy"];
+            /** Rejected Commands */
+            rejected_commands: number;
+        };
+        /** ArmFault */
+        ArmFault: {
+            /** Detected Any */
+            detected_any: number;
+            /** Detected Before Trip Among B Tripped */
+            detected_before_trip_among_b_tripped: number;
+            effective_mitigation_s: components["schemas"]["Stats"];
+            /** Final States */
+            final_states: {
+                [key: string]: number;
+            };
+            /** Interruption Min */
+            interruption_min: number;
+            /** Kwh */
+            kwh: number;
+            /** Kwh Delta Vs B */
+            kwh_delta_vs_b: number;
+            /** Kwh Delta While Derated */
+            kwh_delta_while_derated: number;
+            latency_s: components["schemas"]["Stats"];
+            lead_time_s: components["schemas"]["Stats"];
+            /** Maintenance Applied */
+            maintenance_applied: number;
+            mitigated_s: components["schemas"]["Stats"];
+            /** Pre Onset False */
+            pre_onset_false: number;
+            /** Recall Before Trip */
+            recall_before_trip: number;
+            /** Resolved */
+            resolved: number;
+            /** Seeds Tripped */
+            seeds_tripped: number;
+            /** Trips */
+            trips: number;
+        };
+        /** ArmHealthy */
+        ArmHealthy: {
+            /** By Scenario */
+            by_scenario: {
+                [key: string]: number;
+            };
+            /** False Alerts Per Connector Hour */
+            false_alerts_per_connector_hour: number | null;
+            /** Incidents */
+            incidents: number;
+            /** Kwh */
+            kwh: number;
+            /** Kwh Delta Vs B */
+            kwh_delta_vs_b: number;
+            /** Runs With Incident */
+            runs_with_incident: number;
+            /** Trips */
+            trips: number;
+        };
         /** Batch */
         Batch: {
             /** Samples */
@@ -542,6 +644,100 @@ export interface components {
             /** Stopped At */
             stopped_at?: string | null;
         };
+        /** Detector */
+        Detector: {
+            /** Detected Any */
+            detected_any: number;
+            /** Detected Before Trip Among B Tripped */
+            detected_before_trip_among_b_tripped: number;
+            /** Healthy Alert Episodes Per Connector Hour */
+            healthy_alert_episodes_per_connector_hour: number | null;
+            /** Healthy By Scenario */
+            healthy_by_scenario: {
+                [key: string]: number;
+            };
+            /** Healthy Runs Alerting */
+            healthy_runs_alerting: number;
+            latency_s: components["schemas"]["Stats"];
+            lead_time_s: components["schemas"]["Stats"];
+            /** Pre Onset False */
+            pre_onset_false: number;
+            /** Recall Before Trip */
+            recall_before_trip: number;
+        };
+        /** EvaluationItem */
+        EvaluationItem: {
+            /** B Tripped Seeds */
+            b_tripped_seeds: number;
+            /** Fault Seeds */
+            fault_seeds: number;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Healthy Seeds */
+            healthy_seeds: number;
+            /** Id */
+            id: string;
+            locked: components["schemas"]["Locked"];
+            /** Protocol Version */
+            protocol_version: string;
+            /** Runs */
+            runs: number;
+            /** Runtime S */
+            runtime_s: number;
+            /**
+             * Simulation Only
+             * @default true
+             * @constant
+             */
+            simulation_only: true;
+            targets: components["schemas"]["Targets"];
+        };
+        /** EvaluationList */
+        EvaluationList: {
+            /** Items */
+            items: components["schemas"]["EvaluationItem"][];
+            /** Next Cursor */
+            next_cursor?: null;
+        };
+        /** EvaluationOut */
+        EvaluationOut: {
+            /** Arms */
+            arms: {
+                [key: string]: components["schemas"]["Arm"];
+            };
+            /** B Tripped Seeds */
+            b_tripped_seeds: number;
+            /** Detectors */
+            detectors: {
+                [key: string]: components["schemas"]["Detector"];
+            };
+            /** Fault Seeds */
+            fault_seeds: number;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Healthy Connector Hours */
+            healthy_connector_hours: number;
+            /** Healthy Seeds */
+            healthy_seeds: number;
+            /** Id */
+            id: string;
+            locked: components["schemas"]["Locked"];
+            /** Protocol Version */
+            protocol_version: string;
+            /** Runs */
+            runs: number;
+            /** Runtime S */
+            runtime_s: number;
+            /**
+             * Simulation Only
+             * @default true
+             * @constant
+             */
+            simulation_only: true;
+            /** Summary Markdown */
+            summary_markdown: string | null;
+            targets: components["schemas"]["Targets"];
+        };
         /** FaultEventOut */
         FaultEventOut: {
             /** Connector Id */
@@ -570,6 +766,17 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** Locked */
+        Locked: {
+            /** A Threshold C */
+            a_threshold_c: number;
+            /** C Alert C */
+            c_alert_c: number;
+            /** C Recovered C */
+            c_recovered_c: number;
+            /** Locked At */
+            locked_at: string;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -652,6 +859,26 @@ export interface components {
             station_id?: string | null;
             /** Voltage V */
             voltage_v?: number | null;
+        };
+        /** Stats */
+        Stats: {
+            /** Max */
+            max: number | null;
+            /** Median */
+            median: number | null;
+            /** Min */
+            min: number | null;
+            /** N */
+            n: number;
+        };
+        /** Targets */
+        Targets: {
+            /** C Healthy Runs With Incident Le 1 */
+            c_healthy_runs_with_incident_le_1: boolean;
+            /** C Recall Before Trip Ge 18 Of 20 */
+            c_recall_before_trip_ge_18_of_20: boolean;
+            /** Duplicate Commands Zero */
+            duplicate_commands_zero: boolean;
         };
         /** TelemetryItem */
         TelemetryItem: {
@@ -1100,6 +1327,57 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DemoRunOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    evaluations_api_v1_evaluations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationList"];
+                };
+            };
+        };
+    };
+    evaluation_api_v1_evaluations__evaluation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evaluation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationOut"];
                 };
             };
             /** @description Validation Error */
