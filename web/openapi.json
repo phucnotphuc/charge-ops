@@ -1,0 +1,1860 @@
+{
+  "components": {
+    "schemas": {
+      "ActiveIncident": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "state"
+        ],
+        "title": "ActiveIncident",
+        "type": "object"
+      },
+      "Batch": {
+        "properties": {
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/Sample"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Samples",
+            "type": "array"
+          }
+        },
+        "required": [
+          "samples"
+        ],
+        "title": "Batch",
+        "type": "object"
+      },
+      "CommandRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "enum": [
+              "acknowledge",
+              "reduce_load",
+              "maintenance",
+              "verify_recovery"
+            ],
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "CommandRequest",
+        "type": "object"
+      },
+      "CommandResult": {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Result",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "applied",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "CommandResult",
+        "type": "object"
+      },
+      "ConnectorList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ConnectorList",
+        "type": "object"
+      },
+      "ConnectorOut": {
+        "properties": {
+          "active_incident": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ActiveIncident"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "charger_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Charger Id"
+          },
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "freshness_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Freshness S"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SampleOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "measured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measured At"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "local",
+                  "datadog"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id"
+          },
+          "run_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Status"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "station_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Station Id"
+          }
+        },
+        "required": [
+          "connector_id",
+          "stale"
+        ],
+        "title": "ConnectorOut",
+        "type": "object"
+      },
+      "DemoRunCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "default": "datadog",
+            "enum": [
+              "local",
+              "datadog"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "scenario": {
+            "enum": [
+              "healthy",
+              "thermal_fault"
+            ],
+            "title": "Scenario",
+            "type": "string"
+          },
+          "seed": {
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "scenario",
+          "seed"
+        ],
+        "title": "DemoRunCreate",
+        "type": "object"
+      },
+      "DemoRunOut": {
+        "properties": {
+          "baseline_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Version"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "local",
+              "datadog"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "scenario": {
+            "title": "Scenario",
+            "type": "string"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "stop_requested": {
+            "default": false,
+            "title": "Stop Requested",
+            "type": "boolean"
+          },
+          "stopped_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stopped At"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "mode",
+          "scenario",
+          "created_at"
+        ],
+        "title": "DemoRunOut",
+        "type": "object"
+      },
+      "FaultEventOut": {
+        "properties": {
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "requested_at": {
+            "format": "date-time",
+            "title": "Requested At",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "run_id",
+          "type",
+          "connector_id",
+          "requested_at"
+        ],
+        "title": "FaultEventOut",
+        "type": "object"
+      },
+      "FaultRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "connector_id": {
+            "const": "connector-1",
+            "title": "Connector Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connector_id"
+        ],
+        "title": "FaultRequest",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LoginRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "LoginRequest",
+        "type": "object"
+      },
+      "Sample": {
+        "additionalProperties": false,
+        "properties": {
+          "ambient_temperature_c": {
+            "title": "Ambient Temperature C",
+            "type": "number"
+          },
+          "connector_id": {
+            "const": "connector-1",
+            "default": "connector-1",
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "connector_temperature_c": {
+            "title": "Connector Temperature C",
+            "type": "number"
+          },
+          "current_a": {
+            "minimum": 0.0,
+            "title": "Current A",
+            "type": "number"
+          },
+          "current_limit_a": {
+            "minimum": 0.0,
+            "title": "Current Limit A",
+            "type": "number"
+          },
+          "measured_at": {
+            "format": "date-time",
+            "title": "Measured At",
+            "type": "string"
+          },
+          "power_kw": {
+            "minimum": 0.0,
+            "title": "Power Kw",
+            "type": "number"
+          },
+          "requested_current_a": {
+            "minimum": 0.0,
+            "title": "Requested Current A",
+            "type": "number"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sample_id": {
+            "format": "uuid",
+            "title": "Sample Id",
+            "type": "string"
+          },
+          "voltage_v": {
+            "minimum": 0.0,
+            "title": "Voltage V",
+            "type": "number"
+          }
+        },
+        "required": [
+          "sample_id",
+          "run_id",
+          "measured_at",
+          "current_a",
+          "voltage_v",
+          "power_kw",
+          "requested_current_a",
+          "current_limit_a",
+          "connector_temperature_c",
+          "ambient_temperature_c"
+        ],
+        "title": "Sample",
+        "type": "object"
+      },
+      "SampleOut": {
+        "properties": {
+          "ambient_temperature_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ambient Temperature C"
+          },
+          "charger_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Charger Id"
+          },
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "connector_temperature_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connector Temperature C"
+          },
+          "current_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current A"
+          },
+          "current_limit_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Limit A"
+          },
+          "measured_at": {
+            "format": "date-time",
+            "title": "Measured At",
+            "type": "string"
+          },
+          "power_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Kw"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provenance"
+          },
+          "received_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Received At"
+          },
+          "requested_current_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Current A"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sample_id": {
+            "title": "Sample Id",
+            "type": "string"
+          },
+          "station_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Station Id"
+          },
+          "voltage_v": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voltage V"
+          }
+        },
+        "required": [
+          "sample_id",
+          "run_id",
+          "connector_id",
+          "measured_at"
+        ],
+        "title": "SampleOut",
+        "type": "object"
+      },
+      "TelemetryItem": {
+        "properties": {
+          "ambient_temperature_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ambient Temperature C"
+          },
+          "charger_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Charger Id"
+          },
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "connector_temperature_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connector Temperature C"
+          },
+          "current_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current A"
+          },
+          "current_limit_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Limit A"
+          },
+          "expected_temperature_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Temperature C"
+          },
+          "measured_at": {
+            "format": "date-time",
+            "title": "Measured At",
+            "type": "string"
+          },
+          "power_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Kw"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provenance"
+          },
+          "received_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Received At"
+          },
+          "requested_current_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Current A"
+          },
+          "residual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sample_id": {
+            "title": "Sample Id",
+            "type": "string"
+          },
+          "station_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Station Id"
+          },
+          "voltage_v": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voltage V"
+          }
+        },
+        "required": [
+          "sample_id",
+          "run_id",
+          "connector_id",
+          "measured_at"
+        ],
+        "title": "TelemetryItem",
+        "type": "object"
+      },
+      "TelemetryPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TelemetryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "TelemetryPage",
+        "type": "object"
+      },
+      "UserOut": {
+        "properties": {
+          "role": {
+            "const": "operator",
+            "title": "Role",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "role"
+        ],
+        "title": "UserOut",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "ChargeOps minimal loop",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login"
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout"
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "me_api_v1_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Me"
+      }
+    },
+    "/api/v1/commands/{command_id}": {
+      "get": {
+        "operationId": "command_api_v1_commands__command_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "title": "Command Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Command"
+      }
+    },
+    "/api/v1/connectors": {
+      "get": {
+        "operationId": "connectors_api_v1_connectors_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Connectors"
+      }
+    },
+    "/api/v1/connectors/{connector_id}": {
+      "get": {
+        "operationId": "connector_api_v1_connectors__connector_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectorOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector"
+      }
+    },
+    "/api/v1/connectors/{connector_id}/telemetry": {
+      "get": {
+        "operationId": "connector_telemetry_api_v1_connectors__connector_id__telemetry_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "title": "Connector Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "From",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": true,
+            "schema": {
+              "format": "date-time",
+              "title": "To",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TelemetryPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Telemetry"
+      }
+    },
+    "/api/v1/demo-runs": {
+      "get": {
+        "operationId": "runs_api_v1_demo_runs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Runs"
+      },
+      "post": {
+        "operationId": "create_run_api_v1_demo_runs_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-operator-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Operator-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DemoRunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Run"
+      }
+    },
+    "/api/v1/demo-runs/{run_id}": {
+      "get": {
+        "operationId": "demo_run_api_v1_demo_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Demo Run"
+      }
+    },
+    "/api/v1/demo-runs/{run_id}/inject-fault": {
+      "post": {
+        "operationId": "inject_fault_api_v1_demo_runs__run_id__inject_fault_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-operator-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Operator-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FaultRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaultEventOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Inject Fault"
+      }
+    },
+    "/api/v1/demo-runs/{run_id}/start": {
+      "post": {
+        "operationId": "start_run_api_v1_demo_runs__run_id__start_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-operator-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Operator-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Run"
+      }
+    },
+    "/api/v1/demo-runs/{run_id}/stop": {
+      "post": {
+        "operationId": "stop_run_api_v1_demo_runs__run_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-operator-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Operator-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DemoRunOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Run"
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health"
+      }
+    },
+    "/api/v1/incidents": {
+      "get": {
+        "operationId": "incidents_api_v1_incidents_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Incidents"
+      }
+    },
+    "/api/v1/incidents/{incident_id}": {
+      "get": {
+        "operationId": "incident_api_v1_incidents__incident_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Incident"
+      }
+    },
+    "/api/v1/incidents/{incident_id}/commands": {
+      "post": {
+        "operationId": "create_command_api_v1_incidents__incident_id__commands_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "incident_id",
+            "required": true,
+            "schema": {
+              "title": "Incident Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "idempotency-key",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-operator-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Operator-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Command"
+      }
+    },
+    "/api/v1/ready": {
+      "get": {
+        "operationId": "ready_api_v1_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Ready"
+      }
+    },
+    "/api/v1/simulator/commands": {
+      "get": {
+        "operationId": "simulator_commands_api_v1_simulator_commands_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-simulator-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Simulator-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Simulator Commands"
+      }
+    },
+    "/api/v1/simulator/commands/{command_id}/result": {
+      "post": {
+        "operationId": "command_result_api_v1_simulator_commands__command_id__result_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "command_id",
+            "required": true,
+            "schema": {
+              "title": "Command Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "x-simulator-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Simulator-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommandResult"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Command Result"
+      }
+    },
+    "/api/v1/simulator/run": {
+      "get": {
+        "operationId": "active_run_api_v1_simulator_run_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-simulator-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Simulator-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Active Run"
+      }
+    },
+    "/api/v1/telemetry/batch": {
+      "post": {
+        "operationId": "ingest_api_v1_telemetry_batch_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-simulator-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Simulator-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Batch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest"
+      }
+    },
+    "/api/v1/webhooks/datadog": {
+      "post": {
+        "operationId": "webhook_api_v1_webhooks_datadog_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-webhook-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Webhook-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Webhook"
+      }
+    }
+  }
+}

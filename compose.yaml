@@ -9,7 +9,7 @@ x-env: &env
   DD_TRIAL_ID: ${DD_TRIAL_ID:-hackathon-2026}
   OPERATOR_USERNAME: ${OPERATOR_USERNAME:-}
   OPERATOR_PASSWORD_HASH: ${OPERATOR_PASSWORD_HASH:-}
-  ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+  ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173}
   DD_TRACE_ENABLED: ${DD_TRACE_ENABLED:-false}
   DD_INSTRUMENTATION_TELEMETRY_ENABLED: ${DD_INSTRUMENTATION_TELEMETRY_ENABLED:-false}
   DD_AGENT_HOST: datadog
@@ -48,12 +48,21 @@ services:
   api:
     <<: *app
     environment: {<<: *env, DD_SERVICE: chargeops-api}
-    ports: ["127.0.0.1:8080:8000"]
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/ready')"]
       interval: 5s
       timeout: 5s
       retries: 20
+  web:
+    build:
+      context: ./web
+    ports: ["127.0.0.1:8080:8080"]
+    volumes:
+      - ./infra/Caddyfile.web:/etc/caddy/Caddyfile:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
   worker:
     <<: *app
     environment: {<<: *env, DD_SERVICE: chargeops-worker}

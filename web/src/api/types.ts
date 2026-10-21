@@ -1,5 +1,9 @@
-// TODO(integration): replace with openapi-typescript output from /openapi.json
-// Hand-written from docs/CONTRACT.md §1-2. Missing values are null, never 0.
+// Backend shapes derive from schema.d.ts (npm run gen:api, from web/openapi.json).
+// Types marked HAND-WRITTEN cover endpoints without a response model; docs/CONTRACT.md §1-2 is their source.
+// Missing values are null, never 0.
+import type { components } from "./schema";
+
+type Schemas = components["schemas"];
 
 export type Role = "viewer" | "operator";
 export type RunMode = "local" | "datadog";
@@ -25,65 +29,31 @@ export interface ApiErrorBody {
   error: { code: string; message: string; request_id: string };
 }
 
-export interface Me {
-  username: string;
-  role: Role;
-}
+export type Me = Schemas["UserOut"];
 
 export interface Provenance {
   composition: "synthetic" | "public_replay" | "hybrid";
   manifest_id: string;
 }
 
-export interface TelemetrySample {
-  sample_id: string;
-  run_id: string;
-  station_id: string | null;
-  charger_id: string | null;
-  connector_id: string;
+/** SampleOut plus optional fields the contract allows but the API does not yet return. */
+export type TelemetrySample = Omit<Schemas["SampleOut"], "provenance"> & {
+  provenance?: Provenance | null;
   session_id?: string | null;
-  measured_at: string;
-  received_at: string | null;
-  voltage_v: number | null;
-  current_a: number | null;
-  power_kw: number | null;
-  connector_temperature_c: number | null;
-  ambient_temperature_c: number | null;
-  requested_current_a: number | null;
-  current_limit_a: number | null;
   connector_status?: "available" | "charging" | "faulted" | "offline" | null;
   session_status?: "idle" | "active" | "completed" | "interrupted" | null;
-  provenance?: Provenance | null;
-}
+};
 
-/** GET /connectors and GET /connectors/{id}: latest telemetry, server-computed freshness, active incident, mode. */
-export interface Connector {
-  connector_id: string;
-  station_id: string | null;
-  charger_id: string | null;
+/** GET /connectors and GET /connectors/{id}: latest telemetry, server-computed freshness (null: no telemetry yet), `stale` verdict (>30 s or none), active incident, mode. */
+export type Connector = Omit<Schemas["ConnectorOut"], "latest" | "active_incident" | "run_id"> & {
+  /** Always present in responses; null when no run has produced telemetry. */
   run_id: string | null;
-  run_status: string | null;
-  mode: RunMode | null;
-  latest: TelemetrySample | null;
-  measured_at: string | null;
-  /** Seconds since the newest sample, computed by the server (null: no telemetry yet). */
-  freshness_s: number | null;
-  /** Server verdict: freshness > 30 s, or no telemetry. */
-  stale: boolean;
-  active_incident: { id: string; state: IncidentState } | null;
-}
+  latest?: TelemetrySample | null;
+  active_incident?: { id: string; state: IncidentState } | null;
+};
 
 /** GET /connectors/{id}/telemetry item: measured series plus expected temperature. */
-export interface TelemetryPoint {
-  sample_id?: string;
-  measured_at: string;
-  connector_temperature_c: number | null;
-  expected_temperature_c: number | null;
-  residual: number | null;
-  current_a: number | null;
-  current_limit_a: number | null;
-  ambient_temperature_c: number | null;
-}
+export type TelemetryPoint = Schemas["TelemetryItem"];
 
 export interface TimelineEvent {
   at: string;
@@ -97,7 +67,7 @@ export interface EvidenceWindow {
   residual_mean?: number | null;
 }
 
-/** Incident snapshot (worker-owned fields). Ids arrive as `id`; the current backend still sends `_id`. */
+/** HAND-WRITTEN (no response model): incident snapshot (worker-owned fields). Ids arrive as `id`; the current backend still sends `_id`. */
 export interface Incident {
   id?: string;
   _id?: string;
@@ -130,6 +100,7 @@ export interface Incident {
   command_ids?: string[];
 }
 
+/** HAND-WRITTEN (no response model): command document. */
 export interface Command {
   id?: string;
   _id?: string;
@@ -143,26 +114,21 @@ export interface Command {
   error?: string | null;
 }
 
+/** HAND-WRITTEN (no response model): 202 body of POST /incidents/{id}/commands. */
 export interface CommandAccepted {
   command_id: string;
   status: CommandStatus;
 }
 
-// NOTE: GET /demo-runs returns raw Mongo docs (`_id`); GET/POST /demo-runs/{id}... return `id`. Use idOf().
-export interface DemoRun {
-  id?: string;
-  _id?: string;
-  status: "created" | "pending" | "active" | "stopped" | "rejected" | "cancelled" | string;
-  mode: RunMode;
-  scenario: Scenario | string;
-  seed?: number | null;
-  created_at?: string;
-  started_at?: string | null;
-  stopped_at?: string | null;
-  reason?: string | null;
-  stop_requested?: boolean;
-}
+export type DemoRunOut = Schemas["DemoRunOut"];
 
+/**
+ * GET /demo-runs returns raw Mongo docs (`_id`, no response model): HAND-WRITTEN widening of DemoRunOut.
+ * GET/POST /demo-runs/{id}... return DemoRunOut with `id`. Use idOf().
+ */
+export type DemoRun = Omit<DemoRunOut, "id" | "created_at"> & { id?: string; _id?: string; created_at?: string };
+
+/** HAND-WRITTEN: no evaluations endpoint in the OpenAPI schema. */
 export interface Evaluation {
   id?: string;
   _id?: string;
@@ -174,10 +140,6 @@ export interface Evaluation {
   metrics?: Record<string, number | string | null> | null;
 }
 
-export interface CreateRunBody {
-  scenario: Scenario;
-  seed: number;
-  mode: RunMode;
-}
+export type CreateRunBody = Schemas["DemoRunCreate"];
 
 export const idOf = (x: { id?: string; _id?: string }): string => x.id ?? x._id ?? "";

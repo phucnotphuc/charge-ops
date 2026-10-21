@@ -24,18 +24,31 @@ Hệ thống demo cảnh báo sớm bất thường nhiệt connector: telemetry
 - [Disclosure](docs/DISCLOSURE.md): khai báo phần chuẩn bị trước thời gian build và AI.
 - [Runbook luồng tối thiểu](docs/MINIMAL_LOOP.md): cách chạy, thiết lập Datadog, kiểm chứng và giới hạn hiện tại.
 
-## Khởi chạy luồng tối thiểu
+## Khởi chạy từ clone sạch
 
-Cần Docker Linux Engine đang chạy. Tạo `.env` nếu chưa có; script không ghi đè file cũ và không in secrets. Chạy local trước để kiểm tra hạ tầng:
+Cần Docker Linux Engine đang chạy (không cần Node trên máy host: image `web` tự build UI). Script `init_env.py` không ghi đè `.env` cũ và không in secrets.
 
 ```powershell
-python scripts/init_env.py
+git clone <repo> chargeops; cd chargeops
+python scripts/init_env.py --operator-user operator   # hỏi mật khẩu operator; hash được ghi sẵn dạng $$ cho Compose
 docker compose up --build -d
-docker compose exec api python -m chargeops.check_mongo
-docker compose exec api python -m chargeops.cli start --mode local
-docker compose exec api python -m chargeops.cli status
 ```
 
-API/OpenAPI tại `http://localhost:8080/docs`, chưa có frontend. Kịch bản fault bắt đầu tăng nhiệt sau 120 giây; mỗi run tự dừng sau 15 phút. Mode local không thay nghiệm thu Datadog; xem runbook để thiết lập dashboard/monitor/webhook và chạy mode datadog. Không có command giảm tải/bảo trì/retest trong bản đầu này.
+1. Mở http://localhost:8080 (giao diện web; `/api/*`, `/docs`, `/openapi.json` được proxy tới API trong cùng origin).
+2. Đăng nhập operator bằng user/mật khẩu vừa đặt. Không cần profile `observability` cho chế độ local.
+3. Kiểm tra hạ tầng: `docker compose exec api python -m chargeops.check_mongo`; CLI: `docker compose exec api python -m chargeops.cli start --mode local`.
 
-Kiểm thử: `uv sync --frozen`, `uv run pytest -q`, `uv run ruff check chargeops scripts tests`. Tests dùng MongoDB giả lập chỉ chứng minh logic; `chargeops.check_mongo` là kiểm tra riêng cần MongoDB thật. Image tags đã chọn nhưng chưa build/pull kiểm chứng. Video/benchmark chỉ được tạo từ hệ thống thực đã chạy, không thay kết quả thật bằng fixture.
+Cấu hình trong `.env` (xem `.env.example`): `OPERATOR_USERNAME`, `OPERATOR_PASSWORD_HASH` (nếu tự dán hash từ `python -m chargeops.auth hash`, phải viết mỗi `$` thành `$$`), `ALLOWED_ORIGINS` (mặc định `http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173`), `DD_TRACE_ENABLED`, `APP_VERSION`. Có thể truyền mật khẩu không tương tác: `python scripts/init_env.py --operator-user operator --operator-password-stdin`.
+
+Kịch bản fault bắt đầu tăng nhiệt sau 120 giây; mỗi run tự dừng sau 15 phút. Mode local không thay nghiệm thu Datadog; xem runbook để thiết lập dashboard/monitor/webhook và chạy mode datadog (`docker compose --profile observability up`). Gateway webhook chỉ mở `/api/v1/webhooks/datadog`.
+
+Kiểm thử:
+
+```powershell
+uv sync --frozen; uv run pytest -q; uv run ruff check chargeops scripts tests
+cd web; npm ci; npm test -- --run; npm run build
+```
+
+Khi API đổi: `uv run python scripts/export_openapi.py` rồi `cd web; npm run gen:api` (hoặc `npm run check:api` để kiểm tra `schema.d.ts` không lệch). Tests Python dùng MongoDB giả lập chỉ chứng minh logic; `chargeops.check_mongo` cần MongoDB thật.
+
+**Chưa chạy thật:** `docker compose up --build`, build image `web`/Caddy, đăng nhập qua http://localhost:8080 và MongoDB/Datadog thật (Docker Engine chưa chạy). Mới xác nhận `docker compose config` hợp lệ cho profile mặc định và `observability`, cùng pytest/ruff/vitest/`npm run build`. Video/benchmark chỉ được tạo từ hệ thống thực đã chạy, không thay kết quả thật bằng fixture.
