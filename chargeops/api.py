@@ -1,17 +1,42 @@
+import base64
 import hmac
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta
+from typing import Annotated
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
+from pydantic import AwareDatetime, ValidationError
 from pymongo.errors import DuplicateKeyError, PyMongoError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from chargeops.auth import SESSION_COOKIE, SESSION_TTL_S, new_token, token_digest, verify_password
 from chargeops.config import settings
-from chargeops.domain import MANIFEST, Batch, CommandRequest, CommandResult, normalize_webhook, now
+from chargeops.domain import (
+    BASELINE_VERSION,
+    CONNECTOR,
+    MANIFEST,
+    Batch,
+    CommandRequest,
+    CommandResult,
+    ConnectorList,
+    ConnectorOut,
+    DemoRunCreate,
+    DemoRunOut,
+    FaultEventOut,
+    FaultRequest,
+    LoginRequest,
+    TelemetryPage,
+    UserOut,
+    normalize_webhook,
+    now,
+    with_residuals,
+)
 from chargeops.logging import event, logger
+from chargeops.simulator import DEMO_PROFILE, PROFILES
 from chargeops.storage import database, initialize
 
 
@@ -35,15 +60,67 @@ def simulator_auth(x_simulator_secret: str = Header(default="")):
         raise HTTPException(401, "Invalid simulator credentials")
 
 
-def operator_auth(x_operator_secret: str = Header(default="")):
-    # Temporary G2 guard; G3 replaces it with operator sessions (CONTRACT §2).
-    if not hmac.compare_digest(x_operator_secret, settings().operator_secret.get_secret_value()):
-        raise HTTPException(401, "Invalid operator credentials")
+class ApiError(HTTPException):
+    def __init__(self, status_code, code, message):
+        super().__init__(status_code, message)
+        self.code = code
+
+
+ERROR_CODES = {
+    400: "bad_request",
+    401: "unauthorized",
+    403: "forbidden",
+    404: "not_found",
+    405: "method_not_allowed",
+    409: "conflict",
+    413: "payload_too_large",
+    422: "validation_error",
+}
+
+
+def envelope(request, status_code, code, message):
+    request_id = request.headers.get("x-request-id") or str(uuid4())
+    body = {"error": {"code": code, "message": message, "request_id": request_id}}
+    return JSONResponse(status_code=status_code, content=body, headers={"X-Request-ID": request_id})
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_error(request, exc):
+    code = getattr(exc, "code", None) or ERROR_CODES.get(exc.status_code, "error")
+    return envelope(request, exc.status_code, code, str(exc.detail))
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request, exc):
+    first = exc.errors()[0]
+    where = ".".join(str(part) for part in first["loc"] if part != "body")
+    return envelope(request, 422, "validation_error", f"{where}: {first['msg']}")
+
+
+def session_for(request, store):
+    token = request.cookies.get(SESSION_COOKIE)
+    session = store.sessions.find_one({"_id": token_digest(token)}) if token else None
+    return session if session and session["expires_at"] > now() else None
+
+
+def operator_auth(request: Request, x_operator_secret: str = Header(default=""), store=Depends(db)):
+    """Operator session cookie (with Origin check) or the X-Operator-Secret header used by cli.py/demo.py."""
+    if x_operator_secret:
+        if not hmac.compare_digest(x_operator_secret, settings().operator_secret.get_secret_value()):
+            raise ApiError(401, "unauthorized", "Invalid operator credentials")
+        return "operator"
+    session = session_for(request, store)
+    if not session:
+        raise ApiError(401, "unauthorized", "Operator login required")
+    origins = [o.strip() for o in settings().allowed_origins.split(",") if o.strip()]
+    if request.headers.get("origin") not in origins:
+        raise ApiError(403, "forbidden", "Origin not allowed")
+    return session["username"]
 
 
 @app.exception_handler(PyMongoError)
 async def mongo_error(request, exc):
-    return JSONResponse(status_code=503, content={"error": "Database unavailable"})
+    return envelope(request, 503, "database_unavailable", "Database unavailable")
 
 
 @app.get("/api/v1/health")
@@ -228,4 +305,280 @@ def command_result(command_id: str, body: CommandResult, store=Depends(db)):
 def runs(store=Depends(db)):
     return jsonable_encoder(
         {"items": list(store.runs.find().sort("created_at", -1).limit(100)), "next_cursor": None}
+    )
+
+
+def run_out(run):
+    return DemoRunOut.model_validate({**run, "id": run["_id"]})
+
+
+def get_run(store, run_id):
+    run = store.runs.find_one({"_id": run_id})
+    if not run:
+        raise ApiError(404, "not_found", "Demo run not found")
+    return run
+
+
+@app.post(
+    "/api/v1/demo-runs", status_code=201, response_model=DemoRunOut, dependencies=[Depends(operator_auth)]
+)
+def create_run(body: DemoRunCreate, store=Depends(db)):
+    profile = body.profile or DEMO_PROFILE
+    if profile not in PROFILES:
+        raise ApiError(422, "validation_error", f"Unknown profile {profile}")
+    # Created runs hold no active_slot; /start claims it, like `cli start` does when it inserts "pending".
+    run = {
+        "_id": str(uuid4()),
+        "status": "created",
+        "mode": body.mode,
+        "scenario": body.scenario,
+        "seed": body.seed,
+        "profile_id": profile,
+        "created_at": now(),
+        "baseline_version": BASELINE_VERSION,
+        "stop_requested": False,
+    }
+    store.runs.insert_one(run)
+    event(logger("api"), "demo_run_created", run_id=run["_id"], mode=body.mode, scenario=body.scenario)
+    return run_out(run)
+
+
+@app.get("/api/v1/demo-runs/{run_id}", response_model=DemoRunOut)
+def demo_run(run_id: str, store=Depends(db)):
+    return run_out(get_run(store, run_id))
+
+
+@app.post(
+    "/api/v1/demo-runs/{run_id}/start",
+    status_code=202,
+    response_model=DemoRunOut,
+    dependencies=[Depends(operator_auth)],
+)
+def start_run(run_id: str, store=Depends(db)):
+    run = get_run(store, run_id)
+    if run["status"] != "created":
+        raise ApiError(409, "conflict", f"Run is {run['status']}, only a created run can start")
+    if run["mode"] == "datadog":  # the worker enforces the same rules when it activates the run
+        if not settings().dd_monitor_id:
+            raise ApiError(409, "configure_dd_monitor_id_first", "Set DD_MONITOR_ID before a Datadog run")
+        budget = store.budgets.find_one({"_id": settings().dd_trial_id}) or {"run_ids": []}
+        if len(budget["run_ids"]) >= 20:
+            raise ApiError(409, "trial_run_budget_exhausted", "Datadog trial budget of 20 runs is used up")
+    try:
+        # Worker activates the pending run and honours stop_requested; the API never writes "active".
+        store.runs.update_one(
+            {"_id": run_id, "status": "created"},
+            {"$set": {"status": "pending", "active_slot": "single", "start_requested_at": now()}},
+        )
+    except DuplicateKeyError:
+        raise ApiError(409, "conflict", "A run is already pending/active. Stop it first.") from None
+    event(logger("api"), "demo_run_start_requested", run_id=run_id)
+    return run_out(get_run(store, run_id))
+
+
+@app.post(
+    "/api/v1/demo-runs/{run_id}/stop",
+    status_code=202,
+    response_model=DemoRunOut,
+    dependencies=[Depends(operator_auth)],
+)
+def stop_run(run_id: str, store=Depends(db)):
+    run = get_run(store, run_id)
+    if run["status"] == "created":
+        store.runs.update_one({"_id": run_id}, {"$set": {"status": "cancelled", "stopped_at": now()}})
+    elif run["status"] in ("pending", "active"):
+        store.runs.update_one({"_id": run_id}, {"$set": {"stop_requested": True}})
+    else:
+        raise ApiError(409, "conflict", f"Run is already {run['status']}")
+    event(logger("api"), "demo_run_stop_requested", run_id=run_id)
+    return run_out(get_run(store, run_id))
+
+
+@app.post(
+    "/api/v1/demo-runs/{run_id}/inject-fault",
+    status_code=202,
+    response_model=FaultEventOut,
+    dependencies=[Depends(operator_auth)],
+)
+def inject_fault(run_id: str, body: FaultRequest, store=Depends(db)):
+    run = get_run(store, run_id)
+    if run["status"] != "active":
+        raise ApiError(409, "conflict", "Faults can only be injected into an active run")
+    record = {
+        "_id": str(uuid4()),
+        "run_id": run_id,
+        "type": "inject_fault",
+        "connector_id": body.connector_id,
+        "requested_at": now(),
+        "consumed_at": None,
+    }
+    store.run_events.insert_one(record)
+    event(logger("api"), "fault_injection_requested", run_id=run_id, connector_id=body.connector_id)
+    return FaultEventOut(
+        event_id=record["_id"],
+        run_id=run_id,
+        type=record["type"],
+        connector_id=record["connector_id"],
+        requested_at=record["requested_at"],
+    )
+
+
+@app.post("/api/v1/auth/login", response_model=UserOut)
+def login(body: LoginRequest, response: Response, store=Depends(db)):
+    config = settings()
+    encoded = config.operator_password_hash.get_secret_value()
+    user_ok = hmac.compare_digest(body.username.encode(), config.operator_username.encode())
+    if not (encoded and verify_password(body.password, encoded) and user_ok):
+        raise ApiError(401, "unauthorized", "Invalid username or password")
+    token, at = new_token(), now()
+    store.sessions.insert_one(
+        {
+            "_id": token_digest(token),
+            "username": config.operator_username,
+            "created_at": at,
+            "expires_at": at + timedelta(seconds=SESSION_TTL_S),
+        }
+    )
+    response.set_cookie(
+        SESSION_COOKIE, token, max_age=SESSION_TTL_S, httponly=True, samesite="strict", path="/"
+    )
+    return UserOut(username=config.operator_username, role="operator")
+
+
+@app.post("/api/v1/auth/logout", status_code=204)
+def logout(request: Request, store=Depends(db)):
+    token = request.cookies.get(SESSION_COOKIE)
+    if token:
+        store.sessions.delete_one({"_id": token_digest(token)})
+    response = Response(status_code=204)
+    response.delete_cookie(SESSION_COOKIE, path="/", httponly=True, samesite="strict")
+    return response
+
+
+@app.get("/api/v1/auth/me", response_model=UserOut)
+def me(request: Request, store=Depends(db)):
+    session = session_for(request, store)
+    if not session:
+        raise ApiError(401, "unauthorized", "Not logged in")
+    return UserOut(username=session["username"], role="operator")
+
+
+FRESH_S = 30
+
+
+def sample_dict(document):
+    """Telemetry document without Mongo internals; station/charger come from the time-series meta."""
+    meta = document.get("meta", {})
+    out = {k: v for k, v in document.items() if k not in ("_id", "meta")}
+    return {**out, "station_id": meta.get("station_id"), "charger_id": meta.get("charger_id")}
+
+
+def reporting_run(store):
+    return store.runs.find_one({"status": "active"}) or store.runs.find_one(
+        {"status": "stopped"}, sort=[("started_at", -1)]
+    )
+
+
+def connector_view(store, run, connector_id, latest):
+    stamp = latest["measured_at"] if latest else None
+    freshness = (now() - stamp).total_seconds() if stamp else None
+    incident = store.incidents.find_one(
+        {"run_id": run["_id"], "connector_id": connector_id, "unresolved": True}, sort=[("opened_at", -1)]
+    )
+    return ConnectorOut(
+        connector_id=connector_id,
+        station_id=latest and latest["meta"].get("station_id"),
+        charger_id=latest and latest["meta"].get("charger_id"),
+        run_id=run["_id"],
+        run_status=run["status"],
+        mode=run["mode"],
+        latest=sample_dict(latest) if latest else None,
+        measured_at=stamp,
+        freshness_s=freshness,
+        stale=freshness is None or freshness > FRESH_S,
+        active_incident={"id": incident["_id"], "state": incident["state"]} if incident else None,
+    )
+
+
+def connector_views(store):
+    run = reporting_run(store)
+    if not run:
+        return []
+    # Newest by measured_at, not arrival order: a late older sample must not replace the latest state.
+    pipeline = [
+        {"$match": {"meta.run_id": run["_id"]}},
+        {"$sort": {"measured_at": -1, "received_at": -1}},
+        {"$group": {"_id": "$meta.connector_id", "latest": {"$first": "$$ROOT"}}},
+    ]
+    latest = {row["_id"]: row["latest"] for row in store.telemetry.aggregate(pipeline)}
+    latest.setdefault(CONNECTOR, None)
+    return [connector_view(store, run, cid, latest[cid]) for cid in sorted(latest)]
+
+
+@app.get("/api/v1/connectors", response_model=ConnectorList)
+def connectors(store=Depends(db)):
+    return ConnectorList(items=connector_views(store))
+
+
+@app.get("/api/v1/connectors/{connector_id}", response_model=ConnectorOut)
+def connector(connector_id: str, store=Depends(db)):
+    found = next((c for c in connector_views(store) if c.connector_id == connector_id), None)
+    if not found:
+        raise ApiError(404, "not_found", "Connector not found")
+    return found
+
+
+def encode_cursor(row):
+    return base64.urlsafe_b64encode(f"{row['measured_at'].isoformat()}|{row['sample_id']}".encode()).decode()
+
+
+def decode_cursor(cursor):
+    try:
+        stamp, sample_id = base64.urlsafe_b64decode(cursor.encode()).decode().split("|", 1)
+        return datetime.fromisoformat(stamp), sample_id
+    except (ValueError, UnicodeDecodeError):
+        raise ApiError(422, "validation_error", "cursor: invalid") from None
+
+
+@app.get("/api/v1/connectors/{connector_id}/telemetry", response_model=TelemetryPage)
+def connector_telemetry(
+    connector_id: str,
+    start: Annotated[AwareDatetime, Query(alias="from")],
+    to: AwareDatetime,
+    run_id: str | None = None,
+    cursor: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    store=Depends(db),
+):
+    if to <= start or to - start > timedelta(hours=24):
+        raise ApiError(422, "validation_error", "from/to: range must be positive and at most 24 hours")
+    after = decode_cursor(cursor) if cursor else None
+    if run_id is None:
+        run = reporting_run(store)
+        run_id = run["_id"] if run else None
+    known = connector_id == CONNECTOR or store.telemetry.find_one(
+        {"meta.run_id": run_id, "meta.connector_id": connector_id}, {"_id": 1}
+    )
+    if not known:
+        raise ApiError(404, "not_found", "Connector not found")
+    if run_id is None:
+        return TelemetryPage(items=[])
+    # Whole run history up to `to`, deduplicated by sample_id: the lagged baseline starts cold at run start.
+    pipeline = [
+        {"$match": {"meta.run_id": run_id, "meta.connector_id": connector_id, "measured_at": {"$lte": to}}},
+        {"$sort": {"received_at": 1}},
+        {"$group": {"_id": "$sample_id", "sample": {"$first": "$$ROOT"}}},
+        {"$replaceRoot": {"newRoot": "$sample"}},
+        {"$sort": {"measured_at": 1, "sample_id": 1}},
+    ]
+    rows = with_residuals(list(store.telemetry.aggregate(pipeline)))
+    rows = [
+        r
+        for r in rows
+        if r["measured_at"] >= start and (after is None or (r["measured_at"], r["sample_id"]) > after)
+    ]
+    page = rows[:limit]
+    return TelemetryPage(
+        items=[sample_dict(r) for r in page],
+        next_cursor=encode_cursor(page[-1]) if len(rows) > limit else None,
     )

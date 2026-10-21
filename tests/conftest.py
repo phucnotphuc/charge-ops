@@ -19,5 +19,6 @@ def store(monkeypatch, tmp_path):
         partialFilterExpression={"unresolved": True},
     )
     db.commands.create_index("idempotency_key", unique=True)
+    db.runs.create_index("active_slot", unique=True, partialFilterExpression={"active_slot": "single"})
     app.state.db = db
     return db

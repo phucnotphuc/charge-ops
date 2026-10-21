@@ -143,3 +143,102 @@ def with_residuals(rows):
         row["expected_temperature_c"] = expected
         row["residual"] = row["connector_temperature_c"] - expected
     return rows
+
+
+class SampleOut(BaseModel):
+    sample_id: str
+    run_id: str
+    station_id: str | None = None
+    charger_id: str | None = None
+    connector_id: str
+    measured_at: AwareDatetime
+    received_at: AwareDatetime | None = None
+    voltage_v: float | None = None
+    current_a: float | None = None
+    power_kw: float | None = None
+    connector_temperature_c: float | None = None
+    ambient_temperature_c: float | None = None
+    requested_current_a: float | None = None
+    current_limit_a: float | None = None
+    provenance: dict | None = None
+
+
+class TelemetryItem(SampleOut):
+    expected_temperature_c: float | None = None
+    residual: float | None = None
+
+
+class TelemetryPage(BaseModel):
+    items: list[TelemetryItem]
+    next_cursor: str | None = None
+
+
+class ActiveIncident(BaseModel):
+    id: str
+    state: str
+
+
+class ConnectorOut(BaseModel):
+    connector_id: str
+    station_id: str | None = None
+    charger_id: str | None = None
+    run_id: str | None = None
+    run_status: str | None = None
+    mode: Literal["local", "datadog"] | None = None
+    latest: SampleOut | None = None
+    measured_at: AwareDatetime | None = None
+    freshness_s: float | None = None
+    stale: bool
+    active_incident: ActiveIncident | None = None
+
+
+class ConnectorList(BaseModel):
+    items: list[ConnectorOut]
+    next_cursor: str | None = None
+
+
+class DemoRunCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    scenario: Literal["healthy", "thermal_fault"]
+    seed: int
+    mode: Literal["local", "datadog"] = "datadog"
+    profile: str | None = None
+
+
+class DemoRunOut(BaseModel):
+    id: str
+    status: str
+    mode: Literal["local", "datadog"]
+    scenario: str
+    seed: int | None = None
+    profile_id: str | None = None
+    baseline_version: str | None = None
+    created_at: AwareDatetime
+    started_at: AwareDatetime | None = None
+    stopped_at: AwareDatetime | None = None
+    stop_requested: bool = False
+    reason: str | None = None
+
+
+class FaultRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    connector_id: Literal["connector-1"]
+
+
+class FaultEventOut(BaseModel):
+    event_id: str
+    run_id: str
+    type: str
+    connector_id: str
+    requested_at: AwareDatetime
+
+
+class LoginRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    username: str = Field(min_length=1, max_length=200)
+    password: str = Field(min_length=1, max_length=500)
+
+
+class UserOut(BaseModel):
+    username: str
+    role: Literal["operator"]

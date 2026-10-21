@@ -28,6 +28,8 @@ def initialize(db):
         unique=True,
         partialFilterExpression={"unresolved": True},
     )
+    db.sessions.create_index("expires_at", expireAfterSeconds=0)
+    db.run_events.create_index([("run_id", 1), ("requested_at", 1)])
     db.inbox.create_index([("processed", 1), ("occurred_at", 1)])
     db.commands.create_index("idempotency_key", unique=True)
     db.commands.create_index([("incident_id", 1), ("type", 1), ("applied_at", -1)])
