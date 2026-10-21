@@ -2,15 +2,23 @@
 
 from uuid import uuid4
 
-from chargeops.domain import CONNECTOR, target_current
+from chargeops.domain import CONNECTOR, RECOVERY_RESIDUAL_C, target_current
 
 # Demo policy, locked before evaluation.
 COMMAND_TIMEOUT_S = 30
 REDUCTION_CHECK_S = 120
 RETEST_S = 120
 CURRENT_TOLERANCE = 1.10
-RECOVERED_C = 3.0
+RECOVERED_C = RECOVERY_RESIDUAL_C
 LOAD_FLOOR = 0.90
+RESIDUAL_NOT_RECOVERED = "residual_not_recovered"
+CYCLE_FIELDS = [
+    "load_reduction_verified_at",
+    "reduction_check",
+    "reduction_check_reason",
+    "maintenance_applied_at",
+    "verifying_since",
+]
 
 
 def note(name, at, **fields):
@@ -35,6 +43,7 @@ def open_incident(db, run, evidence, source, at, event_id):
                 "_id": str(uuid4()),
                 "state": "open",
                 "state_since": at,
+                "cycle": 0,
                 "source": source,
                 "opened_at": at,
                 "evidence": evidence,
@@ -57,9 +66,8 @@ def on_alert(db, run, evidence, source, at, event_id, alert_at):
         return "incident_opened"
     if incident["state"] == "verifying" and alert_at >= incident["verifying_since"]:
         # New handling cycle; frozen reference/original/target stay immutable.
-        cycle = dict.fromkeys(
-            ["load_reduction_verified_at", "reduction_check", "maintenance_applied_at", "verifying_since"]
-        )
+        cycle = dict.fromkeys(CYCLE_FIELDS)
+        cycle["cycle"] = incident.get("cycle", 0) + 1
         transition(db, incident, "open", at, "recurrence", {"source": source, "event_id": event_id}, **cycle)
         return "incident_reopened"
     return "incident_existing"
@@ -67,6 +75,18 @@ def on_alert(db, run, evidence, source, at, event_id, alert_at):
 
 def mean(values):
     return sum(values) / len(values)
+
+
+def charging(sample):
+    """A tripped or faulted connector (no current) is an interruption, never evidence of mitigation."""
+    return sample["current_a"] > 0 and sample.get("connector_status") != "faulted"
+
+
+def maintenance_unlocked(incident):
+    """Only `residual_not_recovered`: current verified reduced, still hot REDUCTION_CHECK_S after verification.
+
+    `load_not_reduced` and `load_reduction_unverified` never unlock maintenance."""
+    return incident.get("reduction_check_reason") == RESIDUAL_NOT_RECOVERED
 
 
 def handle_command(db, incident, command, at):
@@ -101,10 +121,12 @@ def handle_command(db, incident, command, at):
             }
         target = frozen.get("target_current_a", incident.get("target_current_a"))
         return None, {"state": "mitigating", **frozen}, {"current_limit_a": target}
+    if kind == "maintenance":
+        if state == "mitigated" or (state == "mitigating" and maintenance_unlocked(incident)):
+            return None, {}, {"fault_cleared": True}
+        return f"invalid_state:{state}", None, None
     if state != "mitigated":
         return f"invalid_state:{state}", None, None
-    if kind == "maintenance":
-        return None, {}, {"fault_cleared": True}
     if not incident.get("maintenance_applied_at"):
         return "maintenance_not_applied", None, None
     return None, {}, {"current_limit_a": incident["original_limit_a"]}  # verify_recovery
@@ -126,9 +148,17 @@ def process_commands(db, at):
             db.commands.update_one(
                 {"_id": command["_id"]}, {"$set": {"status": "applied", "applied_at": at, "validated": True}}
             )
-        else:
+        else:  # the handling cycle at dispatch decides which cycle a late result belongs to
             db.commands.update_one(
-                {"_id": command["_id"]}, {"$set": {"sim": sim, "dispatched_at": at, "validated": True}}
+                {"_id": command["_id"]},
+                {
+                    "$set": {
+                        "sim": sim,
+                        "dispatched_at": at,
+                        "validated": True,
+                        "cycle": incident.get("cycle", 0),
+                    }
+                },
             )
         state = fields.pop("state", incident["state"])
         if state != incident["state"]:
@@ -177,7 +207,32 @@ def applied(db, incident, kind):
     )
 
 
+def record_maintenance(db, incident, at):
+    """Match maintenance by handling cycle, not state_since: a result landing around a same-tick
+    mitigating -> mitigated transition still counts."""
+    if not incident.get("maintenance_applied_at"):
+        command = db.commands.find_one(
+            {
+                "incident_id": incident["_id"],
+                "type": "maintenance",
+                "status": "applied",
+                "cycle": incident.get("cycle", 0),
+            },
+            sort=[("applied_at", -1)],
+        )
+        if command:
+            incident["maintenance_applied_at"] = command["applied_at"]
+            db.incidents.update_one(
+                {"_id": incident["_id"]},
+                {
+                    "$set": {"maintenance_applied_at": command["applied_at"]},
+                    **note("maintenance_applied", at),
+                },
+            )
+
+
 def check_mitigation(db, incident, at):
+    record_maintenance(db, incident, at)  # maintenance unlocked by an ineffective derating
     command = applied(db, incident, "reduce_load")
     if not command:
         return
@@ -189,8 +244,10 @@ def check_mitigation(db, incident, at):
     )
     for window in windows:
         samples = window["samples"]
-        load_ok = mean([s["current_a"] for s in samples]) <= CURRENT_TOLERANCE * target and all(
-            s["current_limit_a"] <= target for s in samples
+        load_ok = (
+            all(charging(s) for s in samples)
+            and mean([s["current_a"] for s in samples]) <= CURRENT_TOLERANCE * target
+            and all(s["current_limit_a"] <= target for s in samples)
         )
         if not load_ok:
             continue
@@ -219,29 +276,34 @@ def check_mitigation(db, incident, at):
                 evidence_after=evidence,
             )
             return
-    if (
-        not incident.get("load_reduction_verified_at")
-        and not incident.get("reduction_check")
-        and (at - ack).total_seconds() >= REDUCTION_CHECK_S
-    ):
-        name = "load_reduction_ineffective" if windows else "load_reduction_unverified"
-        db.incidents.update_one(
-            {"_id": incident["_id"]}, {"$set": {"reduction_check": name}, **note(name, at)}
+    verified = incident.get("load_reduction_verified_at")
+    if not verified:  # once per cycle, REDUCTION_CHECK_S after ACK
+        if incident.get("reduction_check") or (at - ack).total_seconds() < REDUCTION_CHECK_S:
+            return
+        name, reason = (
+            ("load_reduction_ineffective", "load_not_reduced")
+            if windows
+            else ("load_reduction_unverified", "insufficient_data")
         )
+    elif (
+        incident.get("reduction_check_reason") == RESIDUAL_NOT_RECOVERED
+        or (at - verified).total_seconds() < REDUCTION_CHECK_S
+    ):
+        return
+    else:  # once per cycle, REDUCTION_CHECK_S after verification, even after an earlier check event
+        name, reason = "load_reduction_ineffective", RESIDUAL_NOT_RECOVERED
+    incident.update(reduction_check=name, reduction_check_reason=reason)
+    db.incidents.update_one(
+        {"_id": incident["_id"]},
+        {
+            "$set": {"reduction_check": name, "reduction_check_reason": reason},
+            **note(name, at, reason=reason),
+        },
+    )
 
 
 def check_mitigated(db, incident, at):
-    if not incident.get("maintenance_applied_at"):
-        command = applied(db, incident, "maintenance")
-        if command:
-            incident["maintenance_applied_at"] = command["applied_at"]
-            db.incidents.update_one(
-                {"_id": incident["_id"]},
-                {
-                    "$set": {"maintenance_applied_at": command["applied_at"]},
-                    **note("maintenance_applied", at),
-                },
-            )
+    record_maintenance(db, incident, at)
     command = incident.get("maintenance_applied_at") and applied(db, incident, "verify_recovery")
     if command:
         transition(

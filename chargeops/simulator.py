@@ -1,67 +1,13 @@
-import csv
-import math
 import time
-from collections import defaultdict
 from datetime import datetime
-from pathlib import Path
 from uuid import UUID, uuid5
 
 import httpx
 
 from chargeops.config import settings
-from chargeops.domain import AMBIENT_C, THERMAL_K, lag, now
+from chargeops.domain import AMBIENT_C, lag, now
 from chargeops.logging import event, logger
-
-# Ground truth: simulator-only, never read by the detector. Calibration knobs.
-ORIGINAL_LIMIT_A = 250.0  # highest current in the Autosun–PolyU v3 data
-FAULT_START_S = 120
-FAULT_RAMP_S = 60
-FAULT_RESIDUAL_C = 10.5  # extra heat at the onset load; halving current leaves a quarter (≈2.6 °C)
-DEMO_PROFILE = "44020100400000052012112300218810"  # ~130 A, stable for 92 of 97 minutes
-
-
-def load_profiles():
-    """Per-minute (current A, voltage V) of the 50 audited sessions (data/manifests/autosun-v3.json)."""
-    profiles = defaultdict(list)
-    with (Path(__file__).parent / "profiles" / "autosun_v3.csv").open(encoding="utf-8") as f:
-        for row in csv.DictReader(f):  # rows are ordered by minute within each session
-            profiles[row["transaction_id"]].append((float(row["current_a"]), float(row["voltage_v"])))
-    return dict(profiles)
-
-
-PROFILES = load_profiles()
-
-
-def replay(profile, elapsed):
-    """Vehicle demand and voltage, linearly interpolated between published minutes; 0 A after the session."""
-    position = elapsed / 60
-    minute = int(position)
-    if minute >= len(profile):
-        return 0.0, profile[-1][1]
-    if minute == len(profile) - 1:
-        return profile[minute]
-    weight = position - minute
-    (a0, v0), (a1, v1) = profile[minute], profile[minute + 1]
-    return a0 + (a1 - a0) * weight, v0 + (v1 - v0) * weight
-
-
-def physics(elapsed, scenario, sim, profile):
-    """Demand, current, limit, voltage and steady-state temperature; `sim` holds applied commands."""
-    demand, voltage = replay(profile, elapsed)
-    limit = sim.get("current_limit_a", ORIGINAL_LIMIT_A)
-    current = min(demand, limit)
-    fault = 0.0
-    onset_a = min(replay(profile, FAULT_START_S)[0], ORIGINAL_LIMIT_A)
-    if (
-        scenario == "thermal_fault"
-        and elapsed >= FAULT_START_S
-        and onset_a > 0
-        and not sim.get("fault_cleared")
-    ):
-        # Extra I²R heating sized in °C at the onset load, so severity does not depend on the session's current.
-        full = FAULT_RESIDUAL_C / (THERMAL_K * onset_a**2)
-        fault = full * (1 - math.exp(-(elapsed - FAULT_START_S) / FAULT_RAMP_S))
-    return demand, current, limit, voltage, AMBIENT_C + THERMAL_K * current**2 * (1 + fault)
+from chargeops.model import DEMO_PROFILE, PROFILES, physics, replay  # noqa: F401  (re-exported)
 
 
 def main():
