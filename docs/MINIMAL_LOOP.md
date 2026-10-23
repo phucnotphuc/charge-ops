@@ -62,6 +62,8 @@ Block thiếu kết thúc 02:52:00: worker đã gửi (có log `metrics_emitted`
 
 ## Vòng xử lý G2 — 20/10/2026
 
+> **Lịch sử (20/10, một connector).** Các con số lỗi trong mục này (`FAULT_RESIDUAL_C = 10,5`, onset giây 120, profile mặc định `…00218810`) và các kết quả run bên dưới thuộc bản một connector đã chạy thật ngày 20/10. Từ 21/10 (WP-W2B, chưa chạy thật) fleet 2 trạm × 3 connector dùng tham số khác: connector lỗi, onset 120–300 s và mức lỗi 9,5–11 °C được rút theo seed (`FAULT_ONSET_S`, `FAULT_SEVERITY_C` trong `chargeops/fleet.py`, CONTRACT §1); `FAULT_RESIDUAL_C` chỉ còn dùng cho lỗi chèn bằng `inject-fault`.
+
 Một connector, theo CONTRACT §3. Code: `chargeops/lifecycle.py` (state machine, worker là nơi duy nhất ghi trạng thái incident), `simulator.py` (mô hình nhiệt), `domain.py` (baseline), `demo.py` (operator tự động).
 
 **Mô hình nhiệt và baseline:**
@@ -163,7 +165,7 @@ docker compose exec api python -m chargeops.cli status
 docker compose exec api python -m chargeops.cli stop
 ```
 
-Worker nhận start/stop bất đồng bộ. Fault tăng nhiệt sau 120 giây, mẫu mỗi 5 giây, cửa sổ aggregation 60 giây đóng mỗi 15 giây. Run tự dừng sau 1800 giây; stop giữ nguyên incident chưa resolved.
+Worker nhận start/stop bất đồng bộ. Fault tăng nhiệt sau 120 giây (bản một connector 20/10; fleet: 120–300 giây theo seed), mẫu mỗi 5 giây, cửa sổ aggregation 60 giây đóng mỗi 15 giây. Run tự dừng sau 1800 giây; stop giữ nguyên incident chưa resolved.
 
 Vòng xử lý: `python -m chargeops.demo --delay 10` (tự đóng vai operator đến `resolved`), hoặc thủ công `python -m chargeops.cli command <incident_id> acknowledge|reduce_load|maintenance|verify_recovery` và `python -m chargeops.cli incident <incident_id>` (trạng thái, timeline, commands). Cần `OPERATOR_SECRET` trong `.env`; `.env` cũ thì thêm một secret ngẫu nhiên ≥24 ký tự (xem `.env.example`). CLI chỉ cho một pending/active run. Không mở run mới trước khi run cũ đã stopped.
 

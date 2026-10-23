@@ -8,6 +8,8 @@ Theo lựa chọn của nhóm ngày 14/10: trước 17/10 chỉ tạo tài liệ
 
 Đích dự án: `D:\devops\charge-ops`; remote `phucnotphuc/charge-ops` đã được tạo private trong lượt chuẩn bị và tài liệu đã push lên `main`. Xác minh trạng thái local/remote mới nhất và visibility trước mutation/push, không tạo lại hoặc ghi đè repo; giữ nguyên repo cha. Chỉ dùng máy local, MongoDB container, Datadog trial và tunnel miễn phí; không tạo EC2/Atlas/domain trả phí.
 
+**Trạng thái 21/10 — seams ARCHITECTURE §2:** chưa hiện thực thành interface. Có ngầm định: ingest HTTP batch và `stats` duck-typed. Chưa có: `ChargerCommandSink`/ánh xạ OCPP, abstraction `Detector`, `AlertSource` qua inbox cho alert local, `Identity` có vai trò (chỉ `operator`). Lõi import trực tiếp `ddtrace`/`DogStatsd`. Không hiện thực trong bản thi; xem ARCHITECTURE.md §2.
+
 ## Trình tự và quyền sở hữu
 
 Agent chính chốt hợp đồng, tạo nền tảng sau mốc build, tích hợp và nghiệm thu. Ba sub-agent tối đa hoạt động cùng lúc; mỗi lượt có file ownership rõ ràng. Thay đổi API/domain phải quay về agent chính, không tự sửa hợp đồng chia sẻ.

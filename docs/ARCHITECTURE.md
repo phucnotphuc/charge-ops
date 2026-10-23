@@ -21,6 +21,8 @@ Cập nhật 17/10/2026. Tài liệu này tách **lõi sản phẩm** khỏi **p
 | Logs | JSON một dòng ra stdout, có `run_id`, `connector_id`, `incident_id`, `trace_id` | Datadog Log Management qua Agent | Bất kỳ collector nào đọc stdout |
 | Xác thực | `Identity` với vai trò `viewer`/`operator` | User cấu hình local, session cookie | OIDC/SSO; thêm `org_id` vào session |
 
+**Trạng thái 21/10:** bảng trên là thiết kế đích, chưa được hiện thực thành interface. Hiện có ngầm định: nguồn telemetry là HTTP batch (`POST /telemetry/batch`, bất kỳ client nào gửi đúng CONTRACT §1 đều dùng được) và metrics qua một đối tượng `stats` duck-typed (worker nhận `DogStatsd` hoặc `Mock` trong test). **Chưa hiện thực:** `ChargerCommandSink` và ánh xạ OCPP (simulator poll `/simulator/commands` trực tiếp, giá trị lệnh nằm trong `runs.sim`); abstraction `Detector` (residual cài thẳng trong `domain.py`/`worker.py`); `AlertSource` qua inbox cho alert local (detector local mở incident trực tiếp, chỉ webhook Datadog đi qua inbox); `Identity` có vai trò (chỉ có `operator`, GET ẩn danh). Lõi import trực tiếp `ddtrace` (`chargeops/logging.py`, `worker.py`) và `DogStatsd` (`worker.py`), nên chưa tách khỏi Datadog.
+
 Simulator và OCPP đều phải đi qua cùng `ChargerCommandSink`: lệnh giảm tải tuyệt đối `target_current_a` trong CONTRACT §3 ánh xạ trực tiếp sang charging profile, nên luồng giảm tải → kiểm chứng bằng telemetry giữ nguyên khi thay simulator bằng trụ thật.
 
 ## 3. Mô hình dữ liệu để mở rộng
