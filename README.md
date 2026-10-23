@@ -2,9 +2,11 @@
 
 Hệ thống demo cảnh báo sớm bất thường nhiệt connector: telemetry → phát hiện → điều tra → operator duyệt giảm tải → bảo trì mô phỏng → kiểm tra phục hồi.
 
-## Trạng thái ngày 14/10/2026
+## Trạng thái ngày 21/10/2026
 
-**Đã viết luồng tối thiểu theo yêu cầu bắt đầu ngay của người dùng ngày 14/10:** một connector tổng hợp → ingest FastAPI → MongoDB time series/aggregation → metrics Datadog → webhook → worker tạo incident. Có Compose, lockfile và kiểm thử logic/API. **Chưa kiểm chứng container/MongoDB/Datadog thật** vì Docker Engine chưa chạy và keys chưa được cấu hình trong môi trường dự án. Phần viết trước 17/10 được khai báo trong DISCLOSURE.md.
+**Đã viết và kiểm thử logic (mongomock/vitest):** fleet 2 trạm × 3 connector (mỗi connector replay một phiên Autosun–PolyU v3 đã kiểm định, lỗi gieo theo seed, 4 kịch bản), API FastAPI + đăng nhập operator, worker và vòng đời incident (giảm tải → bảo trì → kiểm tra phục hồi), quan sát Datadog (metrics/logs/APM, monitor/webhook), giao diện web React, đánh giá offline A/B/C (`b1-eval-v3.1`, kết quả mô phỏng trong `data/evaluation/`).
+
+**Kiểm chứng thật:** gate ngày 20/10 chạy container, MongoDB thật và Datadog thật nhưng **chỉ với một connector** (xem [MINIMAL_LOOP](docs/MINIMAL_LOOP.md)). Fleet 6 connector, giao diện web, đăng nhập, Caddy/web image và endpoint đánh giá trên nhánh này **chưa chạy thật**. Phần viết trước 17/10 được khai báo trong DISCLOSURE.md.
 
 - Local-first, mục tiêu chi phí dịch vụ 0 đồng; không EC2, Atlas, domain hay AI trả phí.
 - GitHub private; cấp quyền giám khảo khi BTC cung cấp tài khoản.
@@ -30,17 +32,17 @@ Cần Docker Linux Engine đang chạy (không cần Node trên máy host: image
 
 ```powershell
 git clone <repo> chargeops; cd chargeops
-python scripts/init_env.py --operator-user operator   # hỏi mật khẩu operator; hash được ghi sẵn dạng $$ cho Compose
+python scripts/init_env.py --operator-user operator   # hỏi mật khẩu operator; hash được ghi trong dấu nháy đơn
 docker compose up --build -d
 ```
 
-1. Mở http://localhost:8080 (giao diện web; `/api/*`, `/docs`, `/openapi.json` được proxy tới API trong cùng origin).
+1. Mở http://localhost:8080 (giao diện web; `/api/*`, `/docs`, `/redoc`, `/openapi.json` được proxy tới API trong cùng origin).
 2. Đăng nhập operator bằng user/mật khẩu vừa đặt. Không cần profile `observability` cho chế độ local.
 3. Kiểm tra hạ tầng: `docker compose exec api python -m chargeops.check_mongo`; CLI: `docker compose exec api python -m chargeops.cli start --mode local`.
 
-Cấu hình trong `.env` (xem `.env.example`): `OPERATOR_USERNAME`, `OPERATOR_PASSWORD_HASH` (nếu tự dán hash từ `python -m chargeops.auth hash`, phải viết mỗi `$` thành `$$`), `ALLOWED_ORIGINS` (mặc định `http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173`), `DD_TRACE_ENABLED`, `APP_VERSION`. Có thể truyền mật khẩu không tương tác: `python scripts/init_env.py --operator-user operator --operator-password-stdin`.
+Cấu hình trong `.env` (xem `.env.example`): `OPERATOR_USERNAME`, `OPERATOR_PASSWORD_HASH` (nếu tự dán hash từ `python -m chargeops.auth hash`, giữ nguyên và đặt trong dấu nháy đơn, ví dụ `OPERATOR_PASSWORD_HASH='scrypt$16384$8$1$…'`; Compose và pydantic-settings đều đọc giá trị nháy đơn nguyên văn nên cùng một dòng dùng được cho container và khi chạy trên host; không viết `$$` vì khi chạy trên host giá trị bị đọc nguyên `$$` và đăng nhập thất bại. Đã kiểm bằng `docker compose config` và python-dotenv, chưa kiểm bằng container chạy thật), `ALLOWED_ORIGINS` (mặc định `http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173`), `DD_TRACE_ENABLED`, `APP_VERSION`. Có thể truyền mật khẩu không tương tác: `python scripts/init_env.py --operator-user operator --operator-password-stdin`.
 
-Kịch bản fault bắt đầu tăng nhiệt sau 120 giây; mỗi run tự dừng sau 15 phút. Mode local không thay nghiệm thu Datadog; xem runbook để thiết lập dashboard/monitor/webhook và chạy mode datadog (`docker compose --profile observability up`). Gateway webhook chỉ mở `/api/v1/webhooks/datadog`.
+Kịch bản `thermal_fault` gieo lỗi trên một connector theo seed, bắt đầu từ giây 120–300; mỗi run tự dừng sau 30 phút (`RUN_MAX_S = 1800`). `POST /auth/login` và `/auth/logout` từ chối Origin lạ; client không gửi Origin (curl, CLI) vẫn dùng được. Mode local không thay nghiệm thu Datadog; xem runbook để thiết lập dashboard/monitor/webhook và chạy mode datadog (`docker compose --profile observability up`). Gateway webhook chỉ mở `/api/v1/webhooks/datadog`.
 
 Kiểm thử:
 
