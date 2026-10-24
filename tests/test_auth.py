@@ -61,6 +61,13 @@ def test_login_rejects_bad_credentials(client, password, username):
     assert "set-cookie" not in response.headers
 
 
+def test_compose_escaped_hash_still_logs_in_outside_compose(client, monkeypatch):
+    # init_env.py writes '$$' so Compose keeps '$'; uvicorn reading .env directly sees the '$$' form.
+    monkeypatch.setenv("OPERATOR_PASSWORD_HASH", hash_password(PASSWORD, n=2**10).replace("$", "$$"))
+    settings.cache_clear()
+    assert login(client).status_code == 200
+
+
 def test_login_disabled_without_configured_hash(store, monkeypatch):
     monkeypatch.delenv("OPERATOR_PASSWORD_HASH", raising=False)
     settings.cache_clear()

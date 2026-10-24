@@ -31,6 +31,12 @@ def initialize(db):
     )
     db.sessions.create_index("expires_at", expireAfterSeconds=0)
     db.run_events.create_index([("run_id", 1), ("consumed_at", 1), ("requested_at", 1)])
+    db.run_events.create_index(
+        [("run_id", 1), ("connector_id", 1)],
+        name="pending_fault",
+        unique=True,
+        partialFilterExpression={"pending": True},
+    )
     db.inbox.create_index([("processed", 1), ("occurred_at", 1)])
     db.commands.create_index("idempotency_key", unique=True)
     db.commands.create_index([("incident_id", 1), ("type", 1), ("applied_at", -1)])

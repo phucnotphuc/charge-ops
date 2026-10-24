@@ -308,6 +308,30 @@ def test_inject_fault_needs_active_run_and_valid_connector(client, store):
     assert bad.status_code == 422
 
 
+def test_inject_fault_is_not_repeated_while_pending_or_active(client, store):
+    active_run(store)
+    path, body = f"/api/v1/demo-runs/{RUN}/inject-fault", {"connector_id": "connector-1"}
+    assert client.post(path, json=body, headers=OPERATOR).status_code == 202
+    assert client.post(path, json=body, headers=OPERATOR).status_code == 409  # double click: still pending
+    other = client.post(path, json={"connector_id": "connector-2"}, headers=OPERATOR)
+    assert other.status_code == 202  # pending guard is per connector
+    # Simulator consumed it: the fault is active, a retry must not restart the ramp.
+    simulator = {"X-Simulator-Secret": "s" * 32}
+    for item in client.get("/api/v1/simulator/events", headers=simulator).json():
+        client.post(f"/api/v1/simulator/events/{item['_id']}/consume", headers=simulator).raise_for_status()
+    response = client.post(path, json=body, headers=OPERATOR)
+    assert response.status_code == 409 and response.json()["error"]["code"] == "conflict"
+    # Maintenance cleared it afterwards: a new injection is a new request.
+    later = now() + timedelta(seconds=60)
+    store.runs.update_one({"_id": RUN}, {"$set": {"sim.connector-1.fault_cleared_at": later}})
+    assert client.post(path, json=body, headers=OPERATOR).status_code == 202
+
+
+def test_seed_outside_int64_is_422_not_500(client):
+    response = client.post("/api/v1/demo-runs", json={"scenario": "healthy", "seed": 2**64}, headers=OPERATOR)
+    assert response.status_code == 422 and response.json()["error"]["code"] == "validation_error"
+
+
 def test_routes_in_openapi_with_response_models():
     spec = app.openapi()["paths"]
     expected = {

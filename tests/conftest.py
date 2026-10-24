@@ -20,5 +20,10 @@ def store(monkeypatch, tmp_path):
     )
     db.commands.create_index("idempotency_key", unique=True)
     db.runs.create_index("active_slot", unique=True, partialFilterExpression={"active_slot": "single"})
+    db.run_events.create_index(
+        [("run_id", 1), ("connector_id", 1)],
+        unique=True,
+        partialFilterExpression={"pending": True},
+    )
     app.state.db = db
     return db

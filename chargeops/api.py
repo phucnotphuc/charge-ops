@@ -179,7 +179,7 @@ def consume_event(event_id: str, store=Depends(db)):
     if not found:
         raise ApiError(404, "not_found", "Event not found")
     first = store.run_events.update_one(
-        {"_id": event_id, "consumed_at": None}, {"$set": {"consumed_at": now()}}
+        {"_id": event_id, "consumed_at": None}, {"$set": {"consumed_at": now()}, "$unset": {"pending": ""}}
     )
     consumed = store.run_events.find_one({"_id": event_id})["consumed_at"]
     key = f"sim.{found['connector_id']}"
@@ -379,6 +379,9 @@ def create_run(body: DemoRunCreate, store=Depends(db)):
     profile = body.profile  # None: every connector's session comes from the seed
     if profile is not None and profile not in PROFILES:
         raise ApiError(422, "validation_error", f"Unknown profile {profile}")
+    # Checked here, not on DemoRunCreate: domain.py is in the evaluation fingerprint.
+    if not -(2**63) <= body.seed < 2**63:
+        raise ApiError(422, "validation_error", "seed must fit in a signed 64-bit integer")
     # Created runs hold no active_slot; /start claims it, like `cli start` does when it inserts "pending".
     run = {
         "_id": str(uuid4()),
@@ -465,6 +468,11 @@ def inject_fault(run_id: str, body: FaultRequest, store=Depends(db)):
     run = get_run(store, run_id)
     if run["status"] != "active":
         raise ApiError(409, "conflict", "Faults can only be injected into an active run")
+    # A double click or a client retry must not restart the fault ramp, nor revive it after maintenance.
+    sim = (run.get("sim") or {}).get(body.connector_id) or {}
+    injected, cleared = sim.get("fault_injected_at"), sim.get("fault_cleared_at")
+    if injected and not (cleared and cleared > injected):
+        raise ApiError(409, "conflict", "An injected fault is already active on this connector")
     record = {
         "_id": str(uuid4()),
         "run_id": run_id,
@@ -472,8 +480,12 @@ def inject_fault(run_id: str, body: FaultRequest, store=Depends(db)):
         "connector_id": body.connector_id,
         "requested_at": now(),
         "consumed_at": None,
+        "pending": True,  # unset on consume; unique index pending_fault allows one per connector
     }
-    store.run_events.insert_one(record)
+    try:
+        store.run_events.insert_one(record)
+    except DuplicateKeyError:
+        raise ApiError(409, "conflict", "A fault injection is already pending for this connector") from None
     event(logger("api"), "fault_injection_requested", run_id=run_id, connector_id=body.connector_id)
     return FaultEventOut(
         event_id=record["_id"],

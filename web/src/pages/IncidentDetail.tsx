@@ -15,11 +15,26 @@ import {
   fmtTime,
 } from "../lib/format";
 
-const COMMANDS: { type: CommandType; states: string[]; hint: string }[] = [
-  { type: "acknowledge", states: ["open"], hint: "Xác nhận đã nhận biết sự cố" },
-  { type: "reduce_load", states: ["acknowledged", "mitigating"], hint: "Đặt giới hạn dòng mục tiêu" },
-  { type: "maintenance", states: ["mitigated"], hint: "Loại nguyên nhân lỗi mô phỏng" },
-  { type: "verify_recovery", states: ["mitigated"], hint: "Khôi phục giới hạn tải gốc và kiểm tra 120 giây" },
+// Mirrors lifecycle.handle_command so the UI never offers a command the backend rejects.
+const COMMANDS: { type: CommandType; allowed: (i: Incident) => boolean; hint: string }[] = [
+  { type: "acknowledge", allowed: (i) => i.state === "open", hint: "Xác nhận đã nhận biết sự cố" },
+  {
+    type: "reduce_load",
+    allowed: (i) => (i.state === "acknowledged" || i.state === "mitigating") && !i.load_reduction_verified_at,
+    hint: "Đặt giới hạn dòng mục tiêu",
+  },
+  {
+    type: "maintenance",
+    // Also from mitigating once derating was verified but the residual did not recover (CONTRACT §3).
+    allowed: (i) =>
+      i.state === "mitigated" || (i.state === "mitigating" && i.reduction_check_reason === "residual_not_recovered"),
+    hint: "Loại nguyên nhân lỗi mô phỏng",
+  },
+  {
+    type: "verify_recovery",
+    allowed: (i) => i.state === "mitigated",
+    hint: "Khôi phục giới hạn tải gốc và kiểm tra 120 giây",
+  },
 ];
 
 const TERMINAL = ["applied", "failed", "timed_out"];
@@ -210,8 +225,8 @@ function CommandPanel({
         </p>
       )}
       <div className="cmd-row">
-        {COMMANDS.map(({ type, states, hint }) => {
-          const allowed = states.includes(incident.state) && !resolved;
+        {COMMANDS.map(({ type, allowed: allows, hint }) => {
+          const allowed = allows(incident) && !resolved;
           return (
             <button
               key={type}
