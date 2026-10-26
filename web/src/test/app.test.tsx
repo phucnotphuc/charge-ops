@@ -115,6 +115,27 @@ describe("incident screen", () => {
     expect(screen.getByTestId("tracked-command")).toHaveTextContent("ACK chưa phải bằng chứng đã giảm dòng");
   });
 
+  it("unlocks maintenance in mitigating only after residual_not_recovered, like the backend", async () => {
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) return me("operator");
+      if (url.endsWith("/incidents/inc-1"))
+        return {
+          body: incident({
+            state: "mitigating",
+            load_reduction_verified_at: "2026-10-21T00:05:00Z",
+            reduction_check_reason: "residual_not_recovered",
+          }),
+        };
+      return { status: 404 };
+    });
+    renderAt("/incidents/inc-1", <IncidentDetail />, "/incidents/:id");
+
+    const maintenance = await screen.findByRole("button", { name: "Bảo trì" });
+    await waitFor(() => expect(maintenance).toBeEnabled());
+    // Derating already verified: the backend rejects another reduce_load.
+    expect(screen.getByRole("button", { name: "Giảm tải" })).toBeDisabled();
+  });
+
   it("shows an error state, not mock data, when the API fails", async () => {
     mockFetch((url) => {
       if (url.endsWith("/auth/me")) return unauthenticated;

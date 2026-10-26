@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 
 from chargeops.api import app
 from chargeops.domain import CONNECTORS, LOCATION, MANIFEST, window_evidence
-from chargeops.fleet import fleet_plan, physics
-from chargeops.model import ORIGINAL_LIMIT_A
+from chargeops.fleet import fleet_plan, physics, steady_load
+from chargeops.model import ORIGINAL_LIMIT_A, PROFILES
 from chargeops.simulator import Simulator
 from chargeops.worker import process_event, tick
 
@@ -125,6 +125,18 @@ def test_plan_profiles_independent_of_scenario_and_override_is_kept():
     faulty = next(c for c, p in overridden.items() if p.fault_onset_s is not None)
     assert overridden[faulty].profile_id == chosen
     assert len({p.profile_id for p in overridden.values()}) == 6
+
+
+def test_pinned_profile_without_steady_load_is_rejected(fleet):
+    plan = fleet_plan(11, "thermal_fault")
+    onset = next(p.fault_onset_s for p in plan.values() if p.fault_onset_s is not None)
+    tapering = next(p for p in sorted(PROFILES) if not steady_load(PROFILES[p], onset))
+    with pytest.raises(ValueError, match="no steady load"):
+        fleet_plan(11, "thermal_fault", tapering)
+    fleet_plan(11, "healthy", tapering)  # only the faulty connector needs a steady load
+    body = {"scenario": "thermal_fault", "seed": 11, "mode": "local", "profile": tapering}
+    response = fleet.client.post("/api/v1/demo-runs", json=body, headers=OPERATOR)
+    assert response.status_code == 422 and response.json()["error"]["code"] == "validation_error"
 
 
 def test_load_shapes_reuse_the_evaluation_model():

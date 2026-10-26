@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     dd_monitor_id: str = ""
     dd_trial_id: str = "hackathon-2026"
     log_dir: str = "logs"
+
+    @field_validator("operator_password_hash", mode="before")
+    @classmethod
+    def unescape_compose(cls, value):
+        # init_env.py writes '$$' for Compose; read without Compose (uvicorn + Vite) the '$$' stays literal.
+        # A scrypt hash never contains '$$' (every field is non-empty), so this is a no-op inside Compose.
+        return value.replace("$$", "$") if isinstance(value, str) else value
 
 
 @lru_cache

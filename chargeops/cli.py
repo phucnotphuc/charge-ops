@@ -7,6 +7,7 @@ from pymongo.errors import DuplicateKeyError
 
 from chargeops.config import settings
 from chargeops.domain import BASELINE_VERSION, SCENARIOS, now
+from chargeops.fleet import fleet_plan
 from chargeops.model import PROFILES
 from chargeops.storage import database, initialize
 
@@ -55,6 +56,10 @@ def main():
     if args.command == "start":
         if args.profile is not None and args.profile not in PROFILES:
             parser.exit(1, f"Unknown profile {args.profile}; see chargeops/profiles/autosun_v3.csv\n")
+        try:
+            fleet_plan(args.seed, args.scenario, args.profile)  # the simulator replays this plan every step
+        except ValueError as exc:
+            parser.exit(1, f"{exc}\n")
         run_id = str(uuid4())
         try:
             db.runs.insert_one(

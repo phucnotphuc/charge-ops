@@ -23,6 +23,13 @@ from chargeops.storage import database, fleet_window_rows, initialize
 
 WATCHED = ("inbox", "commands", "run_events")
 STATE_ID = "change_stream"
+GAUGE_FIELDS = (
+    "current_a",
+    "current_limit_a",
+    "connector_temperature_c",
+    "expected_temperature_c",
+    "ambient_temperature_c",
+)
 
 
 @contextmanager
@@ -79,13 +86,22 @@ class ChangeWaker:
         self.thread = threading.Thread(target=self._pump, daemon=True)
         self.thread.start()
 
-    def _pump(self):
+    def _pump(self, max_delay=30):
+        delay = 1
         while not self.stopping.is_set():
             try:
+                if self.stream is None:
+                    self.stream = self._open()
+                    event(self.log, "change_stream_reopened")
+                    delay = 1
                 change = self.stream.try_next()
             except Exception as exc:
-                event(self.log, "change_stream_unavailable", error_type=type(exc).__name__)
-                return
+                # Election, mongod restart, network blip: reopen with backoff; ticks keep running on the timer.
+                event(self.log, "change_stream_unavailable", error_type=type(exc).__name__, retry_s=delay)
+                self._close()
+                self.stopping.wait(delay)
+                delay = min(delay * 2, max_delay)
+                continue
             if change is None:
                 self.stopping.wait(0.05)
                 continue
@@ -110,9 +126,13 @@ class ChangeWaker:
         self.stopping.set()
         if self.thread:
             self.thread.join(timeout=2)
-        if self.stream is not None:
+        self._close()
+
+    def _close(self):
+        stream, self.stream = self.stream, None
+        if stream is not None:
             try:
-                self.stream.close()
+                stream.close()
             except Exception:
                 pass
 
@@ -298,6 +318,9 @@ def evaluate_window(db, stats, log, run, at, end, connector_id, rows):
     stats.increment("chargeops.residual_negative", sum(max(-r["residual"], 0) for r in block), tags=tags)
     stats.increment("chargeops.samples", len(block), tags=tags)
     stats.gauge("chargeops.quality", int(evidence["quality"]), tags=tags)
+    # Block means for the engineering dashboard only; alerting stays on the sample-weighted residual above.
+    for field in GAUGE_FIELDS if block else ():
+        stats.gauge(f"chargeops.{field}", sum(r[field] for r in block) / len(block), tags=tags)
     event(
         log,
         "metrics_emitted",

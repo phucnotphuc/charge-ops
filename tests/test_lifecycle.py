@@ -134,6 +134,7 @@ def test_full_loop_open_to_resolved(store, flow):
         "current_limit_a": 200,
         "fault_cleared": True,
         "fault_cleared_at": incident()["maintenance_applied_at"],
+        "fault_injection_open": False,  # maintenance also closes any operator-injected fault
     }
     assert store.runs.find_one()["sim"] == {"connector-1": device}
 

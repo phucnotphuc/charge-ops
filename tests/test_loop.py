@@ -219,6 +219,7 @@ def test_datadog_mode_never_opens_incident_without_webhook(store, monkeypatch):
             "measured_at": end - timedelta(seconds=60 - i * 5),
             "received_at": end,
             "current_a": 60,
+            "current_limit_a": 250,
             "ambient_temperature_c": 25,
             "connector_temperature_c": 51.4,
         }
@@ -237,6 +238,11 @@ def test_datadog_mode_never_opens_incident_without_webhook(store, monkeypatch):
     # Only three newest samples, not all 12 samples in the rolling window; connector-1 is exported first.
     assert stats.increment.call_args_list[2].args == ("chargeops.samples", 3)
     assert "connector_id:connector-1" in stats.increment.call_args_list[2].kwargs["tags"]
+    gauges = {c.args[0]: c.args[1] for c in stats.gauge.call_args_list[:6]}  # connector-1 first
+    assert gauges["chargeops.current_limit_a"] == 250
+    assert gauges["chargeops.expected_temperature_c"] == pytest.approx(
+        sum(r["expected_temperature_c"] for r in expected[-3:]) / 3
+    )
     tick(store, stats, Mock())
     assert stats.increment.call_count == 3 * 6  # restart/tick does not double export a block
 

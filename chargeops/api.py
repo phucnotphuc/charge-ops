@@ -37,6 +37,7 @@ from chargeops.domain import (
     now,
     with_residuals,
 )
+from chargeops.fleet import fleet_plan
 from chargeops.logging import event, logger
 from chargeops.model import PROFILES
 from chargeops.storage import database, initialize
@@ -191,7 +192,8 @@ def consume_event(event_id: str, store=Depends(db)):
                 {f"{key}.fault_injected_at": {"$lt": consumed}},
             ],
         },
-        {"$set": {f"{key}.fault_injected_at": consumed}},
+        # A new injection reopens the slot; an old retry never reopens a cleared fault.
+        {"$set": {f"{key}.fault_injected_at": consumed, f"{key}.{INJECTION_OPEN}": True}},
     )
     if not first.modified_count:
         return {"status": "duplicate"}
@@ -346,6 +348,7 @@ def command_result(command_id: str, body: CommandResult, store=Depends(db)):
         changes = {f"sim.{found['connector_id']}.{key}": value for key, value in found["sim"].items()}
         if found["sim"].get("fault_cleared"):  # when, so an injected fault is told apart from the seeded one
             changes[f"sim.{found['connector_id']}.fault_cleared_at"] = at
+            changes[f"sim.{found['connector_id']}.{INJECTION_OPEN}"] = False
         store.runs.update_one({"_id": found["run_id"]}, {"$set": changes})
     done = store.commands.update_one(
         {"_id": command_id, "status": {"$in": ["pending", "claimed"]}},
@@ -385,6 +388,13 @@ def create_run(body: DemoRunCreate, store=Depends(db)):
     profile = body.profile  # None: every connector's session comes from the seed
     if profile is not None and profile not in PROFILES:
         raise ApiError(422, "validation_error", f"Unknown profile {profile}")
+    # Checked here, not on DemoRunCreate: domain.py is in the evaluation fingerprint.
+    if not -(2**63) <= body.seed < 2**63:
+        raise ApiError(422, "validation_error", "seed must fit in a signed 64-bit integer")
+    try:
+        fleet_plan(body.seed, body.scenario, profile)  # the simulator replays this plan every step
+    except ValueError as exc:
+        raise ApiError(422, "validation_error", str(exc)) from None
     # Created runs hold no active_slot; /start claims it, like `cli start` does when it inserts "pending".
     run = {
         "_id": str(uuid4()),
@@ -461,6 +471,9 @@ def stop_run(run_id: str, store=Depends(db)):
     return run_out(get_run(store, run_id))
 
 
+INJECTION_OPEN = "fault_injection_open"
+
+
 @app.post(
     "/api/v1/demo-runs/{run_id}/inject-fault",
     status_code=202,
@@ -471,6 +484,14 @@ def inject_fault(run_id: str, body: FaultRequest, store=Depends(db)):
     run = get_run(store, run_id)
     if run["status"] != "active":
         raise ApiError(409, "conflict", "Faults can only be injected into an active run")
+    # Claimed atomically on the run, so a double click or a client retry can neither restart the fault ramp
+    # nor revive it after maintenance. Maintenance closes it; consuming the event re-opens it.
+    flag = f"sim.{body.connector_id}.{INJECTION_OPEN}"
+    claimed = store.runs.update_one(
+        {"_id": run_id, "status": "active", flag: {"$ne": True}}, {"$set": {flag: True}}
+    )
+    if not claimed.matched_count:
+        raise ApiError(409, "conflict", "A fault injection is already pending or active on this connector")
     record = {
         "_id": str(uuid4()),
         "run_id": run_id,
@@ -568,18 +589,18 @@ def connector_view(store, run, connector_id, latest):
     )
 
 
-def connector_views(store):
+def connector_views(store, ids=CONNECTORS):
     run = reporting_run(store)
     if not run:
         return []
     # Newest by measured_at, not arrival order: a late older sample must not replace the latest state.
     pipeline = [
-        {"$match": {"meta.run_id": run["_id"]}},
+        {"$match": {"meta.run_id": run["_id"], "meta.connector_id": {"$in": list(ids)}}},
         {"$sort": {"measured_at": -1, "received_at": -1}},
         {"$group": {"_id": "$meta.connector_id", "latest": {"$first": "$$ROOT"}}},
     ]
     latest = {row["_id"]: row["latest"] for row in store.telemetry.aggregate(pipeline)}
-    return [connector_view(store, run, cid, latest.get(cid)) for cid in CONNECTORS]
+    return [connector_view(store, run, cid, latest.get(cid)) for cid in ids]
 
 
 @app.get("/api/v1/connectors", response_model=ConnectorList)
@@ -589,10 +610,14 @@ def connectors(store=Depends(db)):
 
 @app.get("/api/v1/connectors/{connector_id}", response_model=ConnectorOut)
 def connector(connector_id: str, store=Depends(db)):
-    found = next((c for c in connector_views(store) if c.connector_id == connector_id), None)
-    if not found:
+    if connector_id not in CONNECTORS:
         raise ApiError(404, "not_found", "Connector not found")
-    return found
+    views = connector_views(store, [connector_id])
+    if views:
+        return views[0]
+    # No run to report yet (fresh database): a known connector without data, not a 404.
+    station_id, charger_id = LOCATION[connector_id]
+    return ConnectorOut(connector_id=connector_id, station_id=station_id, charger_id=charger_id, stale=True)
 
 
 def encode_cursor(row):
