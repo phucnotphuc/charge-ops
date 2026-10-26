@@ -93,6 +93,23 @@ def test_stale_resume_token_retries_without_it():
     waker.stop()
 
 
+def test_stream_error_reopens_and_keeps_waking():
+    class Broken(FakeStream):
+        def try_next(self):
+            raise PyMongoError("primary stepped down")
+
+    db = FakeDb(Broken([]))
+    waker = ChangeWaker(db, Log())
+    waker.start()
+    db.stream = FakeStream([{"operationType": "insert"}])  # the next watch() gets a healthy stream
+    assert waker.wait(3) is True  # woken by the reopened stream after the 1 s backoff
+    assert len(db.calls) == 2
+    lines = waker.log.lines
+    assert any("change_stream_unavailable" in line for line in lines)
+    assert any("change_stream_reopened" in line for line in lines)
+    waker.stop()
+
+
 def test_commit_without_new_events_writes_nothing():
     db = FakeDb(FakeStream([]))
     waker = ChangeWaker(db, Log())

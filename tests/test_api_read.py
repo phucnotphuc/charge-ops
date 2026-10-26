@@ -110,6 +110,10 @@ def test_connectors_without_any_run_is_empty_and_unknown_connector_404(client, s
     assert client.get("/api/v1/connectors").json() == {"items": [], "next_cursor": None}
     response = client.get("/api/v1/connectors/connector-9")
     assert response.status_code == 404 and response.json()["error"]["code"] == "not_found"
+    # A known connector on a fresh database is "no data yet", not "not found".
+    known = client.get("/api/v1/connectors/connector-1")
+    assert known.status_code == 200
+    assert known.json()["latest"] is None and known.json()["run_id"] is None and known.json()["stale"]
 
 
 def window(start, end):
@@ -321,10 +325,35 @@ def test_inject_fault_is_not_repeated_while_pending_or_active(client, store):
         client.post(f"/api/v1/simulator/events/{item['_id']}/consume", headers=simulator).raise_for_status()
     response = client.post(path, json=body, headers=OPERATOR)
     assert response.status_code == 409 and response.json()["error"]["code"] == "conflict"
-    # Maintenance cleared it afterwards: a new injection is a new request.
-    later = now() + timedelta(seconds=60)
-    store.runs.update_one({"_id": RUN}, {"$set": {"sim.connector-1.fault_cleared_at": later}})
+    # Maintenance applied afterwards: a new injection is a new request.
+    store.commands.insert_one(
+        {
+            "_id": "maint-1",
+            "run_id": RUN,
+            "connector_id": "connector-1",
+            "type": "maintenance",
+            "status": "claimed",
+            "dispatched_at": now(),
+            "sim": {"fault_cleared": True},
+        }
+    )
+    client.post(
+        "/api/v1/simulator/commands/maint-1/result", json={"status": "applied"}, headers=simulator
+    ).raise_for_status()
     assert client.post(path, json=body, headers=OPERATOR).status_code == 202
+
+
+def test_injection_consumed_after_maintenance_stays_guarded(client, store):
+    active_run(store)
+    path, body = f"/api/v1/demo-runs/{RUN}/inject-fault", {"connector_id": "connector-1"}
+    assert client.post(path, json=body, headers=OPERATOR).status_code == 202
+    # Maintenance lands before the simulator consumed the event: physics will still apply the injection.
+    flag = "sim.connector-1.fault_injection_open"
+    store.runs.update_one({"_id": RUN}, {"$set": {flag: False}})
+    simulator = {"X-Simulator-Secret": "s" * 32}
+    for item in client.get("/api/v1/simulator/events", headers=simulator).json():
+        client.post(f"/api/v1/simulator/events/{item['_id']}/consume", headers=simulator).raise_for_status()
+    assert client.post(path, json=body, headers=OPERATOR).status_code == 409
 
 
 def test_seed_outside_int64_is_422_not_500(client):

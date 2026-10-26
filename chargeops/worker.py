@@ -79,13 +79,22 @@ class ChangeWaker:
         self.thread = threading.Thread(target=self._pump, daemon=True)
         self.thread.start()
 
-    def _pump(self):
+    def _pump(self, max_delay=30):
+        delay = 1
         while not self.stopping.is_set():
             try:
+                if self.stream is None:
+                    self.stream = self._open()
+                    event(self.log, "change_stream_reopened")
+                    delay = 1
                 change = self.stream.try_next()
             except Exception as exc:
-                event(self.log, "change_stream_unavailable", error_type=type(exc).__name__)
-                return
+                # Election, mongod restart, network blip: reopen with backoff; ticks keep running on the timer.
+                event(self.log, "change_stream_unavailable", error_type=type(exc).__name__, retry_s=delay)
+                self._close()
+                self.stopping.wait(delay)
+                delay = min(delay * 2, max_delay)
+                continue
             if change is None:
                 self.stopping.wait(0.05)
                 continue
@@ -110,9 +119,13 @@ class ChangeWaker:
         self.stopping.set()
         if self.thread:
             self.thread.join(timeout=2)
-        if self.stream is not None:
+        self._close()
+
+    def _close(self):
+        stream, self.stream = self.stream, None
+        if stream is not None:
             try:
-                self.stream.close()
+                stream.close()
             except Exception:
                 pass
 

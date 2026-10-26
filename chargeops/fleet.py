@@ -76,6 +76,12 @@ def fleet_plan(seed, scenario, profile=None):
         if profile in profiles:  # keep every connector on a different session
             profiles[profiles.index(profile)] = profiles[pinned]
         profiles[pinned] = profile
+        if scenario == "thermal_fault" and not steady_load(PROFILES[profile], onset):
+            # `faulty` was picked for a steady load; a tapering pinned session would fail retest on low_load.
+            raise ValueError(
+                f"profile {profile} has no steady load after the fault onset ({onset} s) for seed {seed}; "
+                "pick another seed or profile"
+            )
     plans = {}
     for cid, profile_id, (change, factor, drop) in zip(CONNECTORS, profiles, shapes, strict=True):
         fault = scenario == "thermal_fault" and cid == faulty
