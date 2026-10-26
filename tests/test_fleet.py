@@ -21,6 +21,19 @@ RUN = "00000000-0000-4000-8000-0000000000f1"
 T0 = datetime(2026, 10, 21, 3, 0, tzinfo=UTC)  # on a 15-second boundary
 
 
+def test_retry_old_fault_event_preserves_new_injection(store):
+    from chargeops.api import consume_event
+
+    newer = T0 + timedelta(seconds=100)
+    store.runs.insert_one({"_id": RUN, "sim": {"connector-1": {"fault_injected_at": newer}}})
+    store.run_events.insert_one({
+        "_id": "old", "type": "inject_fault", "run_id": RUN,
+        "connector_id": "connector-1", "consumed_at": T0,
+    })
+    assert consume_event("old", store) == {"status": "duplicate"}
+    assert store.runs.find_one({"_id": RUN})["sim"]["connector-1"]["fault_injected_at"] == newer
+
+
 class Harness:
     """Simulator, API and worker on one simulated clock; the simulator talks to the API over HTTP only."""
 

@@ -185,8 +185,14 @@ def consume_event(event_id: str, store=Depends(db)):
     consumed = store.run_events.find_one({"_id": event_id})["consumed_at"]
     key = f"sim.{found['connector_id']}"
     store.runs.update_one(
-        {"_id": found["run_id"], f"{key}.fault_injected_at": {"$ne": consumed}},
-        # Re-open: maintenance may have closed the injection before the simulator consumed it.
+        {
+            "_id": found["run_id"],
+            "$or": [
+                {f"{key}.fault_injected_at": None},
+                {f"{key}.fault_injected_at": {"$lt": consumed}},
+            ],
+        },
+        # A new injection reopens the slot; an old retry never reopens a cleared fault.
         {"$set": {f"{key}.fault_injected_at": consumed, f"{key}.{INJECTION_OPEN}": True}},
     )
     if not first.modified_count:

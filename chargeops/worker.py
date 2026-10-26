@@ -191,12 +191,14 @@ def process_event(db, item, at, monitor_id):
 
 def manage_run(db, at):
     # Idempotent: repairs a crash between activation and the post-activation charge.
-    started = [
-        r["_id"] for r in db.runs.find({"mode": "datadog", "started_at": {"$exists": True}}, {"_id": 1})
-    ]
-    if started:
+    # Legacy runs recover ownership from the durable budget before adopting the current trial.
+    owners = {rid: b["_id"] for b in db.budgets.find() for rid in b.get("run_ids", [])}
+    for run in db.runs.find({"mode": "datadog", "started_at": {"$exists": True}}):
+        trial_id = run.get("dd_trial_id") or owners.get(run["_id"], settings().dd_trial_id)
+        if not run.get("dd_trial_id"):
+            db.runs.update_one({"_id": run["_id"]}, {"$set": {"dd_trial_id": trial_id}})
         db.budgets.update_one(
-            {"_id": settings().dd_trial_id}, {"$addToSet": {"run_ids": {"$each": started}}}, upsert=True
+            {"_id": trial_id}, {"$addToSet": {"run_ids": run["_id"]}}, upsert=True
         )
     pending = db.runs.find_one({"status": "pending"})
     if pending:
@@ -225,7 +227,10 @@ def manage_run(db, at):
                     },
                 )
                 return
-        activated = db.runs.update_one(still_pending, {"$set": {"status": "active", "started_at": at}})
+        activation = {"status": "active", "started_at": at}
+        if pending["mode"] == "datadog":
+            activation["dd_trial_id"] = settings().dd_trial_id
+        activated = db.runs.update_one(still_pending, {"$set": activation})
         if activated.matched_count == 1 and pending["mode"] == "datadog":
             db.budgets.update_one({"_id": settings().dd_trial_id}, {"$addToSet": {"run_ids": pending["_id"]}})
     run = db.runs.find_one({"status": "active"})

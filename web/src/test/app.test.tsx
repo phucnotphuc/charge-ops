@@ -50,6 +50,26 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("incident screen", () => {
+  it.each([
+    ["residual_not_recovered", true],
+    ["load_not_reduced", false],
+    ["insufficient_data", false],
+    [null, false],
+  ])("gates maintenance during mitigation for reason %s", async (reason, allowed) => {
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) return me("operator");
+      if (url.endsWith("/incidents/inc-1")) return {
+        body: { ...incident({ state: "mitigating" }), reduction_check_reason: reason },
+      };
+      return { status: 404 };
+    });
+    renderAt("/incidents/inc-1", <IncidentDetail />, "/incidents/:id");
+    const button = await screen.findByRole("button", { name: "Bảo trì" });
+    await waitFor(() => expect(screen.queryByTestId("readonly-note")).not.toBeInTheDocument());
+    if (allowed) expect(button).toBeEnabled();
+    else expect(button).toBeDisabled();
+  });
+
   it("renders state, source and the two-step proof, and disables commands for a viewer", async () => {
     mockFetch((url) => {
       if (url.endsWith("/auth/me")) return unauthenticated;
