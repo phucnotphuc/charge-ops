@@ -23,6 +23,13 @@ from chargeops.storage import database, fleet_window_rows, initialize
 
 WATCHED = ("inbox", "commands", "run_events")
 STATE_ID = "change_stream"
+GAUGE_FIELDS = (
+    "current_a",
+    "current_limit_a",
+    "connector_temperature_c",
+    "expected_temperature_c",
+    "ambient_temperature_c",
+)
 
 
 @contextmanager
@@ -306,6 +313,9 @@ def evaluate_window(db, stats, log, run, at, end, connector_id, rows):
     stats.increment("chargeops.residual_negative", sum(max(-r["residual"], 0) for r in block), tags=tags)
     stats.increment("chargeops.samples", len(block), tags=tags)
     stats.gauge("chargeops.quality", int(evidence["quality"]), tags=tags)
+    # Block means for the engineering dashboard only; alerting stays on the sample-weighted residual above.
+    for field in GAUGE_FIELDS if block else ():
+        stats.gauge(f"chargeops.{field}", sum(r[field] for r in block) / len(block), tags=tags)
     event(
         log,
         "metrics_emitted",

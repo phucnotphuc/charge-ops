@@ -43,49 +43,220 @@ def monitor_specs():
     }
 
 
-def dashboard():
-    widgets = []
-    for title, query in [
-        ("Telemetry quality (1 = valid)", "min:chargeops.quality{env:hackathon} by {run_id,connector_id}"),
-        ("Samples received", "sum:chargeops.samples{env:hackathon} by {run_id,connector_id}.as_count()"),
-    ]:
-        widgets.append(
+SCOPE = "{env:hackathon,$run_id,$station_id,$connector_id}"
+TEMPLATE_VARIABLES = [
+    {"name": tag, "prefix": tag, "default": "*"} for tag in ("run_id", "station_id", "connector_id")
+]
+COMMAND_LOGS = "service:chargeops @event:(webhook_received OR webhook_processed OR command_requested OR command_applied OR command_rejected)"
+
+
+def metric(name, query):
+    return {"data_source": "metrics", "name": name, "query": query}
+
+
+def log_count(name, query, group_by=None):
+    spec = {
+        "data_source": "logs",
+        "name": name,
+        "search": {"query": query},
+        "indexes": ["*"],
+        "compute": {"aggregation": "count"},
+    }
+    if group_by:
+        spec["group_by"] = [
+            {"facet": group_by, "limit": 10, "sort": {"aggregation": "count", "order": "desc"}}
+        ]
+    return spec
+
+
+def residual_queries(by="{connector_id}"):
+    # Same sample-weighted mean as the thermal monitor: Σ residual / Σ samples.
+    return [
+        metric(name, f"sum:chargeops.{series}{SCOPE} by {by}.as_count()")
+        for name, series in [("a", "residual_positive"), ("b", "residual_negative"), ("c", "samples")]
+    ]
+
+
+def timeseries(title, queries, formulas=None, display="line", markers=()):
+    return {
+        "type": "timeseries",
+        "title": title,
+        "show_legend": True,
+        "requests": [
             {
-                "definition": {
-                    "type": "timeseries",
-                    "title": title,
-                    "requests": [{"q": query, "display_type": "line"}],
-                }
+                "queries": queries,
+                "formulas": [{"formula": f} for f in formulas or [q["name"] for q in queries]],
+                "response_format": "timeseries",
+                "display_type": display,
             }
-        )
-    widgets.append(
-        {
-            "definition": {
-                "type": "timeseries",
-                "title": "Thermal residual (sample weighted)",
+        ],
+        "markers": [
+            {"value": f"y = {y}", "display_type": kind, "label": label} for y, kind, label in markers
+        ],
+    }
+
+
+def monitors(title):
+    return {
+        "type": "manage_status",
+        "title": title,
+        "query": "ChargeOps",
+        "summary_type": "monitors",
+        "display_format": "countsAndList",
+    }
+
+
+def log_stream(title, query):
+    return {
+        "type": "list_stream",
+        "title": title,
+        "requests": [
+            {
+                "columns": [
+                    {"field": "status_line", "width": "auto"},
+                    {"field": "timestamp", "width": "auto"},
+                    {"field": "content", "width": "full"},
+                ],
+                "query": {"data_source": "logs_stream", "query_string": query, "indexes": []},
+                "response_format": "event_list",
+            }
+        ],
+    }
+
+
+def dashboard(title, description, widgets):
+    return {
+        "title": title,
+        "description": description,
+        "layout_type": "ordered",
+        "template_variables": TEMPLATE_VARIABLES,
+        "widgets": [{"definition": widget} for widget in widgets],
+    }
+
+
+def engineering_dashboard():
+    thresholds = [(8, "error dashed", "cảnh báo 8 °C"), (3, "ok dashed", "phục hồi 3 °C")]
+    return dashboard(
+        "ChargeOps — Kỹ sư điện / vận hành trạm",
+        "Connector nào đang nóng bất thường so với tải và nhiệt môi trường, giảm tải có tác dụng không.",
+        [
+            monitors("Trạng thái cảnh báo"),
+            {
+                "type": "toplist",
+                "title": "Residual trung bình theo connector (trong khung thời gian)",
                 "requests": [
                     {
-                        "queries": [
+                        "queries": residual_queries(),
+                        "formulas": [
                             {
-                                "data_source": "metrics",
-                                "name": name,
-                                "query": f"sum:chargeops.{metric}{{env:hackathon}} by {{run_id,connector_id}}.as_count()",
+                                "formula": "(a-b)/c",
+                                "conditional_formats": [
+                                    {"comparator": ">", "value": 8, "palette": "white_on_red"},
+                                    {"comparator": ">", "value": 3, "palette": "white_on_yellow"},
+                                    {"comparator": "<=", "value": 3, "palette": "white_on_green"},
+                                ],
                             }
-                            for name, metric in [
-                                ("a", "residual_positive"),
-                                ("b", "residual_negative"),
-                                ("c", "samples"),
-                            ]
                         ],
-                        "formulas": [{"formula": "(a-b)/c"}],
-                        "response_format": "timeseries",
-                        "display_type": "line",
+                        "response_format": "scalar",
                     }
                 ],
-            }
-        }
+            },
+            timeseries(
+                "Residual nhiệt (°C, trung bình theo mẫu)",
+                residual_queries(),
+                ["(a-b)/c"],
+                markers=thresholds,
+            ),
+            timeseries(
+                "Nhiệt đo được và nhiệt kỳ vọng theo tải (°C)",
+                [
+                    metric("measured", f"avg:chargeops.connector_temperature_c{SCOPE} by {{connector_id}}"),
+                    metric("expected", f"avg:chargeops.expected_temperature_c{SCOPE} by {{connector_id}}"),
+                ],
+            ),
+            timeseries(
+                "Dòng sạc và giới hạn dòng (A) — giảm tải hiện ở đây",
+                [
+                    metric("current", f"avg:chargeops.current_a{SCOPE} by {{connector_id}}"),
+                    metric("limit", f"avg:chargeops.current_limit_a{SCOPE} by {{connector_id}}"),
+                ],
+            ),
+            timeseries(
+                "Nhiệt độ môi trường (°C)",
+                [metric("ambient", f"avg:chargeops.ambient_temperature_c{SCOPE} by {{station_id}}")],
+            ),
+            log_stream("Webhook và lệnh vận hành", COMMAND_LOGS),
+        ],
     )
-    return {"title": "ChargeOps — minimal operational loop", "layout_type": "ordered", "widgets": widgets}
+
+
+def platform_dashboard():
+    api = "{env:hackathon,service:chargeops-api}"
+    worker = "{env:hackathon,service:chargeops-worker}"
+    simulator = "{env:hackathon,service:chargeops-simulator}"
+    return dashboard(
+        "ChargeOps — IT / SRE nền tảng",
+        "Hệ thống có khỏe không: API, worker, luồng telemetry, chất lượng dữ liệu và lỗi.",
+        [
+            monitors("Trạng thái monitor"),
+            timeseries(
+                "API — số request theo endpoint",
+                [metric("a", f"sum:trace.fastapi.request.hits{api} by {{resource_name}}.as_count()")],
+                display="bars",
+            ),
+            timeseries(
+                "API — độ trễ p50 / p95 (s)",
+                [
+                    metric("p50", f"p50:trace.fastapi.request{api}"),
+                    metric("p95", f"p95:trace.fastapi.request{api}"),
+                ],
+            ),
+            timeseries(
+                "API — response theo nhóm mã HTTP",
+                [
+                    metric(
+                        "a",
+                        f"sum:trace.fastapi.request.hits.by_http_status{api} by {{http.status_class}}.as_count()",
+                    )
+                ],
+                display="bars",
+            ),
+            timeseries(
+                "Simulator → API — request theo mã HTTP",
+                [
+                    metric(
+                        "a",
+                        f"sum:trace.http.request.hits.by_http_status{simulator} by {{http.status_class}}.as_count()",
+                    )
+                ],
+                display="bars",
+            ),
+            timeseries(
+                "Worker — số vòng xử lý và độ trễ p95 (s)",
+                [
+                    metric("ticks", f"sum:trace.worker.tick.hits{worker}.as_count()"),
+                    metric("p95", f"p95:trace.worker.tick{worker}"),
+                ],
+            ),
+            timeseries(
+                "Mẫu telemetry nhận theo connector (mỗi block 15 s)",
+                [metric("a", f"sum:chargeops.samples{SCOPE} by {{connector_id}}.as_count()")],
+                display="bars",
+            ),
+            timeseries(
+                "Chất lượng cửa sổ telemetry (1 = hợp lệ, 0 = thiếu/cũ)",
+                [metric("a", f"min:chargeops.quality{SCOPE} by {{connector_id}}")],
+            ),
+            timeseries("Log theo sự kiện", [log_count("a", "service:chargeops", "@event")], display="bars"),
+            log_stream(
+                "Lỗi, retry và lệnh bị từ chối",
+                "service:chargeops (status:error OR @event:ingest_retry OR @event:worker_retry OR @event:command_rejected)",
+            ),
+        ],
+    )
+
+
+DASHBOARDS = {"dashboard": engineering_dashboard, "dashboard_platform": platform_dashboard}
 
 
 def main():
@@ -187,15 +358,17 @@ def main():
         )
         state["composite"] = result["id"]
         save()
-        result = call(
-            "PUT" if "dashboard" in state else "POST",
-            f"/dashboard/{state['dashboard']}" if "dashboard" in state else "/dashboard",
-            dashboard(),
-        )
-        state["dashboard"] = result["id"]
-        save()
+        for key, build in DASHBOARDS.items():
+            result = call(
+                "PUT" if key in state else "POST",
+                f"/dashboard/{state[key]}" if key in state else "/dashboard",
+                build(),
+            )
+            state[key] = result["id"]
+            save()
     print(f"Set DD_MONITOR_ID={state['composite']} in .env, then recreate worker.")
-    print(f"Dashboard: https://app.{site}/dashboard/{state['dashboard']}")
+    for key in DASHBOARDS:
+        print(f"Dashboard: https://app.{site}/dashboard/{state[key]}")
 
 
 if __name__ == "__main__":
