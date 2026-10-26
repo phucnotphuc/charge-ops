@@ -211,7 +211,9 @@ function CommandPanel({
       )}
       <div className="cmd-row">
         {COMMANDS.map(({ type, states, hint }) => {
-          const allowed = states.includes(incident.state) && !resolved;
+          const maintenanceUnlocked = type === "maintenance" && incident.state === "mitigating"
+            && incident.reduction_check_reason === "residual_not_recovered";
+          const allowed = (states.includes(incident.state) || maintenanceUnlocked) && !resolved;
           return (
             <button
               key={type}

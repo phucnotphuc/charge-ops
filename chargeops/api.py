@@ -184,7 +184,13 @@ def consume_event(event_id: str, store=Depends(db)):
     consumed = store.run_events.find_one({"_id": event_id})["consumed_at"]
     key = f"sim.{found['connector_id']}"
     store.runs.update_one(
-        {"_id": found["run_id"], f"{key}.fault_injected_at": {"$ne": consumed}},
+        {
+            "_id": found["run_id"],
+            "$or": [
+                {f"{key}.fault_injected_at": None},
+                {f"{key}.fault_injected_at": {"$lt": consumed}},
+            ],
+        },
         {"$set": {f"{key}.fault_injected_at": consumed}},
     )
     if not first.modified_count:

@@ -8,6 +8,37 @@ from chargeops.domain import now
 from chargeops.worker import ChangeWaker, run_loop
 
 
+def test_trial_switch_preserves_historical_budget(store, monkeypatch):
+    monkeypatch.setenv("DD_TRIAL_ID", "new-trial")
+    monkeypatch.setenv("DD_MONITOR_ID", "123")
+    settings.cache_clear()
+    old_ids = [f"old-{i}" for i in range(20)]
+    store.budgets.insert_one({"_id": "old-trial", "run_ids": old_ids})
+    store.runs.insert_many([
+        {"_id": rid, "mode": "datadog", "status": "stopped", "started_at": now()}
+        for rid in old_ids
+    ])
+    store.runs.insert_one({"_id": "new", "mode": "datadog", "status": "pending"})
+    worker.manage_run(store, now())
+    assert store.runs.find_one({"_id": "new"})["status"] == "active"
+    assert store.runs.find_one({"_id": "new"})["dd_trial_id"] == "new-trial"
+    assert store.budgets.find_one({"_id": "new-trial"})["run_ids"] == ["new"]
+    worker.manage_run(store, now())
+    assert store.budgets.find_one({"_id": "new-trial"})["run_ids"] == ["new"]
+
+
+def test_reconcile_after_trial_switch_repairs_original_trial(store, monkeypatch):
+    monkeypatch.setenv("DD_TRIAL_ID", "new-trial")
+    settings.cache_clear()
+    store.runs.insert_one({
+        "_id": "old", "mode": "datadog", "status": "stopped", "started_at": now(),
+        "dd_trial_id": "old-trial",
+    })
+    worker.manage_run(store, now())
+    assert store.budgets.find_one({"_id": "old-trial"})["run_ids"] == ["old"]
+    assert store.budgets.find_one({"_id": "new-trial"}) is None
+
+
 class FakeStream:
     def __init__(self, changes, token="tok-1"):
         self.changes = list(changes)

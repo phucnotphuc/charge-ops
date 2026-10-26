@@ -93,6 +93,7 @@ export interface Incident {
   target_current_a?: number | null;
   load_reduction_verified_at?: string | null;
   reduction_check?: "load_reduction_ineffective" | "load_reduction_unverified" | null;
+  reduction_check_reason?: "residual_not_recovered" | "load_not_reduced" | "insufficient_data" | null;
   maintenance_applied_at?: string | null;
   mitigated_at?: string | null;
   timeline: TimelineEvent[];
