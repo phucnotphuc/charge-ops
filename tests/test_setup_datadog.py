@@ -56,3 +56,52 @@ def test_composite_message_links_dashboard_and_logs_and_keeps_webhook():
 
 def test_dashboard_url():
     assert sd.dashboard_url("datadoghq.com", "x") == "https://app.datadoghq.com/dashboard/x"
+
+
+def test_stale_and_worker_monitors_alert_on_no_data():
+    specs = sd.extra_monitor_specs(URL)
+    for key in ("stale", "worker"):
+        assert specs[key]["options"]["notify_no_data"] is True
+        assert specs[key]["options"]["no_data_timeframe"] == 4
+
+
+def test_main_orders_resources_and_second_run_only_puts(monkeypatch, tmp_path):
+    import json
+
+    import httpx
+
+    calls = []
+    counter = iter(range(1, 1000))
+
+    def handler(request):
+        body = json.loads(request.content) if request.content else None
+        calls.append((request.method, request.url.path, body))
+        if request.method == "GET":
+            return httpx.Response(404, json={})
+        return httpx.Response(200, json={"id": next(counter)})
+
+    real_client = httpx.Client
+    monkeypatch.setattr(sd.httpx, "Client", lambda **kw: real_client(transport=httpx.MockTransport(handler), **kw))
+    monkeypatch.setattr(sd, "load_dotenv", lambda *a, **k: None)
+    for key in ("DD_API_KEY", "DD_APP_KEY", "WEBHOOK_SECRET"):
+        monkeypatch.setenv(key, "test-value")
+    monkeypatch.setenv("DD_SITE", "ap1.datadoghq.com")
+    state = tmp_path / "state.json"
+    monkeypatch.setattr(
+        "sys.argv", ["setup_datadog.py", "--webhook-url", "https://example.test/hook", "--state", str(state)]
+    )
+
+    sd.main()
+    created = [(p, b) for m, p, b in calls if m == "POST" and p.endswith(("/monitor", "/dashboard"))]
+    last_dashboard = max(i for i, (p, _) in enumerate(created) if p.endswith("/dashboard"))
+    composite = next(i for i, (_, b) in enumerate(created) if b.get("type") == "composite")
+    assert last_dashboard < composite
+    saved = json.loads(state.read_text())
+    assert sd.dashboard_url("ap1.datadoghq.com", saved["dashboard"]) in created[composite][1]["message"]
+
+    calls.clear()
+    sd.main()
+    assert not [1 for m, p, _ in calls if m == "POST" and p.endswith(("/monitor", "/dashboard"))]
+    puts = [p for m, p, _ in calls if m == "PUT"]
+    assert sum("/monitor/" in p for p in puts) == 6  # thermal, quality, stale, worker, stuck, composite
+    assert sum("/dashboard/" in p for p in puts) == 2

@@ -183,7 +183,12 @@ def extra_monitor_specs(engineering_url):
             "type": "query alert",
             "query": "sum(last_2m):sum:chargeops.samples{env:hackathon} by {run_id,connector_id}.as_count() < 12",
             "message": "Connector {{connector_id.name}} gửi dưới 12 mẫu trong 2 phút. " + investigate(engineering_url),
-            "options": {"thresholds": {"critical": 12}, "notify_no_data": False, "require_full_window": True},
+            "options": {
+                "thresholds": {"critical": 12},
+                "notify_no_data": True,
+                "no_data_timeframe": 4,
+                "require_full_window": True,
+            },
         },
         "worker": {
             "name": "ChargeOps worker heartbeat",
@@ -193,7 +198,7 @@ def extra_monitor_specs(engineering_url):
             "options": {
                 "thresholds": {"critical": 1},
                 "notify_no_data": True,
-                "no_data_timeframe": 3,
+                "no_data_timeframe": 4,
                 "require_full_window": False,
             },
         },

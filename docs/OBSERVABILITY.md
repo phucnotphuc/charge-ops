@@ -51,15 +51,17 @@ Tài liệu này mô tả các tín hiệu, dashboard, monitor và cách điều
 | `ChargeOps thermal residual` (thermal) | residual trung bình theo mẫu, `last_1m` | > 8 °C, phục hồi 3 °C | không |
 | `ChargeOps valid telemetry window` (quality) | `min:chargeops.quality`, `last_1m` | > 0.5 | không |
 | `ChargeOps thermal incident` (composite) | `thermal && quality` | cả hai cùng cảnh báo | **có** (`@webhook-chargeops-minimal`), duy nhất |
-| `ChargeOps telemetry stale` (stale) | `sum:chargeops.samples` theo `run_id,connector_id`, `last_2m` | < 12 mẫu | không |
-| `ChargeOps worker heartbeat` (worker) | `sum:chargeops.worker.tick`, `last_2m` | < 1; `notify_no_data` bật (3 phút) | không |
+| `ChargeOps telemetry stale` (stale) | `sum:chargeops.samples` theo `run_id,connector_id`, `last_2m` | < 12 mẫu; `notify_no_data` bật (4 phút) | không |
+| `ChargeOps worker heartbeat` (worker) | `sum:chargeops.worker.tick`, `last_2m` | < 1; `notify_no_data` bật (4 phút) | không |
 | `ChargeOps derating not resolving` (stuck) | `max:chargeops.incident.state_age_s{state:mitigating}`, `last_5m` | > 600 s | không |
+
+Lưu ý: monitor `stale` cũng chuyển sang cảnh báo no-data khoảng 4 phút sau khi một run kết thúc (bình thường, không gọi webhook). Monitor `worker` sẽ cảnh báo bất cứ khi nào `DD_METRICS_ENABLED=false`, vì khi đó không có heartbeat.
 
 Chỉ monitor composite gọi webhook; các monitor còn lại chỉ có link điều tra trong nội dung cảnh báo.
 
 ## 4. Lộ trình điều tra một sự cố
 
-1. Monitor composite cảnh báo. Nội dung chứa link dashboard kỹ sư đã lọc sẵn theo `run_id` và `connector_id` (template variable) và link Logs.
+1. Monitor composite cảnh báo. Nội dung chứa link dashboard kỹ sư dự kiến lọc sẵn (chưa kiểm chứng) theo `run_id` và `connector_id` (template variable) và link Logs.
 2. Mở dashboard kỹ sư: xem biểu đồ "Residual nhiệt" với vạch 8 °C / 3 °C và các event `source:chargeops` phủ lên để biết sự cố mở, giảm tải, phục hồi lúc nào.
 3. Xem "Dòng sạc và giới hạn dòng": dòng có bị hạ xuống giới hạn mới sau lệnh giảm tải không.
 4. Xem "Thời gian ở trạng thái hiện tại" và "Sự cố đang mở": sự cố có kẹt ở trạng thái giảm tải quá 600 s không (monitor `stuck`).
