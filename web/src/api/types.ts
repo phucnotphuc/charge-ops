@@ -139,4 +139,11 @@ export type EvaluationStats = Schemas["Stats"];
 
 export type CreateRunBody = Schemas["DemoRunCreate"];
 
+/** GET /stations/{id}: public, anonymous driver view. */
+export type StationOut = Schemas["StationOut"];
+export type StationConnector = Schemas["StationConnector"];
+export type FleetOut = Schemas["FleetOut"];
+export type TrendOut = Schemas["TrendOut"];
+export type IncidentSummary = Schemas["IncidentSummary"];
+
 export const idOf = (x: { id?: string; _id?: string }): string => x.id ?? x._id ?? "";

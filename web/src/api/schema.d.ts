@@ -1795,6 +1795,7 @@ export interface operations {
         parameters: {
             query?: {
                 run_id?: string | null;
+                station_id?: ("station-1" | "station-2") | null;
             };
             header?: never;
             path?: never;

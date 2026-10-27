@@ -79,9 +79,12 @@ def seconds_between(start, end):
     return {"$dateDiff": {"startDate": start, "endDate": end, "unit": "second"}}
 
 
-def incident_summary_pipeline(run_id):
+def incident_summary_pipeline(run_id, connector_ids=None):
+    match = {"run_id": run_id} if run_id else {}
+    if connector_ids:
+        match["connector_id"] = {"$in": list(connector_ids)}
     return [
-        {"$match": {"run_id": run_id} if run_id else {}},
+        {"$match": match},
         {
             "$facet": {
                 "by_state": [{"$group": {"_id": "$state", "count": {"$sum": 1}}}, {"$sort": {"_id": 1}}],
