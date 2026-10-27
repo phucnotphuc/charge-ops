@@ -38,15 +38,18 @@ def emit_run_signals(db, stats, run, at):
 def emit_timeline_events(db, stats, incident, tags):
     """At-least-once: the cursor advances after the events are handed to DogStatsD."""
     cursor = db.dd_event_cursor.find_one({"_id": incident["_id"]}) or {"sent": 0}
+    cursor_before = cursor["sent"]
     timeline = incident.get("timeline", [])
+    if len(timeline) < cursor["sent"]:  # timeline shrank (retest reset): restart rather than skip new entries
+        cursor["sent"] = 0
     for entry in timeline[cursor["sent"] :]:
         stats.event(
             f"ChargeOps {entry['event']} · {incident['connector_id']}",
-            f"Incident {incident['_id']} is {incident['state']}; reason {entry.get('reason') or '-'}",
+            f"Incident {incident['_id']} {entry['event']} at {entry['at'].isoformat()}; reason {entry.get('reason') or '-'}",
             alert_type=ALERT_TYPE.get(entry["event"], "info"),
             aggregation_key=incident["_id"],
             source_type_name="chargeops",
             tags=[*tags, f"incident_id:{incident['_id']}", f"event:{entry['event']}", "source:chargeops"],
         )
-    if len(timeline) > cursor["sent"]:
+    if len(timeline) != cursor_before:
         db.dd_event_cursor.update_one({"_id": incident["_id"]}, {"$set": {"sent": len(timeline)}}, upsert=True)

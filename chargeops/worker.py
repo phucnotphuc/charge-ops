@@ -256,9 +256,6 @@ def run_phases(db, stats, log):
     run = db.runs.find_one({"status": "active"})
     if run:
         evaluate_windows(db, stats, log, run, at)
-        if run["mode"] == "datadog":
-            with span("worker.signals", run_id=run["_id"]):
-                emit_run_signals(db, stats, run, at)
     with span("worker.inbox"):
         for item in db.inbox.find({"processed": False}).sort("occurred_at", 1).limit(100):
             with span(
@@ -288,6 +285,13 @@ def run_phases(db, stats, log):
         expire_commands(db, at)
     with span("worker.incidents"):
         advance_incidents(db, at)
+    if run and run["mode"] == "datadog":
+        # Last, so a failing Datadog-signal read/write never starves the inbox, commands or incidents.
+        try:
+            with span("worker.signals", run_id=run["_id"]):
+                emit_run_signals(db, stats, run, at)
+        except PyMongoError as error:
+            event(log, "signals_failed", error_type=type(error).__name__)
 
 
 def evaluate_windows(db, stats, log, run, at):
