@@ -15,10 +15,11 @@ export function fmtDuration(seconds: number | null | undefined): string {
 export function Summary({ runId, stationId }: { runId: string | null; stationId?: string }) {
   const polled = usePolling(() => api.incidentSummary(runId, stationId), [runId, stationId]);
   return (
-    <Async polled={polled} isEmpty={(s) => s.total === 0} empty="Chưa có sự cố trong run này.">
+    <Async polled={polled}>
       {(s) => (
         <section className="card">
           <h2>Sự cố</h2>
+          {s.total === 0 && <p className="muted">Chưa có sự cố trong run này.</p>}
           <div className="funnel">
             {FUNNEL.map((state) => (
               <div key={state} data-testid={`funnel-${state}`}>

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, expect, test, vi } from "vitest";
@@ -40,6 +40,54 @@ test("driver view shows battery, power, temperature and friendly status only", a
   expect(within(screen.getByTestId("card-connector-6")).getByText("Trống")).toBeInTheDocument();
   const page = document.body.textContent ?? "";
   for (const word of ["Residual", "residual", "Sự cố", "incident", "Idempotency"]) expect(page).not.toContain(word);
+});
+
+const FORBIDDEN = ["residual", "Residual", "sự cố", "Sự cố", "giảm tải", "ngưỡng", "lệnh", "Vận hành", "HTTP", "request", "mã yêu cầu", "run_id", "connector-", "Idempotency", "incident"];
+const ARIA_OK = ["Pin xe"];
+
+function expectNoLeak() {
+  const html = document.body.innerHTML.replace(/data-testid="[^"]*"/g, "");
+  for (const word of FORBIDDEN) expect(html).not.toContain(word);
+  expect(document.querySelectorAll("[title]").length).toBe(0);
+  for (const el of document.querySelectorAll("[aria-label]")) expect(ARIA_OK).toContain(el.getAttribute("aria-label"));
+}
+
+test("kiosk DOM has no internal words, titles or unexpected aria labels", async () => {
+  mock({ "/stations/station-2": STATION });
+  at("/stations/station-2", <StationDisplay />, "/stations/:stationId");
+  await screen.findByTestId("card-connector-4");
+  expectNoLeak();
+});
+
+test("kiosk keeps last data and shows a calm banner when a later poll fails", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  let calls = 0;
+  vi.stubGlobal("fetch", vi.fn(async () => {
+    calls += 1;
+    return calls === 1
+      ? new Response(JSON.stringify(STATION), { status: 200, headers: { "Content-Type": "application/json" } })
+      : new Response(JSON.stringify({ error: { code: "db_unavailable", message: "boom", request_id: "req-1" } }), { status: 503 });
+  }));
+  try {
+    at("/stations/station-2", <StationDisplay />, "/stations/:stationId");
+    await screen.findByTestId("card-connector-4");
+    await act(async () => { await vi.advanceTimersByTimeAsync(5100); });
+    await waitFor(() => expect(screen.getByText("Tạm mất kết nối, đang thử lại…")).toBeInTheDocument());
+    expect(screen.getByTestId("card-connector-4")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("db_unavailable");
+    expect(screen.queryByRole("button")).toBeNull();
+    expectNoLeak();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("kiosk before any data shows only the banner and station name", async () => {
+  mock({});
+  at("/stations/station-2", <StationDisplay />, "/stations/:stationId");
+  expect(await screen.findByText("Tạm mất kết nối, đang thử lại…")).toBeInTheDocument();
+  expect(screen.getByText("Trạm sạc số 2")).toBeInTheDocument();
+  expectNoLeak();
 });
 
 test("operator view adds residual and incident link", async () => {

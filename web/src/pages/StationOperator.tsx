@@ -5,7 +5,7 @@ import { usePolling } from "../api/hooks";
 import { Async } from "../components/Async";
 import { ConnectorCard } from "../components/ConnectorCard";
 import { Summary, Trend } from "../components/Insights";
-import { STATE_LABEL, fmtNum } from "../lib/format";
+import { STATE_LABEL, STATION_NAMES, fmtNum } from "../lib/format";
 
 export function StationOperator() {
   const { stationId = "station-1" } = useParams();
@@ -18,7 +18,7 @@ export function StationOperator() {
   const incidents = Object.fromEntries(items.map((c) => [c.connector_id, c.active_incident]));
   return (
     <div className="page">
-      <h1>Vận hành · {stationId}</h1>
+      <h1>Vận hành · {STATION_NAMES[stationId] ?? stationId}</h1>
       <p>
         <Link to={`/stations/${stationId}`}>Mở màn hình trạm cho người dùng</Link>
       </p>

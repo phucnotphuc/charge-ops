@@ -116,6 +116,8 @@ export const REASON_LABEL: Record<string, string> = {
   demo_ended_unresolved: "Run demo đã kết thúc khi sự cố chưa giải quyết.",
 };
 
+export const STATION_NAMES: Record<string, string> = { "station-1": "Trạm sạc số 1", "station-2": "Trạm sạc số 2" };
+
 export const PUBLIC_STATUS_LABEL: Record<string, string> = {
   idle: "Trống",
   charging: "Đang sạc",

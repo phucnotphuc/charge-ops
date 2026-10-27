@@ -128,6 +128,9 @@ input, select { font: inherit; padding: 7px 10px; border: 1px solid #c4cad4; bor
 .station-kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; }
 .station-kv dt { color: var(--muted); }
 .station-kv dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.kiosk-banner { background: #fef3c7; color: var(--warn); border-radius: 12px; padding: 12px 20px; font-weight: 600; margin: 0 0 20px; }
+dl.kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; margin: 0; }
+dl.kv dd { margin: 0; font-weight: 600; text-align: right; }
 .funnel { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .funnel > div { display: flex; flex-direction: column; min-width: 90px; }
 .funnel strong { font-size: 1.4rem; }
