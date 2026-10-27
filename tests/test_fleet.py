@@ -4,14 +4,12 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid5
 
 import pytest
-from fastapi.testclient import TestClient
 
-from chargeops.api import app
 from chargeops.domain import CONNECTORS, LOCATION, MANIFEST, window_evidence
 from chargeops.fleet import fleet_plan, physics, steady_load
 from chargeops.model import ORIGINAL_LIMIT_A, PROFILES
 from chargeops.simulator import Simulator
-from chargeops.worker import process_event, tick
+from chargeops.worker import process_event
 
 SIMULATOR = {"X-Simulator-Secret": "s" * 32}
 OPERATOR = {"X-Operator-Secret": "o" * 32}

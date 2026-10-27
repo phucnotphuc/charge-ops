@@ -169,6 +169,11 @@ def main():
     profiles.to_csv(PROFILES, index=False, lineterminator="\n")
     # Station monitor: real SoC at session start/end and session energy for the replayed sessions.
     replayed = data[data["transaction_id"].isin(chosen.index)]
+    # Many sessions publish current_soc = 0 in the first minute before the BMS reports (0 -> 22 -> 23 ...).
+    # Start at the first reported (non-zero) SoC and count only the energy charged after that reading.
+    replayed = replayed[replayed.groupby("transaction_id")["current_soc"].cummax() > 0]
+    first = replayed.groupby("transaction_id").cumcount() == 0
+    replayed = replayed.assign(out_power=replayed["out_power"].where(~first, 0.0))
     soc = replayed.groupby("transaction_id").agg(
         soc_start_percent=("current_soc", "first"),
         soc_end_percent=("current_soc", "last"),
