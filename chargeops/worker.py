@@ -19,6 +19,7 @@ from chargeops.domain import (
 )
 from chargeops.lifecycle import advance_incidents, expire_commands, on_alert, process_commands
 from chargeops.logging import event, logger
+from chargeops.observability import emit_heartbeat, emit_run_signals
 from chargeops.storage import database, fleet_window_rows, initialize
 
 WATCHED = ("inbox", "commands", "run_events")
@@ -250,9 +251,14 @@ def run_phases(db, stats, log):
     at = now()
     with span("worker.manage_run"):
         manage_run(db, at)
+    if settings().dd_metrics_enabled:
+        emit_heartbeat(stats)
     run = db.runs.find_one({"status": "active"})
     if run:
         evaluate_windows(db, stats, log, run, at)
+        if run["mode"] == "datadog":
+            with span("worker.signals", run_id=run["_id"]):
+                emit_run_signals(db, stats, run, at)
     with span("worker.inbox"):
         for item in db.inbox.find({"processed": False}).sort("occurred_at", 1).limit(100):
             with span(
