@@ -4,7 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 from dotenv import load_dotenv
@@ -77,8 +77,8 @@ def residual_queries(by="{connector_id}"):
     ]
 
 
-def timeseries(title, queries, formulas=None, display="line", markers=()):
-    return {
+def timeseries(title, queries, formulas=None, display="line", markers=(), events=False):
+    widget = {
         "type": "timeseries",
         "title": title,
         "show_legend": True,
@@ -94,6 +94,9 @@ def timeseries(title, queries, formulas=None, display="line", markers=()):
             {"value": f"y = {y}", "display_type": kind, "label": label} for y, kind, label in markers
         ],
     }
+    if events:
+        widget["events"] = [{"q": "tags:source:chargeops"}]
+    return widget
 
 
 def monitors(title):
@@ -134,6 +137,81 @@ def dashboard(title, description, widgets):
     }
 
 
+def incident_widgets():
+    return [
+        timeseries(
+            "Sự cố đang mở theo connector",
+            [metric("open", f"sum:chargeops.incident.open{SCOPE} by {{connector_id}}")],
+            display="bars",
+            events=True,
+        ),
+        timeseries(
+            "Thời gian ở trạng thái hiện tại (s)",
+            [metric("age", f"max:chargeops.incident.state_age_s{SCOPE} by {{connector_id,state}}")],
+            markers=[(600, "warning dashed", "giảm tải quá 10 phút")],
+        ),
+    ]
+
+
+def heartbeat_widget():
+    return timeseries(
+        "Worker heartbeat (tick / phút)",
+        [metric("tick", "sum:chargeops.worker.tick{env:hackathon}.as_rate()")],
+        ["tick * 60"],
+    )
+
+
+def dashboard_url(site, dashboard_id):
+    return f"https://app.{site}/dashboard/{dashboard_id}"
+
+
+def investigate(url):
+    return f"Điều tra: {url}?tpl_var_run_id={{{{run_id.name}}}}&tpl_var_connector_id={{{{connector_id.name}}}}"
+
+
+def composite_message(engineering_url, site):
+    logs = f"https://app.{site}/logs?query=" + quote("service:chargeops @run_id:{{run_id.name}}")
+    return "\n".join(
+        ["ChargeOps thermal anomaly. @webhook-chargeops-minimal", investigate(engineering_url), f"Logs: {logs}"]
+    )
+
+
+def extra_monitor_specs(engineering_url):
+    return {
+        "stale": {
+            "name": "ChargeOps telemetry stale",
+            "type": "query alert",
+            "query": "sum(last_2m):sum:chargeops.samples{env:hackathon} by {run_id,connector_id}.as_count() < 12",
+            "message": "Connector {{connector_id.name}} gửi dưới 12 mẫu trong 2 phút. " + investigate(engineering_url),
+            "options": {
+                "thresholds": {"critical": 12},
+                "notify_no_data": True,
+                "no_data_timeframe": 4,
+                "require_full_window": True,
+            },
+        },
+        "worker": {
+            "name": "ChargeOps worker heartbeat",
+            "type": "query alert",
+            "query": "sum(last_2m):sum:chargeops.worker.tick{env:hackathon}.as_count() < 1",
+            "message": "Worker không gửi heartbeat trong 2 phút: kiểm tra `docker compose logs worker`.",
+            "options": {
+                "thresholds": {"critical": 1},
+                "notify_no_data": True,
+                "no_data_timeframe": 4,
+                "require_full_window": False,
+            },
+        },
+        "stuck": {
+            "name": "ChargeOps derating not resolving",
+            "type": "query alert",
+            "query": "max(last_5m):max:chargeops.incident.state_age_s{env:hackathon,state:mitigating} by {run_id,connector_id} > 600",
+            "message": "Connector {{connector_id.name}} ở trạng thái giảm tải quá 10 phút. " + investigate(engineering_url),
+            "options": {"thresholds": {"critical": 600}, "notify_no_data": False, "require_full_window": False},
+        },
+    }
+
+
 def engineering_dashboard():
     thresholds = [(8, "error dashed", "cảnh báo 8 °C"), (3, "ok dashed", "phục hồi 3 °C")]
     return dashboard(
@@ -166,6 +244,7 @@ def engineering_dashboard():
                 residual_queries(),
                 ["(a-b)/c"],
                 markers=thresholds,
+                events=True,
             ),
             timeseries(
                 "Nhiệt đo được và nhiệt kỳ vọng theo tải (°C)",
@@ -180,11 +259,13 @@ def engineering_dashboard():
                     metric("current", f"avg:chargeops.current_a{SCOPE} by {{connector_id}}"),
                     metric("limit", f"avg:chargeops.current_limit_a{SCOPE} by {{connector_id}}"),
                 ],
+                events=True,
             ),
             timeseries(
                 "Nhiệt độ môi trường (°C)",
                 [metric("ambient", f"avg:chargeops.ambient_temperature_c{SCOPE} by {{station_id}}")],
             ),
+            *incident_widgets(),
             log_stream("Webhook và lệnh vận hành", COMMAND_LOGS),
         ],
     )
@@ -252,6 +333,7 @@ def platform_dashboard():
                 "Lỗi, retry và lệnh bị từ chối",
                 "service:chargeops (status:error OR @event:ingest_retry OR @event:worker_retry OR @event:command_rejected)",
             ),
+            heartbeat_widget(),
         ],
     )
 
@@ -343,11 +425,29 @@ def main():
             )
             state[key] = result["id"]
             save()
+        for key, build in DASHBOARDS.items():
+            result = call(
+                "PUT" if key in state else "POST",
+                f"/dashboard/{state[key]}" if key in state else "/dashboard",
+                build(),
+            )
+            state[key] = result["id"]
+            save()
+        engineering_url = dashboard_url(site, state["dashboard"])
+        for key, spec in extra_monitor_specs(engineering_url).items():
+            call("POST", "/monitor/validate", spec)
+            result = call(
+                "PUT" if key in state else "POST",
+                f"/monitor/{state[key]}" if key in state else "/monitor",
+                spec,
+            )
+            state[key] = result["id"]
+            save()
         composite = {
             "name": "ChargeOps thermal incident",
             "type": "composite",
             "query": f"{state['thermal']} && {state['quality']}",
-            "message": "ChargeOps thermal anomaly. @webhook-chargeops-minimal",
+            "message": composite_message(engineering_url, site),
             "options": {"notify_no_data": False},
         }
         call("POST", "/monitor/validate", composite)
@@ -358,14 +458,7 @@ def main():
         )
         state["composite"] = result["id"]
         save()
-        for key, build in DASHBOARDS.items():
-            result = call(
-                "PUT" if key in state else "POST",
-                f"/dashboard/{state[key]}" if key in state else "/dashboard",
-                build(),
-            )
-            state[key] = result["id"]
-            save()
+    print("Extra monitors: stale, worker heartbeat, derating not resolving (no webhook).")
     print(f"Set DD_MONITOR_ID={state['composite']} in .env, then recreate worker.")
     for key in DASHBOARDS:
         print(f"Dashboard: https://app.{site}/dashboard/{state[key]}")
