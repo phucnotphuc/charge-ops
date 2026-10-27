@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from chargeops.api import app
 from chargeops.config import settings
 from chargeops.domain import Sample, lag, normalize_webhook, now, window_evidence, with_residuals
-from chargeops.simulator import DEMO_PROFILE, PROFILES, physics
+from chargeops.model import DEMO_PROFILE, PROFILES, physics
 from chargeops.storage import window_rows
 from chargeops.worker import manage_run, process_event, tick
 
@@ -108,7 +108,7 @@ def setup_alert(store, quality=True):
         {"_id": run_id, "mode": "datadog", "status": "active", "started_at": at - timedelta(minutes=3)}
     )
     evidence = window_evidence(rows(at), at)
-    evidence.update(_id="window", run_id=run_id, quality=quality)
+    evidence.update(_id="window", run_id=run_id, connector_id="connector-1", quality=quality)
     store.windows.insert_one(evidence)
     return run_id, at
 
@@ -178,6 +178,7 @@ def test_ingest_validates_whole_batch_and_aggregation_deduplicates(store):
     sample = {
         "sample_id": str(uuid4()),
         "run_id": run_id,
+        "connector_id": "connector-1",
         "measured_at": at.isoformat(),
         "current_a": 60,
         "voltage_v": 400,
@@ -198,7 +199,7 @@ def test_ingest_validates_whole_batch_and_aggregation_deduplicates(store):
             client.post("/api/v1/telemetry/batch", json={"samples": [sample]}, headers=headers).status_code
             == 202
         )
-    rows = window_rows(store, run_id, at + timedelta(seconds=1))
+    rows = window_rows(store, run_id, at + timedelta(seconds=1), "connector-1")
     assert len(rows) == 1
     assert rows[0]["residual"] == pytest.approx(51.4 - 25)  # cold start: expected begins at ambient
 
@@ -218,6 +219,7 @@ def test_datadog_mode_never_opens_incident_without_webhook(store, monkeypatch):
             "measured_at": end - timedelta(seconds=60 - i * 5),
             "received_at": end,
             "current_a": 60,
+            "current_limit_a": 250,
             "ambient_temperature_c": 25,
             "connector_temperature_c": 51.4,
         }
@@ -228,15 +230,21 @@ def test_datadog_mode_never_opens_incident_without_webhook(store, monkeypatch):
     monkeypatch.setattr("chargeops.worker.now", lambda: end + timedelta(seconds=3))
     stats = Mock()
     tick(store, stats, Mock())
-    assert store.windows.find_one()["residual_mean"] == pytest.approx(
+    assert store.windows.find_one({"connector_id": "connector-1"})["residual_mean"] == pytest.approx(
         sum(r["residual"] for r in expected) / 12
     )
     assert store.incidents.count_documents({}) == 0
-    assert stats.increment.call_count == 3
-    # Only three newest samples, not all 12 samples in the rolling window.
+    assert stats.increment.call_count == 3 * 6  # three counters per connector of the fleet
+    # Only three newest samples, not all 12 samples in the rolling window; connector-1 is exported first.
     assert stats.increment.call_args_list[2].args == ("chargeops.samples", 3)
+    assert "connector_id:connector-1" in stats.increment.call_args_list[2].kwargs["tags"]
+    gauges = {c.args[0]: c.args[1] for c in stats.gauge.call_args_list[:6]}  # connector-1 first
+    assert gauges["chargeops.current_limit_a"] == 250
+    assert gauges["chargeops.expected_temperature_c"] == pytest.approx(
+        sum(r["expected_temperature_c"] for r in expected[-3:]) / 3
+    )
     tick(store, stats, Mock())
-    assert stats.increment.call_count == 3  # restart/tick does not double export a block
+    assert stats.increment.call_count == 3 * 6  # restart/tick does not double export a block
 
 
 def test_run_budget_survives_pending_restart_and_rejects_twenty_first(store, monkeypatch):

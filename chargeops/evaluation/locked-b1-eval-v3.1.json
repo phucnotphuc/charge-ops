@@ -1,0 +1,353 @@
+{
+  "protocol_version": "b1-eval-v3.1",
+  "fingerprint": "f54276de8d5584c85dfff12f98a90ed083a176543aed842a6f5b1a3a26fe0ab9",
+  "locked_at": "2026-10-21T08:21:51.979853Z",
+  "relock_of": {
+    "protocol_version": "b1-eval-v3",
+    "fingerprint": "2c698eb844b7404f3ee3a0d105b369a2969e4ea9b72a8c3f24197a7cb57407ec",
+    "locked_at": "2026-10-21T06:06:23.039167Z"
+  },
+  "relock_note": "fingerprint-only re-lock, behaviour identical: domain.py/lifecycle.py/model.py changed for the 2-station x 3-connector fleet (WP-W2B) and the earlier API merge; thresholds and tuning detail copied from b1-eval-v3 without re-tuning; `run` output is byte-identical apart from protocol_version (tests/test_evaluation.py::test_relocked_v3_1_reproduces_v3_results_exactly)",
+  "tuning_seeds": {
+    "fault": [
+      1000,
+      1001,
+      1002,
+      1003,
+      1004,
+      1005,
+      1006,
+      1007,
+      1008,
+      1009,
+      1010,
+      1011,
+      1012,
+      1013,
+      1014,
+      1015,
+      1016,
+      1017,
+      1018,
+      1019
+    ],
+    "healthy": [
+      1020,
+      1021,
+      1022,
+      1023,
+      1024,
+      1025,
+      1026,
+      1027,
+      1028,
+      1029,
+      1030,
+      1031,
+      1032,
+      1033,
+      1034,
+      1035,
+      1036,
+      1037,
+      1038,
+      1039
+    ]
+  },
+  "evaluation_seeds": {
+    "fault": [
+      2000,
+      2001,
+      2002,
+      2003,
+      2004,
+      2005,
+      2006,
+      2007,
+      2008,
+      2009,
+      2010,
+      2011,
+      2012,
+      2013,
+      2014,
+      2015,
+      2016,
+      2017,
+      2018,
+      2019
+    ],
+    "healthy": [
+      2020,
+      2021,
+      2022,
+      2023,
+      2024,
+      2025,
+      2026,
+      2027,
+      2028,
+      2029,
+      2030,
+      2031,
+      2032,
+      2033,
+      2034,
+      2035,
+      2036,
+      2037,
+      2038,
+      2039
+    ]
+  },
+  "a_threshold_c": 74.0,
+  "a_rule": "lowest grid value with healthy tuning runs alerting <= false_alert_budget",
+  "c_alert_c": 8.0,
+  "c_recovered_c": 3.0,
+  "c_rule": "product constants (CONTRACT \u00a73); verified, not searched, on tuning seeds",
+  "false_alert_budget": 1,
+  "c_tuning_healthy_runs_alerting": 0,
+  "c_within_budget": true,
+  "tuning": [
+    {
+      "seed": 1000,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 85.83275065507628,
+      "residual_alert": true
+    },
+    {
+      "seed": 1001,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 62.70545901321581,
+      "residual_alert": true
+    },
+    {
+      "seed": 1002,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 91.64827045051898,
+      "residual_alert": true
+    },
+    {
+      "seed": 1003,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 83.38055966964984,
+      "residual_alert": true
+    },
+    {
+      "seed": 1004,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 70.4110908578924,
+      "residual_alert": true
+    },
+    {
+      "seed": 1005,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 58.646716236718724,
+      "residual_alert": true
+    },
+    {
+      "seed": 1006,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 95.78703381744505,
+      "residual_alert": true
+    },
+    {
+      "seed": 1007,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 99.18019554891345,
+      "residual_alert": true
+    },
+    {
+      "seed": 1008,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 98.74541122098226,
+      "residual_alert": true
+    },
+    {
+      "seed": 1009,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 74.96441359232585,
+      "residual_alert": true
+    },
+    {
+      "seed": 1010,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 58.39953254248943,
+      "residual_alert": true
+    },
+    {
+      "seed": 1011,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 82.96944326347523,
+      "residual_alert": true
+    },
+    {
+      "seed": 1012,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 79.29267007341763,
+      "residual_alert": true
+    },
+    {
+      "seed": 1013,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 61.69571215121348,
+      "residual_alert": true
+    },
+    {
+      "seed": 1014,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 99.25356187403274,
+      "residual_alert": true
+    },
+    {
+      "seed": 1015,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 96.35869715898095,
+      "residual_alert": true
+    },
+    {
+      "seed": 1016,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 99.53761837161731,
+      "residual_alert": true
+    },
+    {
+      "seed": 1017,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 73.59258754738427,
+      "residual_alert": true
+    },
+    {
+      "seed": 1018,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 98.27117724686782,
+      "residual_alert": true
+    },
+    {
+      "seed": 1019,
+      "scenario": "thermal_fault",
+      "max_window_mean_c": 99.05353379771647,
+      "residual_alert": true
+    },
+    {
+      "seed": 1020,
+      "scenario": "healthy",
+      "max_window_mean_c": 72.17577935131621,
+      "residual_alert": false
+    },
+    {
+      "seed": 1021,
+      "scenario": "healthy",
+      "max_window_mean_c": 47.118964202949506,
+      "residual_alert": false
+    },
+    {
+      "seed": 1022,
+      "scenario": "healthy",
+      "max_window_mean_c": 42.37114241249302,
+      "residual_alert": false
+    },
+    {
+      "seed": 1023,
+      "scenario": "healthy",
+      "max_window_mean_c": 46.3054908632573,
+      "residual_alert": false
+    },
+    {
+      "seed": 1024,
+      "scenario": "healthy",
+      "max_window_mean_c": 53.53694745552384,
+      "residual_alert": false
+    },
+    {
+      "seed": 1025,
+      "scenario": "healthy",
+      "max_window_mean_c": 48.75282747434355,
+      "residual_alert": false
+    },
+    {
+      "seed": 1026,
+      "scenario": "healthy",
+      "max_window_mean_c": 57.10491657704003,
+      "residual_alert": false
+    },
+    {
+      "seed": 1027,
+      "scenario": "healthy",
+      "max_window_mean_c": 49.49327448794975,
+      "residual_alert": false
+    },
+    {
+      "seed": 1028,
+      "scenario": "load_increase",
+      "max_window_mean_c": 79.9790491221863,
+      "residual_alert": false
+    },
+    {
+      "seed": 1029,
+      "scenario": "load_increase",
+      "max_window_mean_c": 73.6974727333077,
+      "residual_alert": false
+    },
+    {
+      "seed": 1030,
+      "scenario": "load_increase",
+      "max_window_mean_c": 39.88344313944592,
+      "residual_alert": false
+    },
+    {
+      "seed": 1031,
+      "scenario": "load_increase",
+      "max_window_mean_c": 41.687746737585826,
+      "residual_alert": false
+    },
+    {
+      "seed": 1032,
+      "scenario": "load_increase",
+      "max_window_mean_c": 54.744187547022186,
+      "residual_alert": false
+    },
+    {
+      "seed": 1033,
+      "scenario": "load_increase",
+      "max_window_mean_c": 27.790226836779237,
+      "residual_alert": false
+    },
+    {
+      "seed": 1034,
+      "scenario": "demand_drop",
+      "max_window_mean_c": 47.04157199712363,
+      "residual_alert": false
+    },
+    {
+      "seed": 1035,
+      "scenario": "demand_drop",
+      "max_window_mean_c": 47.883859779621254,
+      "residual_alert": false
+    },
+    {
+      "seed": 1036,
+      "scenario": "demand_drop",
+      "max_window_mean_c": 48.47035648704608,
+      "residual_alert": false
+    },
+    {
+      "seed": 1037,
+      "scenario": "demand_drop",
+      "max_window_mean_c": 44.98312526658967,
+      "residual_alert": false
+    },
+    {
+      "seed": 1038,
+      "scenario": "demand_drop",
+      "max_window_mean_c": 68.61167678079237,
+      "residual_alert": false
+    },
+    {
+      "seed": 1039,
+      "scenario": "demand_drop",
+      "max_window_mean_c": 27.151237476098398,
+      "residual_alert": false
+    }
+  ]
+}

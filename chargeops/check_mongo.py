@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from pymongo.errors import DuplicateKeyError
 
-from chargeops.domain import CONNECTOR, block_end, now, window_evidence, with_residuals
+from chargeops.domain import block_end, now, window_evidence, with_residuals
 from chargeops.lifecycle import open_incident
 from chargeops.storage import database, initialize, window_rows
 
@@ -19,42 +19,48 @@ def main():
         info = next(db.list_collections(filter={"name": "telemetry"}))
         assert info["options"]["timeseries"]["timeField"] == "measured_at"
         assert info["options"]["expireAfterSeconds"] == 1209600
-        run_id, end = str(uuid4()), block_end(now())
-        db.runs.insert_one({"_id": run_id, "active_slot": "single"})
-        try:
-            db.runs.insert_one({"_id": str(uuid4()), "active_slot": "single"})
-        except DuplicateKeyError:
-            pass
-        else:
-            raise AssertionError("Single-run unique index not enforced")
-        samples = [
-            {
-                "sample_id": str(i),
-                "meta": {"run_id": run_id, "connector_id": CONNECTOR},
-                "measured_at": end - timedelta(seconds=60 - i * 5),
-                "received_at": end,
-                "ambient_temperature_c": 25,
-                "current_a": 60,
-                "connector_temperature_c": 51.4,
-            }
-            for i in range(12)
-        ]
-        expected = with_residuals([dict(s) for s in samples])
-        db.telemetry.insert_many(samples)
-        # Retry with same sample identity, but a new MongoDB document identity.
-        db.telemetry.insert_one({k: v for k, v in samples[0].items() if k != "_id"})
-        evidence = window_evidence(window_rows(db, run_id, end), end)
-        assert evidence["count"] == 12 and evidence["quality"]
-        # Deduplicated pipeline + baseline on real MongoDB equals the baseline on the 12 distinct samples.
-        assert abs(evidence["residual_mean"] - sum(r["residual"] for r in expected) / 12) < 0.00001
-        run = {"_id": run_id}
-        open_incident(db, run, evidence, "local", end, "smoke")
-        open_incident(db, run, evidence, "local", end, "smoke-retry")
-        assert db.incidents.count_documents({}) == 1
+        check_loop(db)
         print("PASS: real time-series TTL, aggregation dedup/residual, unique active run and incident")
     finally:
         client.drop_database(name)
         client.close()
+
+
+def check_loop(db, connector_id="connector-1"):
+    """Unique active run, deduplicated window aggregation with residuals, one unresolved incident per connector."""
+    run_id, end = str(uuid4()), block_end(now())
+    db.runs.insert_one({"_id": run_id, "active_slot": "single"})
+    try:
+        db.runs.insert_one({"_id": str(uuid4()), "active_slot": "single"})
+    except DuplicateKeyError:
+        pass
+    else:
+        raise AssertionError("Single-run unique index not enforced")
+    samples = [
+        {
+            "sample_id": str(i),
+            "meta": {"run_id": run_id, "connector_id": connector_id},
+            "measured_at": end - timedelta(seconds=60 - i * 5),
+            "received_at": end,
+            "ambient_temperature_c": 25,
+            "current_a": 60,
+            "connector_temperature_c": 51.4,
+        }
+        for i in range(12)
+    ]
+    expected = with_residuals([dict(s) for s in samples])
+    db.telemetry.insert_many(samples)
+    # Retry with same sample identity, but a new MongoDB document identity.
+    db.telemetry.insert_one({k: v for k, v in samples[0].items() if k != "_id"})
+    evidence = window_evidence(window_rows(db, run_id, end, connector_id), end)
+    assert evidence["count"] == 12 and evidence["quality"]
+    # Deduplicated pipeline + baseline on real MongoDB equals the baseline on the 12 distinct samples.
+    assert abs(evidence["residual_mean"] - sum(r["residual"] for r in expected) / 12) < 0.00001
+    evidence["connector_id"] = connector_id
+    run = {"_id": run_id}
+    open_incident(db, run, evidence, "local", end, "smoke")
+    open_incident(db, run, evidence, "local", end, "smoke-retry")
+    assert db.incidents.count_documents({"run_id": run_id, "connector_id": connector_id}) == 1
 
 
 if __name__ == "__main__":

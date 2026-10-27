@@ -1,129 +1,128 @@
-import csv
-import math
 import time
-from collections import defaultdict
 from datetime import datetime
-from pathlib import Path
 from uuid import UUID, uuid5
 
 import httpx
 
 from chargeops.config import settings
-from chargeops.domain import AMBIENT_C, THERMAL_K, lag, now
+from chargeops.domain import AMBIENT_C, CONNECTORS, lag, now
+from chargeops.fleet import fleet_plan, physics
 from chargeops.logging import event, logger
-
-# Ground truth: simulator-only, never read by the detector. Calibration knobs.
-ORIGINAL_LIMIT_A = 250.0  # highest current in the Autosun–PolyU v3 data
-FAULT_START_S = 120
-FAULT_RAMP_S = 60
-FAULT_RESIDUAL_C = 10.5  # extra heat at the onset load; halving current leaves a quarter (≈2.6 °C)
-DEMO_PROFILE = "44020100400000052012112300218810"  # ~130 A, stable for 92 of 97 minutes
+from chargeops.model import DEMO_PROFILE, PROFILES, STEP_S, replay  # noqa: F401  (re-exported)
 
 
-def load_profiles():
-    """Per-minute (current A, voltage V) of the 50 audited sessions (data/manifests/autosun-v3.json)."""
-    profiles = defaultdict(list)
-    with (Path(__file__).parent / "profiles" / "autosun_v3.csv").open(encoding="utf-8") as f:
-        for row in csv.DictReader(f):  # rows are ordered by minute within each session
-            profiles[row["transaction_id"]].append((float(row["current_a"]), float(row["voltage_v"])))
-    return dict(profiles)
+class Simulator:
+    """Talks to the API only (simulator secret): commands and fault events are acknowledged there, and the API
+    applies them to the target connector's device state in `run.sim[connector_id]`."""
 
+    def __init__(self, client, log=None):
+        self.client, self.log = client, log or logger("simulator")
+        self.pending = None  # unsent batch, retried unchanged (same sample_ids) until the API answers
+        self.thermal = {}
 
-PROFILES = load_profiles()
+    def apply_commands(self):
+        commands = self.client.get("/api/v1/simulator/commands")
+        commands.raise_for_status()
+        for command in commands.json():
+            # Absolute values make re-applying harmless.
+            result = self.client.post(
+                f"/api/v1/simulator/commands/{command['_id']}/result", json={"status": "applied"}
+            )
+            result.raise_for_status()
+            event(
+                self.log,
+                "command_applied",
+                command_id=command["_id"],
+                type=command["type"],
+                connector_id=command.get("connector_id"),
+            )
 
+    def consume_events(self):
+        events = self.client.get("/api/v1/simulator/events")
+        events.raise_for_status()
+        for item in events.json():
+            result = self.client.post(f"/api/v1/simulator/events/{item['_id']}/consume")
+            result.raise_for_status()
+            event(self.log, "fault_injected", event_id=item["_id"], connector_id=item["connector_id"])
 
-def replay(profile, elapsed):
-    """Vehicle demand and voltage, linearly interpolated between published minutes; 0 A after the session."""
-    position = elapsed / 60
-    minute = int(position)
-    if minute >= len(profile):
-        return 0.0, profile[-1][1]
-    if minute == len(profile) - 1:
-        return profile[minute]
-    weight = position - minute
-    (a0, v0), (a1, v1) = profile[minute], profile[minute + 1]
-    return a0 + (a1 - a0) * weight, v0 + (v1 - v0) * weight
+    def samples(self, run, measured):
+        started = datetime.fromisoformat(run["started_at"])
+        elapsed = (measured - started).total_seconds()
+        plans = fleet_plan(run.get("seed") or 0, run["scenario"], run.get("profile_id"))
+        if self.thermal.get("run_id") != run["_id"]:
+            # Cold start at plug-in; a restarted simulator resumes each connector from its last stored sample.
+            last = run.get("last_samples") or {}
+            self.thermal = {"run_id": run["_id"]}
+            for cid in CONNECTORS:
+                stored = last.get(cid)
+                self.thermal[cid] = (
+                    (stored["connector_temperature_c"], datetime.fromisoformat(stored["measured_at"]))
+                    if stored
+                    else (AMBIENT_C, measured)
+                )
+        step = int(elapsed // STEP_S)
+        out = []
+        for cid in CONNECTORS:
+            sim = dict((run.get("sim") or {}).get(cid) or {})
+            for stamp, seconds in (
+                ("fault_injected_at", "fault_injected_s"),
+                ("fault_cleared_at", "fault_cleared_s"),
+            ):
+                value = sim.pop(stamp, None)
+                if value:
+                    sim[seconds] = (datetime.fromisoformat(value) - started).total_seconds()
+            demand, current, limit, voltage, steady = physics(plans[cid], elapsed, sim)
+            temperature, at = self.thermal[cid]
+            temperature = lag(temperature, steady, (measured - at).total_seconds())
+            self.thermal[cid] = (temperature, measured)
+            out.append(
+                {
+                    "sample_id": str(uuid5(UUID(run["_id"]), f"{cid}:{step}")),
+                    "run_id": run["_id"],
+                    "connector_id": cid,
+                    "measured_at": measured.isoformat(),
+                    "current_a": current,
+                    "voltage_v": voltage,
+                    "power_kw": voltage * current / 1000,
+                    "requested_current_a": demand,
+                    "current_limit_a": limit,
+                    "connector_temperature_c": temperature,
+                    "ambient_temperature_c": AMBIENT_C,
+                }
+            )
+        return out
 
-
-def physics(elapsed, scenario, sim, profile):
-    """Demand, current, limit, voltage and steady-state temperature; `sim` holds applied commands."""
-    demand, voltage = replay(profile, elapsed)
-    limit = sim.get("current_limit_a", ORIGINAL_LIMIT_A)
-    current = min(demand, limit)
-    fault = 0.0
-    onset_a = min(replay(profile, FAULT_START_S)[0], ORIGINAL_LIMIT_A)
-    if (
-        scenario == "thermal_fault"
-        and elapsed >= FAULT_START_S
-        and onset_a > 0
-        and not sim.get("fault_cleared")
-    ):
-        # Extra I²R heating sized in °C at the onset load, so severity does not depend on the session's current.
-        full = FAULT_RESIDUAL_C / (THERMAL_K * onset_a**2)
-        fault = full * (1 - math.exp(-(elapsed - FAULT_START_S) / FAULT_RAMP_S))
-    return demand, current, limit, voltage, AMBIENT_C + THERMAL_K * current**2 * (1 + fault)
+    def step(self, measured=None):
+        """One 5-second step: apply commands, consume fault events, post all connectors in one batch."""
+        self.apply_commands()
+        self.consume_events()
+        response = self.client.get("/api/v1/simulator/run")
+        response.raise_for_status()
+        run = response.json()
+        if run and self.thermal.get("run_id") != run["_id"]:  # (re)start: fetch each connector's last sample
+            response = self.client.get("/api/v1/simulator/run", params={"resume": "true"})
+            response.raise_for_status()
+            run = response.json()
+        if not run:
+            self.pending = None
+            return
+        if self.pending is None or self.pending["run_id"] != run["_id"]:
+            self.pending = {"run_id": run["_id"], "samples": self.samples(run, measured or now())}
+        result = self.client.post("/api/v1/telemetry/batch", json={"samples": self.pending["samples"]})
+        if result.status_code not in (409, 422):  # rejected batches are dropped, not retried
+            result.raise_for_status()
+        self.pending = None
 
 
 def main():
     config = settings()
     log = logger("simulator")
     headers = {"X-Simulator-Secret": config.simulator_secret.get_secret_value()}
-    pending = None
-    thermal = {}
     with httpx.Client(base_url=config.api_url, headers=headers, timeout=10) as client:
+        simulator = Simulator(client, log)
         while True:
             try:
-                # Applying is the server-side state change; absolute values make re-applying harmless.
-                commands = client.get("/api/v1/simulator/commands")
-                commands.raise_for_status()
-                for command in commands.json():
-                    result = client.post(
-                        f"/api/v1/simulator/commands/{command['_id']}/result", json={"status": "applied"}
-                    )
-                    result.raise_for_status()
-                    event(log, "command_applied", command_id=command["_id"], type=command["type"])
-                response = client.get("/api/v1/simulator/run")
-                response.raise_for_status()
-                run = response.json()
-                if run:
-                    measured = now()
-                    elapsed = (measured - datetime.fromisoformat(run["started_at"])).total_seconds()
-                    if pending is None or pending["run_id"] != run["_id"]:
-                        profile = PROFILES[run.get("profile_id", DEMO_PROFILE)]
-                        demand, current, limit, voltage, steady = physics(
-                            elapsed, run["scenario"], run.get("sim") or {}, profile
-                        )
-                        if thermal.get("run_id") != run["_id"]:
-                            # Cold start at plug-in; a restarted simulator resumes from the last stored sample.
-                            last = run.get("last_sample")
-                            thermal = {
-                                "run_id": run["_id"],
-                                "temperature": last["connector_temperature_c"] if last else AMBIENT_C,
-                                "at": datetime.fromisoformat(last["measured_at"]) if last else measured,
-                            }
-                        dt = (measured - thermal["at"]).total_seconds()
-                        thermal.update(temperature=lag(thermal["temperature"], steady, dt), at=measured)
-                        pending = {
-                            "sample_id": str(uuid5(UUID(run["_id"]), str(int(elapsed // 5)))),
-                            "run_id": run["_id"],
-                            "connector_id": "connector-1",
-                            "measured_at": measured.isoformat(),
-                            "current_a": current,
-                            "voltage_v": voltage,
-                            "power_kw": voltage * current / 1000,
-                            "requested_current_a": demand,
-                            "current_limit_a": limit,
-                            "connector_temperature_c": thermal["temperature"],
-                            "ambient_temperature_c": AMBIENT_C,
-                        }
-                    result = client.post("/api/v1/telemetry/batch", json={"samples": [pending]})
-                    if result.status_code in (409, 422):
-                        pending = None
-                    else:
-                        result.raise_for_status()
-                        pending = None
-                else:
-                    pending = None
+                simulator.step()
             except httpx.HTTPError as exc:
                 event(log, "ingest_retry", error_type=type(exc).__name__)
             # Wall-clock boundaries: Docker Desktop's VM timers run ~7% fast, its wall clock is corrected.

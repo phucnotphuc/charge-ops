@@ -2,7 +2,7 @@
 name = "chargeops"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
-dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "pymongo>=4.10,<5", "httpx>=0.27,<1", "pydantic-settings>=2.6,<3", "datadog>=0.50,<1"]
+dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "pymongo>=4.10,<5", "httpx>=0.27,<1", "pydantic-settings>=2.6,<3", "datadog>=0.50,<1", "ddtrace>=3,<4"]
 
 [dependency-groups]
 dev = ["pytest>=8,<10", "ruff>=0.9,<1", "mongomock>=4.3,<5"]
@@ -10,6 +10,8 @@ dev = ["pytest>=8,<10", "ruff>=0.9,<1", "mongomock>=4.3,<5"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+# Starlette TestClient still imports httpx; upstream deprecation notice, nothing in this repo to fix.
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
 
 [tool.ruff]
 line-length = 110

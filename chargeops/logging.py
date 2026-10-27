@@ -3,6 +3,8 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ddtrace import tracer
+
 from chargeops.config import settings
 
 
@@ -17,7 +19,16 @@ def logger(service):
     return log
 
 
+def trace_fields():
+    # Datadog's log-trace correlation attributes; empty outside an active span.
+    # tracer.get_log_correlation_context() renders the trace id in Datadog's log format (32-char hex).
+    if tracer.current_span() is None:
+        return {}
+    return {key: value for key, value in tracer.get_log_correlation_context().items() if value}
+
+
 def event(log, name, **fields):
     # Datadog uses `timestamp` as the log date; `component` avoids clashing with the Agent's service tag.
     at = datetime.now(UTC).isoformat(timespec="milliseconds")
-    log.info(json.dumps({"timestamp": at, "component": log.name, "event": name, **fields}, default=str))
+    row = {"timestamp": at, "component": log.name, "event": name, **fields, **trace_fields()}
+    log.info(json.dumps(row, default=str))

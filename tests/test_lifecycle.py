@@ -27,8 +27,9 @@ def window(store, end, current=30.0, limit=30.0, residual=1.0, requested=60.0, q
     ]
     store.windows.insert_one(
         {
-            "_id": f"{RUN}:{end.isoformat()}",
+            "_id": f"{RUN}:connector-1:{end.isoformat()}",
             "run_id": RUN,
+            "connector_id": "connector-1",
             "start": end - timedelta(seconds=60),
             "end": end,
             "quality": quality,
@@ -49,7 +50,12 @@ def flow(store, monkeypatch):
     )
     window(store, t - timedelta(seconds=10), current=60, limit=200, residual=10)  # pre-derating reference
     open_incident(
-        store, {"_id": RUN}, {"end": t - timedelta(seconds=10)}, "local", t - timedelta(seconds=5), "w"
+        store,
+        {"_id": RUN},
+        {"end": t - timedelta(seconds=10), "connector_id": "connector-1"},
+        "local",
+        t - timedelta(seconds=5),
+        "w",
     )
     client = TestClient(app)
 
@@ -107,7 +113,7 @@ def test_full_loop_open_to_resolved(store, flow):
         30,
     )
     simulate(5)  # ACK at t+5
-    assert store.runs.find_one()["sim"] == {"current_limit_a": 30}
+    assert store.runs.find_one()["sim"] == {"connector-1": {"current_limit_a": 30}}
 
     window(store, t + timedelta(seconds=70), residual=5)  # load reduced, still hot
     advance_incidents(store, at(70))
@@ -124,7 +130,13 @@ def test_full_loop_open_to_resolved(store, flow):
     simulate(97)
     advance_incidents(store, at(98))
     assert incident()["state"] == "verifying"
-    assert store.runs.find_one()["sim"] == {"current_limit_a": 200, "fault_cleared": True}
+    device = {
+        "current_limit_a": 200,
+        "fault_cleared": True,
+        "fault_cleared_at": incident()["maintenance_applied_at"],
+        "fault_injection_open": False,  # maintenance also closes any operator-injected fault
+    }
+    assert store.runs.find_one()["sim"] == {"connector-1": device}
 
     plan = {160: {}, 175: {"current": 40}, 190: {}, 205: {"quality": False}, 220: {}, 235: {"residual": 4}}
     for end in range(160, 311, 15):
@@ -187,8 +199,124 @@ def test_alert_during_retest_reopens_but_stale_alert_does_not(store, flow):
     t, *_ = flow
     store.incidents.update_one({}, {"$set": {"state": "verifying", "verifying_since": t}})
     run = {"_id": RUN}
-    assert on_alert(store, run, {}, "datadog", t, "old", t - timedelta(seconds=1)) == "incident_existing"
-    assert on_alert(store, run, {}, "datadog", t, "new", t + timedelta(seconds=10)) == "incident_reopened"
+    assert (
+        on_alert(store, run, {"connector_id": "connector-1"}, "datadog", t, "old", t - timedelta(seconds=1))
+        == "incident_existing"
+    )
+    assert (
+        on_alert(store, run, {"connector_id": "connector-1"}, "datadog", t, "new", t + timedelta(seconds=10))
+        == "incident_reopened"
+    )
     found = store.incidents.find_one()
     assert found["state"] == "open" and found["timeline"][-1]["event"] == "recurrence"
     assert found["source"] == "local"  # recurrence does not rewrite the original source
+
+
+def reduce_and_ack(command, simulate):
+    command("acknowledge", 0)
+    command("reduce_load", 1)
+    simulate(5)  # ACK at t+5; target 30 A
+
+
+def hot_after_verification(store, at, t, command, incident, verified_s):
+    """No unlock before REDUCTION_CHECK_S after verification; exactly then, residual_not_recovered."""
+    advance_incidents(store, at(verified_s + 119))
+    assert incident().get("reduction_check_reason") != "residual_not_recovered"
+    early = command("maintenance", verified_s + 119)
+    assert store.commands.find_one({"_id": early})["error"] == "invalid_state:mitigating"
+    advance_incidents(store, at(verified_s + 120))
+    found = incident()
+    assert found["state"] == "mitigating" and found["reduction_check"] == "load_reduction_ineffective"
+    assert found["reduction_check_reason"] == "residual_not_recovered"
+    assert found["timeline"][-1]["reason"] == "residual_not_recovered"
+
+
+def test_maintenance_unlocked_after_ineffective_derating(store, flow):
+    """CONTRACT §3: current verified reduced but still hot 120 s after verification lets maintenance run."""
+    t, at, command, simulate, incident, _ = flow
+    reduce_and_ack(command, simulate)
+    window(store, t + timedelta(seconds=70), residual=5)  # 30 A, still hot
+    advance_incidents(store, at(125))  # 120 s after ACK: no event, the reduction was verified
+    assert incident()["load_reduction_verified_at"] == t + timedelta(seconds=70)
+    assert incident().get("reduction_check") is None
+    hot_after_verification(store, at, t, command, incident, 70)
+    maintenance = command("maintenance", 195)
+    assert store.commands.find_one({"_id": maintenance})["sim"] == {"fault_cleared": True}
+    simulate(200)
+    advance_incidents(store, at(201))
+    assert incident()["state"] == "mitigating" and incident()["maintenance_applied_at"]
+    rejected = command("verify_recovery", 202)  # the retest gate is unchanged: mitigated first
+    assert store.commands.find_one({"_id": rejected})["error"] == "invalid_state:mitigating"
+    window(store, t + timedelta(seconds=265), residual=1)
+    advance_incidents(store, at(266))
+    assert incident()["state"] == "mitigated" and incident()["maintenance_applied_at"]
+    command("verify_recovery", 270)
+    simulate(272)
+    advance_incidents(store, at(273))
+    assert incident()["state"] == "verifying"
+    assert [e["reason"] for e in incident()["timeline"] if e["event"] == "load_reduction_ineffective"] == [
+        "residual_not_recovered"
+    ]  # once per cycle
+
+
+@pytest.mark.parametrize(
+    "first, current, quality",
+    [("load_not_reduced", 60, True), ("insufficient_data", 30, False)],
+)
+def test_earlier_check_never_unlocks_but_later_verification_does(store, flow, first, current, quality):
+    t, at, command, simulate, incident, _ = flow
+    reduce_and_ack(command, simulate)
+    window(
+        store,
+        t + timedelta(seconds=70),
+        current=current,
+        limit=30 if quality else 200,
+        residual=5,
+        quality=quality,
+    )
+    advance_incidents(store, at(125))  # 120 s after ACK, not verified
+    assert incident()["reduction_check_reason"] == first
+    rejected = command("maintenance", 130)
+    assert store.commands.find_one({"_id": rejected})["error"] == "invalid_state:mitigating"
+    window(store, t + timedelta(seconds=145), residual=5)  # now verified, still hot
+    advance_incidents(store, at(146))
+    assert incident()["load_reduction_verified_at"] == t + timedelta(seconds=145)
+    hot_after_verification(store, at, t, command, incident, 145)
+    accepted = command("maintenance", 270)
+    assert store.commands.find_one({"_id": accepted})["sim"] == {"fault_cleared": True}
+
+
+def test_maintenance_result_landing_across_mitigated_transition_is_recorded(store, flow):
+    """Matched by handling cycle: a result stamped before the same-tick mitigated transition still counts."""
+    t, at, command, simulate, incident, _ = flow
+    reduce_and_ack(command, simulate)
+    window(store, t + timedelta(seconds=70), residual=5)
+    advance_incidents(store, at(190))
+    maintenance = command("maintenance", 195)  # unlocked, dispatched while mitigating
+    window(store, t + timedelta(seconds=205), residual=1)
+    advance_incidents(store, at(206))  # mitigated; state_since t+206, result not yet in
+    assert incident()["state"] == "mitigated" and not incident().get("maintenance_applied_at")
+    store.commands.update_one(  # result lands late, stamped t+200 (clock skew / same-tick race)
+        {"_id": maintenance}, {"$set": {"status": "applied", "applied_at": t + timedelta(seconds=200)}}
+    )
+    advance_incidents(store, at(210))
+    assert incident()["maintenance_applied_at"] == t + timedelta(seconds=200)
+
+
+def test_tripped_window_never_verifies_mitigation(store, flow):
+    """A trip (0 A) is below the target and cool, but it is an interruption, not effective derating."""
+    t, at, command, simulate, incident, _ = flow
+    reduce_and_ack(command, simulate)
+    window(store, t + timedelta(seconds=70), current=0, residual=1)
+    advance_incidents(store, at(70))
+    assert incident()["state"] == "mitigating" and not incident().get("load_reduction_verified_at")
+    window(store, t + timedelta(seconds=85), residual=1)
+    store.windows.update_one(
+        {"end": t + timedelta(seconds=85)}, {"$set": {"samples.0.connector_status": "faulted"}}
+    )
+    advance_incidents(store, at(85))
+    assert incident()["state"] == "mitigating" and not incident().get("load_reduction_verified_at")
+    window(store, t + timedelta(seconds=100), residual=1)
+    advance_incidents(store, at(100))
+    assert incident()["state"] == "mitigated"
+    assert incident()["load_reduction_verified_at"] == t + timedelta(seconds=100)
