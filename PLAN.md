@@ -11,7 +11,7 @@ Ngày chốt 14/10/2026, giờ Asia/Saigon. Nhóm yêu cầu **chuẩn bị trư
 - Ngân sách dịch vụ 0 đồng; máy local sẵn có, MongoDB local, Datadog trial, HTTPS tunnel miễn phí. Không EC2/Atlas/domain/AI trả phí.
 - Sub-agent triển khai từng phần và reviewer độc lập; chốt hợp đồng trước khi song song.
 - Luồng chính: telemetry → phát hiện → incident có bằng chứng → operator duyệt giảm tải → bảo trì mô phỏng → kiểm tra phục hồi.
-- Không thanh toán, ứng dụng tài xế, OCPP/charger thật hoặc dự báo tuổi thọ thiết bị.
+- Không thanh toán, tài khoản/ứng dụng tài xế, OCPP/charger thật hoặc dự báo tuổi thọ thiết bị; có màn hình trạm chỉ đọc (pin %, công suất, nhiệt độ) cho người dùng tại trạm.
 
 ## Dependencies
 

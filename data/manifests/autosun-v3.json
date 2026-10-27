@@ -15,13 +15,13 @@
       "name": "Readme.txt",
       "bytes": 2250,
       "sha256": "0a535074de55e4d10592266fbbce588132d37f60ba5192b6b6812e0b128115b2",
-      "downloaded_at": "2026-10-20T04:42:43+00:00"
+      "downloaded_at": "2026-10-27T04:30:51+00:00"
     },
     {
       "name": "processed_data_longer_than_30.xlsx",
       "bytes": 103137520,
       "sha256": "8d7c676bbf2042a4cc8124d12aa5652b6a335bc43e3d4d984e819a0078e08c70",
-      "downloaded_at": "2026-10-20T04:43:10+00:00"
+      "downloaded_at": "2026-10-27T04:32:05+00:00"
     }
   ],
   "units_verified": {
@@ -154,6 +154,11 @@
       "path": "chargeops/profiles/autosun_v3.csv",
       "rows": 2781,
       "sha256": "3b3401c5083c53edceca814ac933808362563bb0578f722cddcf7294c5ce6b51"
+    },
+    "soc_file": {
+      "path": "chargeops/profiles/autosun_v3_soc.csv",
+      "rows": 50,
+      "sha256": "f8b9a656c213a84ac46a0e68dcfcec56451c37fcc320130f8625c55d3f73d016"
     }
   },
   "thermal_fit_eligible_sessions": {
@@ -169,6 +174,6 @@
     },
     "note": "1 C sensor resolution, no ambient; order-of-magnitude calibration only"
   },
-  "use": "load profiles only (charginga/chargingv); battery `label` is not charger ground truth",
-  "generated_at": "2026-10-20T05:10:18+00:00"
+  "use": "load profiles (charginga/chargingv) and per-session SoC/energy for the station display; battery label is not charger ground truth",
+  "generated_at": "2026-10-27T04:43:08+00:00"
 }

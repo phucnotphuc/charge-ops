@@ -77,7 +77,20 @@ Tái lập: `uv run --with pandas==2.2.3 --with openpyxl==3.1.5 python -I script
 - Dòng trong dataset là dòng thực đo được; simulator coi đó là nhu cầu xe (`requested_current_a`). Giới hạn gốc 250 A (dòng lớn nhất quan sát được) là giả định synthetic.
 - Nhãn pin, `types`, `class_judge` không dùng cho detector.
 
-**Attribution:** haosen yang, Jinpeng Tian, Weijie Mai, Chi-yung Chung. *A dataset of EV battery charging from Shenzhen Auto Electric Power Plant Co., Ltd (Autosun) and Hong Kong Polytechnic University*, Mendeley Data, V3, 2024. DOI [10.17632/c7gg94tmvz.3](https://doi.org/10.17632/c7gg94tmvz.3). CC BY 4.0. Biến đổi của ChargeOps: loại trùng giữa sheet, lọc phiên theo quy tắc trên, chỉ dùng dòng/điện áp, nội suy 1 phút → 5 giây.
+**SoC cho màn hình trạm (27/10/2026):** cùng lệnh audit xuất `chargeops/profiles/autosun_v3_soc.csv` (50 dòng, một dòng mỗi phiên replay; SHA-256 trong manifest `selection.soc_file`). File replay `autosun_v3.csv` không đổi (SHA-256 `3b3401c5…` kiểm lại sau khi chạy lại audit). SoC là trạng thái xe, lưu ở collection `vehicle_states`, không thêm vào mẫu telemetry.
+
+| Trường | Nguồn | Cách tính |
+|---|---|---|
+| `soc_start_percent`, `soc_end_percent` | `public` | `current_soc` ở lần đọc đầu tiên khác 0 và ở phút cuối của phiên. 29/50 phiên ghi `current_soc = 0` ở phút đầu trước khi BMS báo (ví dụ 0 → 22 → 23 …); giá trị 0 đó bị bỏ, không coi là SoC thật |
+| `energy_kwh` | `public` | `Σ out_power / 60` (kWh) của các phút sau lần đọc SoC đầu tiên |
+| `capacity_kwh` | `derived` | `energy_kwh / ((soc_end − soc_start) / 100)` khi SoC tăng ≥ 5 điểm, ngược lại để trống. Cả 50 phiên đều có giá trị: 29,1–102,7 kWh, trung vị 60,6 kWh |
+| SoC trực tiếp | `derived` | `soc_start + delivered_kwh / capacity_kwh × 100`, tối đa 100; `delivered_kwh` tích phân `voltage_v × current_a` **thực tế** simulator cấp (sau giới hạn dòng), nên connector bị giảm tải sạc chậm hơn thấy rõ |
+| Dung lượng 60 kWh | `synthetic` | Giá trị dự phòng `DEFAULT_CAPACITY_KWH` khi `capacity_kwh` trống (`capacity_source: default`); hiện không phiên nào cần |
+| `minutes_to_full` | `derived` | `(100 − SoC) / 100 × capacity / power_kw × 60`; `null` khi công suất < 0,5 kW |
+
+Giới hạn: dung lượng ước lượng gộp tổn hao sạc và độ phân giải SoC 1 %; không phải thông số pin của xe. Màn hình trạm là hiển thị mô phỏng, không phải dữ liệu xe thật đang cắm sạc.
+
+**Attribution:** haosen yang, Jinpeng Tian, Weijie Mai, Chi-yung Chung. *A dataset of EV battery charging from Shenzhen Auto Electric Power Plant Co., Ltd (Autosun) and Hong Kong Polytechnic University*, Mendeley Data, V3, 2024. DOI [10.17632/c7gg94tmvz.3](https://doi.org/10.17632/c7gg94tmvz.3). CC BY 4.0. Biến đổi của ChargeOps: loại trùng giữa sheet, lọc phiên theo quy tắc trên, dùng dòng/điện áp (nội suy 1 phút → 5 giây) và `current_soc`/`out_power` của 50 phiên replay cho màn hình trạm.
 
 ## Provenance trong sản phẩm
 

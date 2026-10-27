@@ -19,6 +19,7 @@ RAW = Path("data/raw/autosun-v3")
 CSV = Path("data/processed/autosun_v3_longer_than_30.csv")
 MANIFEST = Path("data/manifests/autosun-v3.json")
 PROFILES = Path("chargeops/profiles/autosun_v3.csv")  # shipped in the image for load replay
+SOC_PROFILES = Path("chargeops/profiles/autosun_v3_soc.csv")  # per-session SoC/energy for the station display
 BASE = "https://data.mendeley.com/public-files/datasets/c7gg94tmvz/files"
 FILES = {  # published SHA-256 from the Mendeley public API (version 3)
     "Readme.txt": (
@@ -166,6 +167,22 @@ def main():
     profiles.columns = ["transaction_id", "minute", "current_a", "voltage_v"]
     PROFILES.parent.mkdir(parents=True, exist_ok=True)
     profiles.to_csv(PROFILES, index=False, lineterminator="\n")
+    # Station monitor: real SoC at session start/end and session energy for the replayed sessions.
+    replayed = data[data["transaction_id"].isin(chosen.index)]
+    # Many sessions publish current_soc = 0 in the first minute before the BMS reports (0 -> 22 -> 23 ...).
+    # Start at the first reported (non-zero) SoC and count only the energy charged after that reading.
+    replayed = replayed[replayed.groupby("transaction_id")["current_soc"].cummax() > 0]
+    first = replayed.groupby("transaction_id").cumcount() == 0
+    replayed = replayed.assign(out_power=replayed["out_power"].where(~first, 0.0))
+    soc = replayed.groupby("transaction_id").agg(
+        soc_start_percent=("current_soc", "first"),
+        soc_end_percent=("current_soc", "last"),
+        energy_kwh=("out_power", lambda p: p.sum() / 60),
+    )
+    rise = soc["soc_end_percent"] - soc["soc_start_percent"]
+    soc["capacity_kwh"] = (soc["energy_kwh"] / (rise / 100)).where(rise >= 5).round(1)
+    soc["energy_kwh"] = soc["energy_kwh"].round(3)
+    soc.reset_index().to_csv(SOC_PROFILES, index=False, lineterminator="\n")
     manifest = {
         "id": "autosun-polyu-v3",
         "title": "A dataset of EV battery charging from Autosun and Hong Kong Polytechnic University",
@@ -194,13 +211,14 @@ def main():
                 "rows": len(profiles),
                 "sha256": sha256(PROFILES),
             },
+            "soc_file": {"path": str(SOC_PROFILES.as_posix()), "rows": len(soc), "sha256": sha256(SOC_PROFILES)},
         },
         "thermal_fit_eligible_sessions": {
             "gun_temperature1": thermal_fit(clean, "charging_gun_temperature1"),
             "gun_temperature2": thermal_fit(clean, "charging_gun_temperature2"),
             "note": "1 C sensor resolution, no ambient; order-of-magnitude calibration only",
         },
-        "use": "load profiles only (charginga/chargingv); battery `label` is not charger ground truth",
+        "use": "load profiles (charginga/chargingv) and per-session SoC/energy for the station display; battery label is not charger ground truth",
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }
     MANIFEST.parent.mkdir(parents=True, exist_ok=True)

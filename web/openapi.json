@@ -1326,6 +1326,137 @@
         "title": "StateCount",
         "type": "object"
       },
+      "StationConnector": {
+        "properties": {
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "connector_temperature_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connector Temperature C"
+          },
+          "current_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current A"
+          },
+          "energy_kwh": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Energy Kwh"
+          },
+          "measured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measured At"
+          },
+          "minutes_to_full": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes To Full"
+          },
+          "power_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Kw"
+          },
+          "soc_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soc Percent"
+          },
+          "status": {
+            "enum": [
+              "offline",
+              "idle",
+              "charging",
+              "limited",
+              "checking"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connector_id",
+          "status",
+          "soc_percent",
+          "power_kw",
+          "current_a",
+          "connector_temperature_c",
+          "energy_kwh",
+          "minutes_to_full",
+          "measured_at"
+        ],
+        "title": "StationConnector",
+        "type": "object"
+      },
+      "StationOut": {
+        "properties": {
+          "connectors": {
+            "items": {
+              "$ref": "#/components/schemas/StationConnector"
+            },
+            "title": "Connectors",
+            "type": "array"
+          },
+          "station_id": {
+            "title": "Station Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "station_id",
+          "connectors"
+        ],
+        "title": "StationOut",
+        "type": "object"
+      },
       "Stats": {
         "properties": {
           "max": {
@@ -1744,6 +1875,91 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VehicleBatch": {
+        "properties": {
+          "vehicles": {
+            "items": {
+              "$ref": "#/components/schemas/VehicleState"
+            },
+            "maxItems": 6,
+            "minItems": 1,
+            "title": "Vehicles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "vehicles"
+        ],
+        "title": "VehicleBatch",
+        "type": "object"
+      },
+      "VehicleState": {
+        "additionalProperties": false,
+        "properties": {
+          "capacity_source": {
+            "enum": [
+              "autosun",
+              "default"
+            ],
+            "title": "Capacity Source",
+            "type": "string"
+          },
+          "connector_id": {
+            "enum": [
+              "connector-1",
+              "connector-2",
+              "connector-3",
+              "connector-4",
+              "connector-5",
+              "connector-6"
+            ],
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "energy_kwh": {
+            "minimum": 0.0,
+            "title": "Energy Kwh",
+            "type": "number"
+          },
+          "measured_at": {
+            "format": "date-time",
+            "title": "Measured At",
+            "type": "string"
+          },
+          "minutes_to_full": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes To Full"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "soc_percent": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Soc Percent",
+            "type": "number"
+          }
+        },
+        "required": [
+          "run_id",
+          "connector_id",
+          "measured_at",
+          "soc_percent",
+          "energy_kwh",
+          "capacity_source"
+        ],
+        "title": "VehicleState",
         "type": "object"
       }
     }
@@ -2858,6 +3074,98 @@
           }
         },
         "summary": "Active Run"
+      }
+    },
+    "/api/v1/simulator/vehicles": {
+      "post": {
+        "operationId": "ingest_vehicles_api_v1_simulator_vehicles_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-simulator-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Simulator-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VehicleBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Vehicles"
+      }
+    },
+    "/api/v1/stations/{station_id}": {
+      "get": {
+        "description": "Anonymous, read-only: the driver-facing screen. Reuses the connector latest-state pipeline.",
+        "operationId": "station_display_api_v1_stations__station_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "station_id",
+            "required": true,
+            "schema": {
+              "enum": [
+                "station-1",
+                "station-2"
+              ],
+              "title": "Station Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Station Display"
       }
     },
     "/api/v1/telemetry/batch": {

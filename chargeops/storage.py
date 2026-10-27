@@ -35,6 +35,7 @@ def initialize(db):
     db.commands.create_index("idempotency_key", unique=True)
     db.commands.create_index([("incident_id", 1), ("type", 1), ("applied_at", -1)])
     db.windows.create_index([("run_id", 1), ("connector_id", 1), ("end", -1)])
+    db.vehicle_states.create_index("run_id")
     db.sources.update_one(
         {"_id": MANIFEST},
         {

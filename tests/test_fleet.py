@@ -1,18 +1,15 @@
 """WP-W2B: two stations × three connectors, seeded faults, per-connector worker and command routing."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import Mock
 from uuid import UUID, uuid5
 
 import pytest
-from fastapi.testclient import TestClient
 
-from chargeops.api import app
 from chargeops.domain import CONNECTORS, LOCATION, MANIFEST, window_evidence
 from chargeops.fleet import fleet_plan, physics, steady_load
 from chargeops.model import ORIGINAL_LIMIT_A, PROFILES
 from chargeops.simulator import Simulator
-from chargeops.worker import process_event, tick
+from chargeops.worker import process_event
 
 SIMULATOR = {"X-Simulator-Secret": "s" * 32}
 OPERATOR = {"X-Operator-Secret": "o" * 32}
@@ -32,66 +29,6 @@ def test_retry_old_fault_event_preserves_new_injection(store):
     })
     assert consume_event("old", store) == {"status": "duplicate"}
     assert store.runs.find_one({"_id": RUN})["sim"]["connector-1"]["fault_injected_at"] == newer
-
-
-class Harness:
-    """Simulator, API and worker on one simulated clock; the simulator talks to the API over HTTP only."""
-
-    def __init__(self, store, monkeypatch):
-        self.store, self.clock = store, [T0]
-        monkeypatch.setattr("chargeops.api.now", lambda: self.clock[0])
-        monkeypatch.setattr("chargeops.worker.now", lambda: self.clock[0])
-        self.client = TestClient(app)
-        self.sim_client = TestClient(app, headers=SIMULATOR)
-        self.simulator = Simulator(self.sim_client)
-        self.stats = Mock()
-        self.t = 0
-
-    def start(self, scenario, seed, mode="local", profile=None):
-        self.store.runs.insert_one(
-            {
-                "_id": RUN,
-                "status": "active",
-                "mode": mode,
-                "scenario": scenario,
-                "seed": seed,
-                "profile_id": profile,
-                "created_at": T0,
-                "started_at": T0,
-                "active_slot": "single",
-                "stop_requested": False,
-            }
-        )
-
-    def run_until(self, seconds, worker=True):
-        while self.t <= seconds:
-            self.clock[0] = T0 + timedelta(seconds=self.t)
-            self.simulator.step(self.clock[0])
-            if worker:
-                tick(self.store, self.stats, Mock())
-            self.t += 5
-
-    def run_while(self, busy, limit):
-        """Advance step by step while `busy()` holds, up to `limit` seconds."""
-        while busy() and self.t <= limit:
-            self.run_until(self.t)
-
-    def command(self, incident_id, kind):
-        response = self.client.post(
-            f"/api/v1/incidents/{incident_id}/commands",
-            json={"type": kind},
-            headers={**OPERATOR, "Idempotency-Key": f"{incident_id}-{kind}"},
-        )
-        assert response.status_code == 202
-        return response.json()["command_id"]
-
-    def incidents(self):
-        return list(self.store.incidents.find())
-
-
-@pytest.fixture
-def fleet(store, monkeypatch):
-    return Harness(store, monkeypatch)
 
 
 def test_two_stations_three_connectors_each():
@@ -481,3 +418,31 @@ def test_fleet_window_rows_equals_per_connector_window_rows(fleet, store):
     temps = [r["connector_temperature_c"] for r in fleet_rows["connector-2"]]
     assert 999.0 not in temps and len(temps) == 12
     assert sum(r["sample_id"] == original["sample_id"] for r in fleet_rows["connector-5"]) == 1
+
+
+def test_derating_slows_the_soc_rise_on_the_faulty_connector(fleet, store):
+    """What the station screen explains to drivers: a limited connector charges visibly slower."""
+    seed = 4
+    plan = fleet_plan(seed, "thermal_fault")
+    faulty = next(c for c, p in plan.items() if p.fault_onset_s is not None)
+    fleet.start("thermal_fault", seed)
+    fleet.run_while(lambda: not fleet.incidents(), plan[faulty].fault_onset_s + 300)
+    incident = fleet.incidents()[0]
+    assert incident["connector_id"] == faulty
+
+    def soc():
+        return store.vehicle_states.find_one({"_id": f"{RUN}:{faulty}"})["soc_percent"]
+
+    def rise_over(seconds):
+        start = soc()
+        fleet.run_until(fleet.t + seconds)
+        return soc() - start
+
+    fleet.command(incident["_id"], "acknowledge")
+    before = rise_over(120)
+    fleet.command(incident["_id"], "reduce_load")
+    fleet.run_while(lambda: store.commands.find_one({"type": "reduce_load"})["status"] != "applied", 900)
+    fleet.run_until(fleet.t + 5)
+    assert store.incidents.find_one()["state"] == "mitigating"
+    after = rise_over(120)
+    assert 0 < after < before

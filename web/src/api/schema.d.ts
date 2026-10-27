@@ -475,6 +475,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/simulator/vehicles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Vehicles */
+        post: operations["ingest_vehicles_api_v1_simulator_vehicles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stations/{station_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Station Display
+         * @description Anonymous, read-only: the driver-facing screen. Reuses the connector latest-state pipeline.
+         */
+        get: operations["station_display_api_v1_stations__station_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/telemetry/batch": {
         parameters: {
             query?: never;
@@ -963,6 +1000,37 @@ export interface components {
             /** State */
             state: string;
         };
+        /** StationConnector */
+        StationConnector: {
+            /** Connector Id */
+            connector_id: string;
+            /** Connector Temperature C */
+            connector_temperature_c: number | null;
+            /** Current A */
+            current_a: number | null;
+            /** Energy Kwh */
+            energy_kwh: number | null;
+            /** Measured At */
+            measured_at: string | null;
+            /** Minutes To Full */
+            minutes_to_full: number | null;
+            /** Power Kw */
+            power_kw: number | null;
+            /** Soc Percent */
+            soc_percent: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "offline" | "idle" | "charging" | "limited" | "checking";
+        };
+        /** StationOut */
+        StationOut: {
+            /** Connectors */
+            connectors: components["schemas"]["StationConnector"][];
+            /** Station Id */
+            station_id: string;
+        };
         /** Stats */
         Stats: {
             /** Max */
@@ -1079,6 +1147,37 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VehicleBatch */
+        VehicleBatch: {
+            /** Vehicles */
+            vehicles: components["schemas"]["VehicleState"][];
+        };
+        /** VehicleState */
+        VehicleState: {
+            /**
+             * Capacity Source
+             * @enum {string}
+             */
+            capacity_source: "autosun" | "default";
+            /**
+             * Connector Id
+             * @enum {string}
+             */
+            connector_id: "connector-1" | "connector-2" | "connector-3" | "connector-4" | "connector-5" | "connector-6";
+            /** Energy Kwh */
+            energy_kwh: number;
+            /**
+             * Measured At
+             * Format: date-time
+             */
+            measured_at: string;
+            /** Minutes To Full */
+            minutes_to_full?: number | null;
+            /** Run Id */
+            run_id: string;
+            /** Soc Percent */
+            soc_percent: number;
         };
     };
     responses: never;
@@ -1895,6 +1994,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_vehicles_api_v1_simulator_vehicles_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-simulator-secret"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VehicleBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    station_display_api_v1_stations__station_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                station_id: "station-1" | "station-2";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StationOut"];
                 };
             };
             /** @description Validation Error */
