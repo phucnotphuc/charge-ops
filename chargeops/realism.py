@@ -37,3 +37,26 @@ def sample_rng(run_id, connector_id, step):
 def noisy(value, sigma, rng, floor=None):
     out = value + rng.gauss(0.0, sigma)
     return max(out, floor) if floor is not None else out
+
+
+class Imperfections:
+    """Field-like telemetry faults, reproducible per (run, step): a sample is dropped, sent twice (same sample_id,
+    exercising the (run_id, sample_id) dedupe) or held back and sent with the next batch (out of order)."""
+
+    def __init__(self, drop=0.01, duplicate=0.01, late=0.01):
+        self.drop, self.duplicate, self.late = drop, duplicate, late
+        self.held = []
+
+    def apply(self, batch, run_id, step):
+        out, self.held = list(self.held), []
+        for sample in batch:
+            roll = sample_rng(run_id, f"imperfect:{sample['connector_id']}", step).random()
+            if roll < self.drop:
+                continue
+            if roll < self.drop + self.late:
+                self.held.append(sample)
+                continue
+            out.append(sample)
+            if roll < self.drop + self.late + self.duplicate:
+                out.append(dict(sample))
+        return out

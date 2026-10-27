@@ -455,3 +455,29 @@ def test_derating_slows_the_soc_rise_on_the_faulty_connector(fleet, store):
     assert store.incidents.find_one()["state"] == "mitigating"
     after = rise_over(120)
     assert 0 < after < before
+
+
+def test_imperfect_telemetry_keeps_one_incident_on_the_faulty_connector(fleet, store):
+    fleet.simulator = Simulator(fleet.sim_client, realism=True)
+    plan = fleet_plan(4, "thermal_fault")
+    planned = next(c for c, p in plan.items() if p.fault_onset_s is not None)
+    fleet.start("thermal_fault", seed=4)
+    fleet.run_until(plan[planned].fault_onset_s + 300, worker=True)
+    opened = list(store.incidents.find({}, {"connector_id": 1}))
+    assert [i["connector_id"] for i in opened] == [planned]
+    ids = [s["sample_id"] for s in store.telemetry.find({})]
+    assert len(ids) > len(set(ids))  # duplicates were stored and must be deduped by the pipeline
+
+
+def test_empty_batch_still_posts_vehicles_and_new_run_drops_held_samples(fleet, store):
+    fleet.simulator = Simulator(fleet.sim_client, realism=True)
+    fleet.simulator.imperfect.late = 1.0
+    fleet.start("thermal_fault", seed=4)
+    fleet.run_until(0, worker=False)
+    assert store.telemetry.count_documents({}) == 0
+    assert store.vehicle_states.count_documents({}) == len(CONNECTORS)
+    assert fleet.simulator.imperfect.held
+    fleet.simulator.thermal = {}  # as if a new run started
+    run = {**store.runs.find_one(), "started_at": T0.isoformat()}
+    fleet.simulator.samples(run, T0 + timedelta(seconds=5))
+    assert fleet.simulator.imperfect.held == []
