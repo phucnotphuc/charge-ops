@@ -11,6 +11,15 @@ from chargeops.model import ORIGINAL_LIMIT_A, PROFILES
 from chargeops.simulator import Simulator
 from chargeops.worker import process_event
 
+
+def test_realistic_healthy_run_opens_no_incident(fleet, store):
+    fleet.simulator = Simulator(fleet.sim_client, realism=True)
+    fleet.start("healthy", seed=3)
+    fleet.run_until(600, worker=True)
+    assert store.incidents.count_documents({}) == 0
+    ambient = {s["ambient_temperature_c"] for s in store.telemetry.find({})}
+    assert len(ambient) > 1  # ambient moves
+
 SIMULATOR = {"X-Simulator-Secret": "s" * 32}
 OPERATOR = {"X-Operator-Secret": "o" * 32}
 WEBHOOK = {"X-Webhook-Secret": "w" * 32}

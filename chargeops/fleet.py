@@ -109,13 +109,14 @@ def demand_at(plan, elapsed):
     return demand, voltage
 
 
-def physics(plan, elapsed, sim):
+def physics(plan, elapsed, sim, ambient_c=AMBIENT_C):
     """One connector: demand, current, limit, voltage and steady-state temperature.
 
     `sim` is this connector's device state from applied commands and consumed fault events, in elapsed
     seconds: current_limit_a, fault_cleared (any maintenance), fault_cleared_s (latest maintenance),
     fault_injected_s. Maintenance clears the seeded fault for good; an injected fault stays active unless
-    maintenance was applied after it, so an injection never revives a cleared seeded fault."""
+    maintenance was applied after it, so an injection never revives a cleared seeded fault.
+    `ambient_c` is the station's ambient at this step; the default keeps the constant 25 °C demo ambient."""
     demand, voltage = demand_at(plan, elapsed)
     limit = sim.get("current_limit_a", ORIGINAL_LIMIT_A)
     current = min(demand, limit)
@@ -129,4 +130,4 @@ def physics(plan, elapsed, sim):
     for onset, severity in faults:
         onset_a = min(demand_at(plan, onset)[0], ORIGINAL_LIMIT_A)
         heat = max(heat, fault_multiplier(elapsed, onset, severity, FAULT_RAMP_S, onset_a, THERMAL_K))
-    return demand, current, limit, voltage, AMBIENT_C + THERMAL_K * current**2 * (1 + heat)
+    return demand, current, limit, voltage, ambient_c + THERMAL_K * current**2 * (1 + heat)

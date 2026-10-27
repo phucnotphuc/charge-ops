@@ -67,6 +67,20 @@ def initialize(db):
         },
         upsert=True,
     )
+    db.sources.update_one(
+        {"_id": MANIFEST},
+        {
+            "$set": {
+                "fields.ambient_temperature_c": (
+                    "synthetic: HCMC diurnal profile per station (SIM_REALISM=true) or constant 25 °C"
+                ),
+                "fields.connector_temperature_c": (
+                    "synthetic: thermal lag model with injected fault, "
+                    "Gaussian sensor noise σ 0.2 °C when SIM_REALISM=true"
+                ),
+            }
+        },
+    )
 
 
 def telemetry_pipeline(run_id, end, connector_id=None):
