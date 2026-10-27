@@ -11,6 +11,7 @@ dev = ["pytest>=8,<10", "ruff>=0.9,<1", "mongomock>=4.3,<5"]
 testpaths = ["tests"]
 pythonpath = ["."]
 # Starlette TestClient still imports httpx; upstream deprecation notice, nothing in this repo to fix.
+markers = ["mongo: needs a real MongoDB via MONGODB_TEST_URI"]
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
 
 [tool.ruff]

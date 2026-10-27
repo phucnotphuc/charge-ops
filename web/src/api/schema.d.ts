@@ -123,6 +123,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/connectors/{connector_id}/trend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Connector Trend */
+        get: operations["connector_trend_api_v1_connectors__connector_id__trend_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/demo-runs": {
         parameters: {
             query?: never;
@@ -308,6 +325,40 @@ export interface paths {
         put?: never;
         /** Create Command */
         post: operations["create_command_api_v1_incidents__incident_id__commands_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/fleet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fleet Insights */
+        get: operations["fleet_insights_api_v1_insights_fleet_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Incident Insights */
+        get: operations["incident_insights_api_v1_insights_incidents_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -560,6 +611,15 @@ export interface components {
              */
             status: "applied" | "failed";
         };
+        /** ConnectorCount */
+        ConnectorCount: {
+            /** Connector Id */
+            connector_id: string;
+            /** Count */
+            count: number;
+            /** Open */
+            open: number;
+        };
         /** ConnectorList */
         ConnectorList: {
             /** Items */
@@ -762,10 +822,46 @@ export interface components {
              */
             connector_id: "connector-1" | "connector-2" | "connector-3" | "connector-4" | "connector-5" | "connector-6";
         };
+        /** FleetOut */
+        FleetOut: {
+            /** Run Id */
+            run_id: string;
+            /** Windows */
+            windows: components["schemas"]["FleetWindow"][];
+        };
+        /** FleetWindow */
+        FleetWindow: {
+            /** Connector Id */
+            connector_id: string;
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /** Quality */
+            quality: boolean;
+            /** Residual Mean */
+            residual_mean: number | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** IncidentSummary */
+        IncidentSummary: {
+            /** By Connector */
+            by_connector: components["schemas"]["ConnectorCount"][];
+            /** By State */
+            by_state: components["schemas"]["StateCount"][];
+            /** Mtta S */
+            mtta_s: number | null;
+            /** Mttm S */
+            mttm_s: number | null;
+            /** Mttr S */
+            mttr_s: number | null;
+            /** Total */
+            total: number;
         };
         /** Locked */
         Locked: {
@@ -860,6 +956,13 @@ export interface components {
             /** Voltage V */
             voltage_v?: number | null;
         };
+        /** StateCount */
+        StateCount: {
+            /** Count */
+            count: number;
+            /** State */
+            state: string;
+        };
         /** Stats */
         Stats: {
             /** Max */
@@ -928,6 +1031,31 @@ export interface components {
             items: components["schemas"]["TelemetryItem"][];
             /** Next Cursor */
             next_cursor?: string | null;
+        };
+        /** TrendOut */
+        TrendOut: {
+            /** Connector Id */
+            connector_id: string;
+            /** Points */
+            points: components["schemas"]["TrendPoint"][];
+            /** Run Id */
+            run_id: string;
+        };
+        /** TrendPoint */
+        TrendPoint: {
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /** Residual Avg 5M */
+            residual_avg_5m: number | null;
+            /** Residual Max 15M */
+            residual_max_15m: number | null;
+            /** Residual Mean */
+            residual_mean: number | null;
+            /** Residual Slope C Per Min */
+            residual_slope_c_per_min: number | null;
         };
         /** UserOut */
         UserOut: {
@@ -1138,6 +1266,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TelemetryPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connector_trend_api_v1_connectors__connector_id__trend_get: {
+        parameters: {
+            query: {
+                run_id: string;
+            };
+            header?: never;
+            path: {
+                connector_id: "connector-1" | "connector-2" | "connector-3" | "connector-4" | "connector-5" | "connector-6";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrendOut"];
                 };
             };
             /** @description Validation Error */
@@ -1487,6 +1648,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fleet_insights_api_v1_insights_fleet_get: {
+        parameters: {
+            query: {
+                run_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FleetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    incident_insights_api_v1_insights_incidents_get: {
+        parameters: {
+            query?: {
+                run_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentSummary"];
                 };
             };
             /** @description Validation Error */

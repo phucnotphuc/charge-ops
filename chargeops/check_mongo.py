@@ -6,6 +6,7 @@ from uuid import uuid4
 from pymongo.errors import DuplicateKeyError
 
 from chargeops.domain import block_end, now, window_evidence, with_residuals
+from chargeops.insights import trend_pipeline
 from chargeops.lifecycle import open_incident
 from chargeops.storage import database, initialize, window_rows
 
@@ -20,6 +21,7 @@ def main():
         assert info["options"]["timeseries"]["timeField"] == "measured_at"
         assert info["options"]["expireAfterSeconds"] == 1209600
         check_loop(db)
+        check_trend(db)
         print("PASS: real time-series TTL, aggregation dedup/residual, unique active run and incident")
     finally:
         client.drop_database(name)
@@ -61,6 +63,26 @@ def check_loop(db, connector_id="connector-1"):
     open_incident(db, run, evidence, "local", end, "smoke")
     open_incident(db, run, evidence, "local", end, "smoke-retry")
     assert db.incidents.count_documents({"run_id": run_id, "connector_id": connector_id}) == 1
+
+
+def check_trend(db, connector_id="connector-1"):
+    """$setWindowFields trend on real MongoDB (mongomock has no window functions)."""
+    run_id, end = str(uuid4()), block_end(now())
+    db.windows.insert_many(
+        [
+            {
+                "run_id": run_id,
+                "connector_id": connector_id,
+                "end": end - timedelta(seconds=15 * (11 - i)),
+                "quality": True,
+                "residual_mean": float(i),
+            }
+            for i in range(12)
+        ]
+    )
+    trend = list(db.windows.aggregate(trend_pipeline(run_id, connector_id)))
+    assert len(trend) == 12 and abs(trend[-1]["residual_slope_c_per_min"] - 4.0) < 0.001
+    print(f"trend points: {len(trend)}; $setWindowFields ok")
 
 
 if __name__ == "__main__":
