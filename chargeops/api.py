@@ -3,7 +3,7 @@ import hmac
 import re
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
@@ -14,7 +14,7 @@ from pydantic import AwareDatetime, ValidationError
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from chargeops import insights, results
+from chargeops import insights, results, station
 from chargeops.auth import SESSION_COOKIE, SESSION_TTL_S, new_token, token_digest, verify_password
 from chargeops.config import settings
 from chargeops.domain import (
@@ -178,6 +178,10 @@ def active_run(resume: bool = False, store=Depends(db)):
                 "connector_temperature_c": row["latest"]["connector_temperature_c"],
             }
             for row in store.telemetry.aggregate(pipeline)
+        }
+        # ... and each connector's delivered energy, so the vehicle SoC continues instead of restarting.
+        run["last_vehicles"] = {
+            doc["connector_id"]: doc for doc in store.vehicle_states.find({"run_id": run["_id"]}, {"_id": 0})
         }
     return encode(run)
 
@@ -627,6 +631,45 @@ def connector_views(store, ids=CONNECTORS):
 @app.get("/api/v1/connectors", response_model=ConnectorList)
 def connectors(store=Depends(db)):
     return ConnectorList(items=connector_views(store))
+
+
+@app.post("/api/v1/simulator/vehicles", status_code=202, dependencies=[Depends(simulator_auth)])
+def ingest_vehicles(batch: station.VehicleBatch, store=Depends(db)):
+    for v in batch.vehicles:
+        store.vehicle_states.update_one(
+            {"_id": f"{v.run_id}:{v.connector_id}"},
+            {"$set": {**v.model_dump(), "received_at": now()}},
+            upsert=True,
+        )
+    return {"accepted": len(batch.vehicles)}
+
+
+@app.get("/api/v1/stations/{station_id}", response_model=station.StationOut)
+def station_display(station_id: Literal["station-1", "station-2"], store=Depends(db)):
+    """Anonymous, read-only: the driver-facing screen. Reuses the connector latest-state pipeline."""
+    ids = [cid for cid in CONNECTORS if LOCATION[cid][0] == station_id]
+    views = [v.model_dump() for v in connector_views(store, ids)] or [
+        {"connector_id": cid, "stale": True} for cid in ids  # no run yet
+    ]
+    out = []
+    for c in views:
+        run_id = c.get("run_id")
+        vehicle = store.vehicle_states.find_one({"_id": f"{run_id}:{c['connector_id']}"}) if run_id else None
+        latest = c.get("latest") or {}
+        out.append(
+            station.StationConnector(
+                connector_id=c["connector_id"],
+                status=station.public_status(c, vehicle),
+                soc_percent=vehicle["soc_percent"] if vehicle else None,
+                power_kw=latest.get("power_kw"),
+                current_a=latest.get("current_a"),
+                connector_temperature_c=latest.get("connector_temperature_c"),
+                energy_kwh=vehicle["energy_kwh"] if vehicle else None,
+                minutes_to_full=vehicle.get("minutes_to_full") if vehicle else None,
+                measured_at=latest.get("measured_at"),
+            )
+        )
+    return station.StationOut(station_id=station_id, connectors=out)
 
 
 @app.get("/api/v1/connectors/{connector_id}", response_model=ConnectorOut)

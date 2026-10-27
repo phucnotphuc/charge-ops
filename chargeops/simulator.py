@@ -9,6 +9,7 @@ from chargeops.domain import AMBIENT_C, CONNECTORS, lag, now
 from chargeops.fleet import fleet_plan, physics
 from chargeops.logging import event, logger
 from chargeops.model import DEMO_PROFILE, PROFILES, STEP_S, replay  # noqa: F401  (re-exported)
+from chargeops.vehicles import SOC_PROFILES, minutes_to_full, soc_percent
 
 
 class Simulator:
@@ -19,6 +20,9 @@ class Simulator:
         self.client, self.log = client, log or logger("simulator")
         self.pending = None  # unsent batch, retried unchanged (same sample_ids) until the API answers
         self.thermal = {}
+        self.delivered = {}  # per run: {connector_id: (kwh, last_measured)} from the actual current
+        self.last_power = {}
+        self.plans = None
 
     def apply_commands(self):
         commands = self.client.get("/api/v1/simulator/commands")
@@ -52,7 +56,9 @@ class Simulator:
         if self.thermal.get("run_id") != run["_id"]:
             # Cold start at plug-in; a restarted simulator resumes each connector from its last stored sample.
             last = run.get("last_samples") or {}
+            vehicles = run.get("last_vehicles") or {}
             self.thermal = {"run_id": run["_id"]}
+            self.delivered, self.last_power = {}, {}
             for cid in CONNECTORS:
                 stored = last.get(cid)
                 self.thermal[cid] = (
@@ -60,6 +66,13 @@ class Simulator:
                     if stored
                     else (AMBIENT_C, measured)
                 )
+                vehicle = vehicles.get(cid)
+                self.delivered[cid] = (
+                    (vehicle["energy_kwh"], datetime.fromisoformat(vehicle["measured_at"]))
+                    if vehicle
+                    else (0.0, measured)
+                )
+        self.plans = plans
         step = int(elapsed // STEP_S)
         out = []
         for cid in CONNECTORS:
@@ -75,6 +88,10 @@ class Simulator:
             temperature, at = self.thermal[cid]
             temperature = lag(temperature, steady, (measured - at).total_seconds())
             self.thermal[cid] = (temperature, measured)
+            kwh, last_at = self.delivered[cid]
+            kwh += voltage * current / 1000 * max((measured - last_at).total_seconds(), 0) / 3600
+            self.delivered[cid] = (kwh, measured)
+            self.last_power[cid] = voltage * current / 1000
             out.append(
                 {
                     "sample_id": str(uuid5(UUID(run["_id"]), f"{cid}:{step}")),
@@ -92,6 +109,34 @@ class Simulator:
             )
         return out
 
+    def vehicles(self, run, plans, measured):
+        """Vehicle states of the step `samples()` just computed (noise-free current, so SoC is not noisy)."""
+        out = []
+        for cid in CONNECTORS:
+            profile = SOC_PROFILES[plans[cid].profile_id]
+            kwh, _ = self.delivered[cid]
+            soc = soc_percent(profile, kwh)
+            out.append(
+                {
+                    "run_id": run["_id"],
+                    "connector_id": cid,
+                    "measured_at": measured.isoformat(),
+                    "soc_percent": round(soc, 1),
+                    "energy_kwh": round(kwh, 3),
+                    "minutes_to_full": minutes_to_full(profile, soc, self.last_power.get(cid, 0.0)),
+                    "capacity_source": "autosun" if profile.capacity_kwh else "default",
+                }
+            )
+        return out
+
+    def post_vehicles(self, vehicles):
+        """Best effort: a lost vehicle batch is superseded by the next step and never blocks telemetry."""
+        try:
+            result = self.client.post("/api/v1/simulator/vehicles", json={"vehicles": vehicles})
+            result.raise_for_status()
+        except httpx.HTTPError as exc:
+            event(self.log, "vehicle_post_retry", error_type=type(exc).__name__)
+
     def step(self, measured=None):
         """One 5-second step: apply commands, consume fault events, post all connectors in one batch."""
         self.apply_commands()
@@ -107,10 +152,14 @@ class Simulator:
             self.pending = None
             return
         if self.pending is None or self.pending["run_id"] != run["_id"]:
-            self.pending = {"run_id": run["_id"], "samples": self.samples(run, measured or now())}
+            measured = measured or now()
+            samples = self.samples(run, measured)
+            vehicles = self.vehicles(run, self.plans, measured)
+            self.pending = {"run_id": run["_id"], "samples": samples, "vehicles": vehicles}
         result = self.client.post("/api/v1/telemetry/batch", json={"samples": self.pending["samples"]})
         if result.status_code not in (409, 422):  # rejected batches are dropped, not retried
             result.raise_for_status()
+            self.post_vehicles(self.pending["vehicles"])
         self.pending = None
 
 
