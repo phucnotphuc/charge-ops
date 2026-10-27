@@ -21,6 +21,8 @@ def store(monkeypatch, tmp_path):
     monkeypatch.setenv("SIMULATOR_SECRET", "s" * 32)
     monkeypatch.setenv("WEBHOOK_SECRET", "w" * 32)
     monkeypatch.setenv("OPERATOR_SECRET", "o" * 32)
+    # Tests must not depend on a developer's local .env (pydantic-settings reads it).
+    monkeypatch.setenv("DD_METRICS_ENABLED", "false")
     monkeypatch.setenv("LOG_DIR", str(tmp_path))
     settings.cache_clear()
     db = mongomock.MongoClient(tz_aware=True).chargeops
