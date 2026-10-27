@@ -656,10 +656,13 @@ def station_display(station_id: Literal["station-1", "station-2"], store=Depends
         run_id = c.get("run_id")
         vehicle = store.vehicle_states.find_one({"_id": f"{run_id}:{c['connector_id']}"}) if run_id else None
         latest = c.get("latest") or {}
+        status = station.public_status(c, vehicle)
+        if status == "offline":  # a stale vehicle state is not shown for an unreachable connector
+            vehicle = None
         out.append(
             station.StationConnector(
                 connector_id=c["connector_id"],
-                status=station.public_status(c, vehicle),
+                status=status,
                 soc_percent=vehicle["soc_percent"] if vehicle else None,
                 power_kw=latest.get("power_kw"),
                 current_a=latest.get("current_a"),

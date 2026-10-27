@@ -270,3 +270,14 @@ def test_missing_monitor_rejects_start_without_consuming_budget(store, monkeypat
     manage_run(store, now())
     assert store.runs.find_one()["reason"] == "configure_dd_monitor_id_first"
     assert store.budgets.count_documents({}) == 0
+
+
+def test_manifest_documents_current_and_power_noise(store, monkeypatch):
+    from chargeops.storage import initialize
+
+    monkeypatch.setattr(type(store), "create_collection", lambda *a, **k: None)  # no time-series in mongomock
+    initialize(store)
+    fields = store.sources.find_one({})["fields"]
+    for name in ("current_a", "power_kw"):
+        assert "σ 0.5 % of current, floored at 0" in fields[name] and "SIM_REALISM=true" in fields[name]
+    assert "σ 0.2" in fields["connector_temperature_c"]

@@ -50,6 +50,7 @@ def fleet_pipeline(run_id):
     """Latest 60-second window of every connector in the run (quality and residual mean), one row per connector."""
     return [
         {"$match": {"run_id": run_id}},
+        {"$project": {"connector_id": 1, "end": 1, "quality": 1, "residual_mean": 1}},  # drop `samples` pre-sort
         {"$sort": {"end": -1}},
         {
             "$group": {

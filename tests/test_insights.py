@@ -120,3 +120,10 @@ def test_trend_pipeline_on_real_mongo():
     assert rows[-1]["residual_slope_c_per_min"] == pytest.approx(4.0)  # +1 °C per 15 s
     assert rows[-1]["residual_max_15m"] == 11.0
     db.windows.drop()
+
+
+def test_fleet_pipeline_projects_before_the_sort_so_samples_are_not_sorted():
+    stages = fleet_pipeline(RUN)
+    kinds = [next(iter(s)) for s in stages]
+    assert kinds[:3] == ["$match", "$project", "$sort"]
+    assert set(stages[1]["$project"]) == {"connector_id", "end", "quality", "residual_mean"}
