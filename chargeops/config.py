@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     dd_agent_host: str = "datadog"
     dd_monitor_id: str = ""
     dd_trial_id: str = "hackathon-2026"
+    dd_metrics_enabled: bool = False
     log_dir: str = "logs"
 
     @field_validator("operator_password_hash", mode="before")

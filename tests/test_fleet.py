@@ -374,6 +374,16 @@ def test_datadog_metrics_tagged_per_connector_and_station(fleet, store):
         (f"connector_id:{c}", f"station_id:{LOCATION[c][0]}") for c in CONNECTORS
     }
     assert all(t[0] == f"run_id:{RUN}" for t in tags)
+    names = {call.args[0] for call in fleet.stats.gauge.call_args_list}
+    assert "chargeops.incident.open" in names
+
+
+def test_local_mode_emits_no_incident_signals(fleet, store):
+    fleet.start("healthy", 3, mode="local")
+    fleet.run_until(120, worker=True)
+    names = {call.args[0] for call in fleet.stats.gauge.call_args_list}
+    assert "chargeops.incident.open" not in names
+    fleet.stats.event.assert_not_called()
 
 
 def test_inject_fault_accepts_every_connector_of_the_run(fleet, store):
