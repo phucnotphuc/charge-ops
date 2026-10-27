@@ -78,6 +78,14 @@ def initialize(db):
                     "synthetic: thermal lag model with injected fault, "
                     "Gaussian sensor noise σ 0.2 °C when SIM_REALISM=true"
                 ),
+                "fields.current_a": (
+                    "replayed Autosun current; Gaussian noise σ 0.5 % of current, floored at 0, "
+                    "when SIM_REALISM=true"
+                ),
+                "fields.power_kw": (
+                    "voltage × reported current / 1000; Gaussian noise σ 0.5 % of current, floored at 0, "
+                    "when SIM_REALISM=true"
+                ),
             }
         },
     )

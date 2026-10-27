@@ -24,9 +24,7 @@ class Simulator:
         self.thermal = {}
         self.delivered = {}  # per run: {connector_id: (kwh, last_measured)} from the actual current
         self.last_power = {}
-        self.plans = None
         self.imperfect = Imperfections() if realism else None
-        self.last_step = None
 
     def apply_commands(self):
         commands = self.client.get("/api/v1/simulator/commands")
@@ -78,9 +76,7 @@ class Simulator:
                     if vehicle
                     else (0.0, measured)
                 )
-        self.plans = plans
-        step = int(elapsed // STEP_S)
-        self.last_step = step  # the same index the sample IDs and imperfections use
+        step = int(elapsed // STEP_S)  # the same index the sample IDs and imperfections use
         out = []
         for cid in CONNECTORS:
             sim = dict((run.get("sim") or {}).get(cid) or {})
@@ -97,7 +93,10 @@ class Simulator:
             temperature = lag(temperature, steady, (measured - at).total_seconds())
             self.thermal[cid] = (temperature, measured)
             kwh, last_at = self.delivered[cid]
-            kwh += voltage * current / 1000 * max((measured - last_at).total_seconds(), 0) / 3600
+            # Energy counts only after the BMS reports its first SoC (minute offset of the session's profile).
+            start_s = SOC_PROFILES[plans[cid].profile_id].soc_start_minute * 60
+            counted = elapsed - max(elapsed - (measured - last_at).total_seconds(), start_s)
+            kwh += voltage * current / 1000 * max(counted, 0) / 3600
             self.delivered[cid] = (kwh, measured)
             self.last_power[cid] = voltage * current / 1000
             # Integration above uses the true current; only the reported values below get sensor noise.
@@ -119,7 +118,7 @@ class Simulator:
                     "ambient_temperature_c": ambient,
                 }
             )
-        return out
+        return out, plans, step
 
     def ambient(self, connector_id, measured):
         return ambient_c(LOCATION[connector_id][0], measured) if self.realism else AMBIENT_C
@@ -168,10 +167,10 @@ class Simulator:
             return
         if self.pending is None or self.pending["run_id"] != run["_id"]:
             measured = measured or now()
-            samples = self.samples(run, measured)
-            vehicles = self.vehicles(run, self.plans, measured)
+            samples, plans, index = self.samples(run, measured)
+            vehicles = self.vehicles(run, plans, measured)
             if self.imperfect is not None:  # faults hit telemetry only, never vehicle states or the integration
-                samples = self.imperfect.apply(samples, run["_id"], self.last_step)
+                samples = self.imperfect.apply(samples, run["_id"], index)
             self.pending = {"run_id": run["_id"], "samples": samples, "vehicles": vehicles}
         if not self.pending["samples"]:  # the API requires min_length=1; vehicle states still go out
             self.post_vehicles(self.pending["vehicles"])

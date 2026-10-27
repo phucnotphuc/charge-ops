@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from fastapi.testclient import TestClient
 
 from chargeops.api import app
@@ -78,3 +80,29 @@ def test_station_without_any_run_shows_offline_connectors(store):
 
 def test_unknown_station_is_422(store):
     assert TestClient(app).get("/api/v1/stations/station-9").status_code == 422
+
+
+def test_public_status_limits_and_edge_cases():
+    def incident(name):
+        return {"active_incident": {"id": "i", "state": name}}
+
+    vehicle = {"soc_percent": 40}
+    assert public_status(connector(**incident("mitigated")), vehicle) == "limited"
+    derated = {"current_a": 90.0, "requested_current_a": 120.0, "current_limit_a": 90.0}
+    assert public_status(connector(latest=derated), vehicle) == "limited"  # no incident needed
+    stalled = {"current_a": 0.5, "requested_current_a": 120.0, "current_limit_a": 90.0}
+    assert public_status(connector(latest=stalled), vehicle) == "checking"
+    assert public_status(connector(**incident("mitigating"), latest=stalled), vehicle) == "checking"
+    assert public_status(connector(), None) == "idle"  # current flows but no vehicle state yet
+
+
+def test_offline_connector_has_null_vehicle_fields(fleet):
+    fleet.start("healthy", seed=3)
+    fleet.run_until(60, worker=False)
+    fresh = TestClient(app).get("/api/v1/stations/station-1").json()["connectors"][0]
+    assert fresh["status"] == "charging" and fresh["soc_percent"] is not None
+    fleet.clock[0] += timedelta(minutes=10)  # telemetry stops: the connector goes stale
+    stale = TestClient(app).get("/api/v1/stations/station-1").json()["connectors"]
+    assert {c["status"] for c in stale} == {"offline"}
+    for c in stale:
+        assert c["soc_percent"] is None and c["energy_kwh"] is None and c["minutes_to_full"] is None

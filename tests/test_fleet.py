@@ -1,9 +1,10 @@
 """WP-W2B: two stations × three connectors, seeded faults, per-connector worker and command routing."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from uuid import UUID, uuid5
 
 import pytest
+from conftest import OPERATOR, RUN, T0
 
 from chargeops.domain import CONNECTORS, LOCATION, MANIFEST, window_evidence
 from chargeops.fleet import fleet_plan, physics, steady_load
@@ -15,16 +16,13 @@ from chargeops.worker import process_event
 def test_realistic_healthy_run_opens_no_incident(fleet, store):
     fleet.simulator = Simulator(fleet.sim_client, realism=True)
     fleet.start("healthy", seed=3)
-    fleet.run_until(600, worker=True)
+    fleet.run_until(1800, worker=True)
     assert store.incidents.count_documents({}) == 0
-    ambient = {s["ambient_temperature_c"] for s in store.telemetry.find({})}
-    assert len(ambient) > 1  # ambient moves
+    rows = sorted(store.telemetry.find({"meta.connector_id": "connector-1"}), key=lambda s: s["measured_at"])
+    assert rows[-1]["measured_at"] - rows[0]["measured_at"] >= timedelta(minutes=30)
+    assert rows[0]["ambient_temperature_c"] != rows[-1]["ambient_temperature_c"]  # ambient drifts over the run
 
-SIMULATOR = {"X-Simulator-Secret": "s" * 32}
-OPERATOR = {"X-Operator-Secret": "o" * 32}
 WEBHOOK = {"X-Webhook-Secret": "w" * 32}
-RUN = "00000000-0000-4000-8000-0000000000f1"
-T0 = datetime(2026, 10, 21, 3, 0, tzinfo=UTC)  # on a 15-second boundary
 
 
 def test_retry_old_fault_event_preserves_new_injection(store):
@@ -455,6 +453,10 @@ def test_derating_slows_the_soc_rise_on_the_faulty_connector(fleet, store):
     assert store.incidents.find_one()["state"] == "mitigating"
     after = rise_over(120)
     assert 0 < after < before
+    latest = store.telemetry.find_one({"meta.connector_id": faulty}, sort=[("measured_at", -1)])
+    assert latest["current_limit_a"] < latest["requested_current_a"]
+    station = fleet.client.get(f"/api/v1/stations/{LOCATION[faulty][0]}").json()
+    assert {c["connector_id"]: c["status"] for c in station["connectors"]}[faulty] == "limited"
 
 
 def test_imperfect_telemetry_keeps_one_incident_on_the_faulty_connector(fleet, store):
@@ -481,3 +483,92 @@ def test_empty_batch_still_posts_vehicles_and_new_run_drops_held_samples(fleet, 
     run = {**store.runs.find_one(), "started_at": T0.isoformat()}
     fleet.simulator.samples(run, T0 + timedelta(seconds=5))
     assert fleet.simulator.imperfect.held == []
+
+
+def run_document(store, run_id):
+    return {**store.runs.find_one(), "_id": run_id, "started_at": T0.isoformat()}
+
+
+def test_realism_does_not_change_delivered_energy_or_soc(fleet, store):
+    """Sensor noise and telemetry faults touch reported samples only, never the integration behind the SoC."""
+    fleet.start("thermal_fault", seed=4)
+    run = run_document(store, RUN)
+    plain, realistic = Simulator(fleet.sim_client), Simulator(fleet.sim_client, realism=True)
+    for seconds in range(0, 1200, 5):
+        measured = T0 + timedelta(seconds=seconds)
+        _, plans, _ = plain.samples(run, measured)
+        realistic.samples(run, measured)
+    assert plain.delivered == realistic.delivered
+    assert plain.vehicles(run, plans, measured) == realistic.vehicles(run, plans, measured)
+    assert all(kwh > 0 for kwh, _ in plain.delivered.values())
+
+
+def test_failed_post_retries_the_identical_batch_without_rerolling_imperfections(fleet, store):
+    import httpx
+
+    fleet.simulator = Simulator(fleet.sim_client, realism=True)
+    fleet.simulator.imperfect.drop, fleet.simulator.imperfect.duplicate = 0.0, 0.0
+    fleet.simulator.imperfect.late = 0.5
+    fleet.start("healthy", seed=5)
+    original, posted = fleet.sim_client.post, []
+
+    def flaky(url, **kwargs):
+        if url.endswith("/telemetry/batch"):
+            posted.append(kwargs["json"]["samples"])
+            if len(posted) == 1:
+                raise httpx.ConnectError("down")
+        return original(url, **kwargs)
+
+    fleet.sim_client.post = flaky
+    with pytest.raises(httpx.ConnectError):
+        fleet.simulator.step(T0)
+    held = list(fleet.simulator.imperfect.held)
+    assert held and len(posted[0]) == len(CONNECTORS) - len(held)
+    fleet.simulator.step(T0 + timedelta(seconds=5))  # retry: same batch, nothing re-rolled or re-released
+    assert posted[1] == posted[0]
+    assert fleet.simulator.imperfect.held == held
+    fleet.simulator.imperfect.late = 0.0
+    fleet.simulator.step(T0 + timedelta(seconds=10))
+    sent = [s["sample_id"] for batch in (posted[0], posted[2]) for s in batch]
+    assert len(sent) == len(set(sent))  # a held sample is released exactly once
+    assert {h["sample_id"] for h in held} <= set(sent)
+
+
+def test_step_across_a_run_change_does_not_carry_held_samples(fleet, store):
+    other = "00000000-0000-4000-8000-0000000000f2"
+    fleet.simulator = Simulator(fleet.sim_client, realism=True)
+    fleet.simulator.imperfect.late = 1.0
+    fleet.start("healthy", seed=5)
+    fleet.simulator.step(T0)
+    assert fleet.simulator.imperfect.held  # everything of run 1 is held back
+    fleet.simulator.imperfect.late = 0.0
+    run = store.runs.find_one()
+    store.runs.delete_many({})
+    store.runs.insert_one({**run, "_id": other})
+    fleet.simulator.step(T0 + timedelta(seconds=5))
+    assert store.telemetry.count_documents({"meta.run_id": RUN}) == 0
+    assert store.telemetry.count_documents({"meta.run_id": other}) == len(CONNECTORS)
+    assert fleet.simulator.imperfect.held == []
+
+
+def test_delivered_energy_starts_at_the_first_soc_reading(fleet, store):
+    from chargeops.vehicles import SOC_PROFILES
+
+    assert any(p.soc_start_minute > 0 for p in SOC_PROFILES.values())
+    seed, plan = next(
+        (seed, plan)
+        for seed in range(40)
+        for plan in [fleet_plan(seed, "healthy")]
+        if any(SOC_PROFILES[p.profile_id].soc_start_minute > 0 for p in plan.values())
+    )
+    cid = next(c for c, p in plan.items() if SOC_PROFILES[p.profile_id].soc_start_minute > 0)
+    offset = SOC_PROFILES[plan[cid].profile_id].soc_start_minute * 60
+    fleet.start("healthy", seed)
+
+    def energy():
+        return store.vehicle_states.find_one({"_id": f"{RUN}:{cid}"})["energy_kwh"]
+
+    fleet.run_until(offset)  # up to and including the reading itself: nothing counted yet
+    assert energy() == 0.0
+    fleet.run_until(offset + 120)
+    assert energy() > 0.0
