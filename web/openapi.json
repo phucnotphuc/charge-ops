@@ -257,6 +257,29 @@
         "title": "CommandResult",
         "type": "object"
       },
+      "ConnectorCount": {
+        "properties": {
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connector_id",
+          "count",
+          "open"
+        ],
+        "title": "ConnectorCount",
+        "type": "object"
+      },
       "ConnectorList": {
         "properties": {
           "items": {
@@ -867,6 +890,63 @@
         "title": "FaultRequest",
         "type": "object"
       },
+      "FleetOut": {
+        "properties": {
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/FleetWindow"
+            },
+            "title": "Windows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "windows"
+        ],
+        "title": "FleetOut",
+        "type": "object"
+      },
+      "FleetWindow": {
+        "properties": {
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "quality": {
+            "title": "Quality",
+            "type": "boolean"
+          },
+          "residual_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Mean"
+          }
+        },
+        "required": [
+          "connector_id",
+          "end",
+          "quality",
+          "residual_mean"
+        ],
+        "title": "FleetWindow",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -878,6 +958,71 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IncidentSummary": {
+        "properties": {
+          "by_connector": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorCount"
+            },
+            "title": "By Connector",
+            "type": "array"
+          },
+          "by_state": {
+            "items": {
+              "$ref": "#/components/schemas/StateCount"
+            },
+            "title": "By State",
+            "type": "array"
+          },
+          "mtta_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mtta S"
+          },
+          "mttm_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mttm S"
+          },
+          "mttr_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mttr S"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "by_state",
+          "by_connector",
+          "mtta_s",
+          "mttm_s",
+          "mttr_s"
+        ],
+        "title": "IncidentSummary",
         "type": "object"
       },
       "Locked": {
@@ -1163,6 +1308,24 @@
         "title": "SampleOut",
         "type": "object"
       },
+      "StateCount": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "count"
+        ],
+        "title": "StateCount",
+        "type": "object"
+      },
       "Stats": {
         "properties": {
           "max": {
@@ -1434,6 +1597,94 @@
           "items"
         ],
         "title": "TelemetryPage",
+        "type": "object"
+      },
+      "TrendOut": {
+        "properties": {
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/TrendPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "connector_id",
+          "points"
+        ],
+        "title": "TrendOut",
+        "type": "object"
+      },
+      "TrendPoint": {
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "residual_avg_5m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Avg 5M"
+          },
+          "residual_max_15m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Max 15M"
+          },
+          "residual_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Mean"
+          },
+          "residual_slope_c_per_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Slope C Per Min"
+          }
+        },
+        "required": [
+          "end",
+          "residual_mean",
+          "residual_avg_5m",
+          "residual_slope_c_per_min",
+          "residual_max_15m"
+        ],
+        "title": "TrendPoint",
         "type": "object"
       },
       "UserOut": {
@@ -1765,6 +2016,62 @@
           }
         },
         "summary": "Connector Telemetry"
+      }
+    },
+    "/api/v1/connectors/{connector_id}/trend": {
+      "get": {
+        "operationId": "connector_trend_api_v1_connectors__connector_id__trend_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "enum": [
+                "connector-1",
+                "connector-2",
+                "connector-3",
+                "connector-4",
+                "connector-5",
+                "connector-6"
+              ],
+              "title": "Connector Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrendOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Trend"
       }
     },
     "/api/v1/demo-runs": {
@@ -2220,6 +2527,91 @@
           }
         },
         "summary": "Create Command"
+      }
+    },
+    "/api/v1/insights/fleet": {
+      "get": {
+        "operationId": "fleet_insights_api_v1_insights_fleet_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fleet Insights"
+      }
+    },
+    "/api/v1/insights/incidents": {
+      "get": {
+        "operationId": "incident_insights_api_v1_insights_incidents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Incident Insights"
       }
     },
     "/api/v1/ready": {

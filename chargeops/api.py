@@ -14,7 +14,7 @@ from pydantic import AwareDatetime, ValidationError
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from chargeops import results
+from chargeops import insights, results
 from chargeops.auth import SESSION_COOKIE, SESSION_TTL_S, new_token, token_digest, verify_password
 from chargeops.config import settings
 from chargeops.domain import (
@@ -25,6 +25,7 @@ from chargeops.domain import (
     Batch,
     CommandRequest,
     CommandResult,
+    ConnectorId,
     ConnectorList,
     ConnectorOut,
     DemoRunCreate,
@@ -694,6 +695,26 @@ def connector_telemetry(
         items=[sample_dict(r) for r in page],
         next_cursor=encode_cursor(page[-1]) if len(rows) > limit else None,
     )
+
+
+@app.get("/api/v1/connectors/{connector_id}/trend", response_model=insights.TrendOut)
+def connector_trend(connector_id: ConnectorId, run_id: str, store=Depends(db)):
+    rows = store.windows.aggregate(insights.trend_pipeline(run_id, connector_id))
+    return insights.TrendOut(
+        run_id=run_id, connector_id=connector_id, points=[insights.TrendPoint(**r) for r in rows]
+    )
+
+
+@app.get("/api/v1/insights/fleet", response_model=insights.FleetOut)
+def fleet_insights(run_id: str, store=Depends(db)):
+    rows = store.windows.aggregate(insights.fleet_pipeline(run_id))
+    return insights.FleetOut(run_id=run_id, windows=[insights.FleetWindow(**r) for r in rows])
+
+
+@app.get("/api/v1/insights/incidents", response_model=insights.IncidentSummary)
+def incident_insights(run_id: str | None = None, store=Depends(db)):
+    docs = list(store.incidents.aggregate(insights.incident_summary_pipeline(run_id)))
+    return insights.shape_summary(docs[0] if docs else {})
 
 
 @app.get("/api/v1/evaluations", response_model=results.EvaluationList)
