@@ -5,10 +5,11 @@ from uuid import UUID, uuid5
 import httpx
 
 from chargeops.config import settings
-from chargeops.domain import AMBIENT_C, CONNECTORS, lag, now
+from chargeops.domain import AMBIENT_C, CONNECTORS, LOCATION, lag, now
 from chargeops.fleet import fleet_plan, physics
 from chargeops.logging import event, logger
 from chargeops.model import DEMO_PROFILE, PROFILES, STEP_S, replay  # noqa: F401  (re-exported)
+from chargeops.realism import ambient_c, noisy, sample_rng
 from chargeops.vehicles import SOC_PROFILES, minutes_to_full, soc_percent
 
 
@@ -16,8 +17,9 @@ class Simulator:
     """Talks to the API only (simulator secret): commands and fault events are acknowledged there, and the API
     applies them to the target connector's device state in `run.sim[connector_id]`."""
 
-    def __init__(self, client, log=None):
+    def __init__(self, client, log=None, realism=False):
         self.client, self.log = client, log or logger("simulator")
+        self.realism = realism
         self.pending = None  # unsent batch, retried unchanged (same sample_ids) until the API answers
         self.thermal = {}
         self.delivered = {}  # per run: {connector_id: (kwh, last_measured)} from the actual current
@@ -64,7 +66,7 @@ class Simulator:
                 self.thermal[cid] = (
                     (stored["connector_temperature_c"], datetime.fromisoformat(stored["measured_at"]))
                     if stored
-                    else (AMBIENT_C, measured)
+                    else (self.ambient(cid, measured), measured)
                 )
                 vehicle = vehicles.get(cid)
                 self.delivered[cid] = (
@@ -84,7 +86,8 @@ class Simulator:
                 value = sim.pop(stamp, None)
                 if value:
                     sim[seconds] = (datetime.fromisoformat(value) - started).total_seconds()
-            demand, current, limit, voltage, steady = physics(plans[cid], elapsed, sim)
+            ambient = self.ambient(cid, measured)
+            demand, current, limit, voltage, steady = physics(plans[cid], elapsed, sim, ambient)
             temperature, at = self.thermal[cid]
             temperature = lag(temperature, steady, (measured - at).total_seconds())
             self.thermal[cid] = (temperature, measured)
@@ -92,22 +95,29 @@ class Simulator:
             kwh += voltage * current / 1000 * max((measured - last_at).total_seconds(), 0) / 3600
             self.delivered[cid] = (kwh, measured)
             self.last_power[cid] = voltage * current / 1000
+            # Integration above uses the true current; only the reported values below get sensor noise.
+            rng = sample_rng(run["_id"], cid, step)
+            reading = noisy(temperature, 0.2, rng) if self.realism else temperature
+            reported = noisy(current, 0.005 * current, rng, floor=0.0) if self.realism else current
             out.append(
                 {
                     "sample_id": str(uuid5(UUID(run["_id"]), f"{cid}:{step}")),
                     "run_id": run["_id"],
                     "connector_id": cid,
                     "measured_at": measured.isoformat(),
-                    "current_a": current,
+                    "current_a": reported,
                     "voltage_v": voltage,
-                    "power_kw": voltage * current / 1000,
+                    "power_kw": voltage * reported / 1000,
                     "requested_current_a": demand,
                     "current_limit_a": limit,
-                    "connector_temperature_c": temperature,
-                    "ambient_temperature_c": AMBIENT_C,
+                    "connector_temperature_c": reading,
+                    "ambient_temperature_c": ambient,
                 }
             )
         return out
+
+    def ambient(self, connector_id, measured):
+        return ambient_c(LOCATION[connector_id][0], measured) if self.realism else AMBIENT_C
 
     def vehicles(self, run, plans, measured):
         """Vehicle states of the step `samples()` just computed (noise-free current, so SoC is not noisy)."""
@@ -168,7 +178,7 @@ def main():
     log = logger("simulator")
     headers = {"X-Simulator-Secret": config.simulator_secret.get_secret_value()}
     with httpx.Client(base_url=config.api_url, headers=headers, timeout=10) as client:
-        simulator = Simulator(client, log)
+        simulator = Simulator(client, log, realism=config.sim_realism)
         while True:
             try:
                 simulator.step()

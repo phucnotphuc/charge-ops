@@ -70,7 +70,7 @@ services:
     command: [python, -m, chargeops.worker]
   simulator:
     <<: *app
-    environment: {<<: *env, DD_SERVICE: chargeops-simulator}
+    environment: {<<: *env, DD_SERVICE: chargeops-simulator, SIM_REALISM: "${SIM_REALISM:-true}"}
     command: [python, -m, chargeops.simulator]
     depends_on:
       api:
