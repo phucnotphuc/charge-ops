@@ -2803,6 +2803,26 @@
               ],
               "title": "Run Id"
             }
+          },
+          {
+            "in": "query",
+            "name": "station_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "station-1",
+                    "station-2"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Station Id"
+            }
           }
         ],
         "responses": {

@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
-from chargeops.api import app
+from chargeops.api import LOCATION, app
 from chargeops.insights import fleet_pipeline, incident_summary_pipeline, shape_summary, trend_pipeline
 
 RUN = "00000000-0000-4000-8000-0000000000b1"
@@ -47,6 +47,24 @@ def test_summary_pipeline_facets():
     facet = incident_summary_pipeline(RUN)[1]["$facet"]
     assert set(facet) == {"by_state", "by_connector", "durations"}
     assert incident_summary_pipeline(None)[0] == {"$match": {}}
+
+
+def test_summary_pipeline_filters_by_connectors():
+    assert incident_summary_pipeline("r", ["connector-4"])[0] == {
+        "$match": {"run_id": "r", "connector_id": {"$in": ["connector-4"]}}
+    }
+
+
+def test_incident_insights_station_filter_passes_connectors(monkeypatch):
+    from chargeops import insights
+
+    seen = []
+    real = insights.incident_summary_pipeline
+    monkeypatch.setattr(insights, "incident_summary_pipeline", lambda r, c=None: seen.append((r, c)) or real(r, c))
+    assert TestClient(app).get("/api/v1/insights/incidents?run_id=r&station_id=station-2").status_code == 200
+    assert seen[0][0] == "r" and seen[0][1]
+    assert all(LOCATION[c][0] == "station-2" for c in seen[0][1])
+    assert TestClient(app).get("/api/v1/insights/incidents?station_id=bogus").status_code == 422
 
 
 def test_shape_summary_fills_missing_values_with_none():

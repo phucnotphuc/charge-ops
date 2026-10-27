@@ -755,8 +755,13 @@ def fleet_insights(run_id: str, store=Depends(db)):
 
 
 @app.get("/api/v1/insights/incidents", response_model=insights.IncidentSummary)
-def incident_insights(run_id: str | None = None, store=Depends(db)):
-    docs = list(store.incidents.aggregate(insights.incident_summary_pipeline(run_id)))
+def incident_insights(
+    run_id: str | None = None,
+    station_id: Literal["station-1", "station-2"] | None = None,
+    store=Depends(db),
+):
+    connector_ids = [c for c, (s, _) in LOCATION.items() if s == station_id] if station_id else None
+    docs = list(store.incidents.aggregate(insights.incident_summary_pipeline(run_id, connector_ids)))
     return insights.shape_summary(docs[0] if docs else {})
 
 

@@ -7,11 +7,15 @@ import { IncidentDetail } from "./pages/IncidentDetail";
 import { IncidentList } from "./pages/IncidentList";
 import { Login } from "./pages/Login";
 import { Overview } from "./pages/Overview";
+import { StationDisplay } from "./pages/StationDisplay";
+import { StationOperator } from "./pages/StationOperator";
 
 export function App() {
   return (
     <Routes>
+      <Route path="/stations/:stationId" element={<StationDisplay />} />
       <Route element={<Layout />}>
+        <Route path="stations/:stationId/operator" element={<StationOperator />} />
         <Route index element={<Overview />} />
         <Route path="connectors/:id" element={<ConnectorPage />} />
         <Route path="incidents" element={<IncidentList />} />

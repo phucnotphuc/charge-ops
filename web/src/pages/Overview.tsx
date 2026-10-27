@@ -19,6 +19,14 @@ export function Overview() {
   return (
     <section className="stack">
       <h1>Tổng quan</h1>
+      <ul className="station-links">
+        {["station-1", "station-2"].map((id) => (
+          <li key={id}>
+            Trạm {id.replace("station-", "")}: <Link to={`/stations/${id}`}>Màn hình trạm</Link> ·{" "}
+            <Link to={`/stations/${id}/operator`}>Vận hành</Link>
+          </li>
+        ))}
+      </ul>
       <Async
         polled={polled}
         isEmpty={(d) => d.items.length === 0}

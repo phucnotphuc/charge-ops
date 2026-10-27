@@ -104,3 +104,30 @@ input, select { font: inherit; padding: 7px 10px; border: 1px solid #c4cad4; bor
 .fresh { display: flex; align-items: center; gap: 6px; }
 .stale-text { color: var(--warn); font-weight: 700; }
 .chart { width: 100%; }
+
+/* Station screens: kiosk is calm, high-contrast and readable from a distance. */
+.kiosk { max-width: 1280px; margin: 0 auto; padding: 32px 28px 40px; font-size: 1.25rem; min-height: 100vh; }
+.kiosk-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 24px; }
+.kiosk-head h1 { font-size: 2.4rem; margin: 0; letter-spacing: 0.01em; }
+.kiosk-clock { font-size: 2.4rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
+.station-links { list-style: none; padding: 0; margin: 0 0 16px; display: flex; gap: 24px; flex-wrap: wrap; }
+.station-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px; }
+.station-card { background: var(--card); border: 1px solid var(--line); border-left: 8px solid var(--line); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.station-card header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.station-card h2 { margin: 0; font-size: 1.5rem; }
+.station-card .status { font-weight: 600; color: var(--muted); }
+.station-card.status-limited { border-left-color: var(--warn); }
+.station-card.status-limited .status { color: var(--warn); }
+.station-card.status-charging { border-left-color: var(--ok); }
+.station-card.status-charging .status { color: var(--ok); }
+.station-card.status-checking { border-left-color: var(--accent); }
+.station-card.status-offline { opacity: 0.65; }
+.soc strong { display: block; font-size: 3.2rem; line-height: 1.1; font-variant-numeric: tabular-nums; }
+[role="progressbar"] { height: 16px; border-radius: 8px; background: var(--line); overflow: hidden; margin-top: 6px; }
+.soc-fill { height: 100%; background: var(--ok); transition: width 1s ease; }
+.station-kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0; }
+.station-kv dt { color: var(--muted); }
+.station-kv dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.funnel { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.funnel > div { display: flex; flex-direction: column; min-width: 90px; }
+.funnel strong { font-size: 1.4rem; }

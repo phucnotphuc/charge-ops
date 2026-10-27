@@ -8,10 +8,14 @@ import type {
   DemoRun,
   Evaluation,
   EvaluationList,
+  FleetOut,
   Incident,
+  IncidentSummary,
   Me,
   Page,
+  StationOut,
   TelemetryPoint,
+  TrendOut,
 } from "./types";
 
 const BASE = "/api/v1";
@@ -118,6 +122,15 @@ export const api = {
   stopRun: (id: string) => post<DemoRun>(`/demo-runs/${encodeURIComponent(id)}/stop`),
   injectFault: (id: string, connectorId: string) =>
     post<unknown>(`/demo-runs/${encodeURIComponent(id)}/inject-fault`, { connector_id: connectorId }),
+
+  station: (id: string) => request<StationOut>(`/stations/${encodeURIComponent(id)}`),
+  fleetInsights: (runId: string) => request<FleetOut>(`/insights/fleet?${new URLSearchParams({ run_id: runId })}`),
+  connectorTrend: (id: string, runId: string) =>
+    request<TrendOut>(`/connectors/${encodeURIComponent(id)}/trend?${new URLSearchParams({ run_id: runId })}`),
+  incidentSummary: (runId: string | null, stationId?: string) => {
+    const query = new URLSearchParams({ ...(runId ? { run_id: runId } : {}), ...(stationId ? { station_id: stationId } : {}) });
+    return request<IncidentSummary>(`/insights/incidents${query.size ? `?${query}` : ""}`);
+  },
 
   evaluations: () => request<EvaluationList>("/evaluations"),
   evaluation: (id: string) => request<Evaluation>(`/evaluations/${encodeURIComponent(id)}`),
