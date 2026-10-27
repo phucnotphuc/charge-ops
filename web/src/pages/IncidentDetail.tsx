@@ -32,10 +32,32 @@ const COMMANDS: { type: CommandType; allowed: (i: Incident) => boolean; hint: st
   },
   {
     type: "verify_recovery",
-    allowed: (i) => i.state === "mitigated",
+    // The worker rejects verify_recovery with maintenance_not_applied until maintenance has been applied.
+    allowed: (i) => i.state === "mitigated" && !!i.maintenance_applied_at,
     hint: "Khôi phục giới hạn tải gốc và kiểm tra 120 giây",
   },
 ];
+
+/** The gate for one command, from COMMANDS above (single source mirroring lifecycle.handle_command). */
+export function commandAllowed(incident: Incident, type: CommandType): boolean {
+  return COMMANDS.find((c) => c.type === type)?.allowed(incident) ?? false;
+}
+
+export const REDUCTION_REASON_LABEL: Record<string, string> = {
+  residual_not_recovered: "Đã giảm dòng nhưng nhiệt chưa phục hồi sau 120 s",
+  load_not_reduced: "Dòng chưa giảm",
+  insufficient_data: "Thiếu dữ liệu để xác nhận",
+};
+
+/** Vietnamese reason for a recorded reduction check; null when the worker recorded none. */
+export function reductionCheckText(incident: Incident): string | null {
+  if (!incident.reduction_check) return null;
+  const reason = incident.reduction_check_reason;
+  if (reason && REDUCTION_REASON_LABEL[reason]) return REDUCTION_REASON_LABEL[reason];
+  return incident.reduction_check === "load_reduction_unverified"
+    ? REDUCTION_REASON_LABEL.insufficient_data
+    : REDUCTION_REASON_LABEL.load_not_reduced;
+}
 
 const TERMINAL = ["applied", "failed", "timed_out"];
 
@@ -89,14 +111,18 @@ export function IncidentView({ incident, onChanged }: { incident: Incident; onCh
               detail={
                 verifiedAt
                   ? `Cửa sổ 60 giây đạt điều kiện lúc ${fmtTime(verifiedAt)}`
-                  : incident.reduction_check === "load_reduction_ineffective"
-                    ? "Sau 120 giây dòng vẫn chưa giảm: lệnh chưa hiệu quả"
-                    : incident.reduction_check === "load_reduction_unverified"
-                      ? "Sau 120 giây dữ liệu chưa đủ để kết luận"
-                      : "Chưa có bằng chứng giảm dòng"
+                  : (reductionCheckText(incident) ?? "Chưa có bằng chứng giảm dòng")
               }
               warn={!!incident.reduction_check && !verifiedAt}
             />
+            {verifiedAt && incident.reduction_check_reason === "residual_not_recovered" && (
+              <ProofRow
+                ok={false}
+                warn
+                title="Giảm tải chưa hiệu quả"
+                detail={`${REDUCTION_REASON_LABEL.residual_not_recovered}: được phép bảo trì ngay`}
+              />
+            )}
           </div>
         </div>
 

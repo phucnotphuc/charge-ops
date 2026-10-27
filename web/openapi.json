@@ -19,6 +19,182 @@
         "title": "ActiveIncident",
         "type": "object"
       },
+      "Arm": {
+        "properties": {
+          "commands": {
+            "title": "Commands",
+            "type": "integer"
+          },
+          "duplicate_commands": {
+            "title": "Duplicate Commands",
+            "type": "integer"
+          },
+          "fault": {
+            "$ref": "#/components/schemas/ArmFault"
+          },
+          "healthy": {
+            "$ref": "#/components/schemas/ArmHealthy"
+          },
+          "rejected_commands": {
+            "title": "Rejected Commands",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fault",
+          "healthy",
+          "duplicate_commands",
+          "rejected_commands",
+          "commands"
+        ],
+        "title": "Arm",
+        "type": "object"
+      },
+      "ArmFault": {
+        "properties": {
+          "detected_any": {
+            "title": "Detected Any",
+            "type": "integer"
+          },
+          "detected_before_trip_among_b_tripped": {
+            "title": "Detected Before Trip Among B Tripped",
+            "type": "integer"
+          },
+          "effective_mitigation_s": {
+            "$ref": "#/components/schemas/Stats"
+          },
+          "final_states": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Final States",
+            "type": "object"
+          },
+          "interruption_min": {
+            "title": "Interruption Min",
+            "type": "number"
+          },
+          "kwh": {
+            "title": "Kwh",
+            "type": "number"
+          },
+          "kwh_delta_vs_b": {
+            "title": "Kwh Delta Vs B",
+            "type": "number"
+          },
+          "kwh_delta_while_derated": {
+            "title": "Kwh Delta While Derated",
+            "type": "number"
+          },
+          "latency_s": {
+            "$ref": "#/components/schemas/Stats"
+          },
+          "lead_time_s": {
+            "$ref": "#/components/schemas/Stats"
+          },
+          "maintenance_applied": {
+            "title": "Maintenance Applied",
+            "type": "integer"
+          },
+          "mitigated_s": {
+            "$ref": "#/components/schemas/Stats"
+          },
+          "pre_onset_false": {
+            "title": "Pre Onset False",
+            "type": "integer"
+          },
+          "recall_before_trip": {
+            "title": "Recall Before Trip",
+            "type": "integer"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "integer"
+          },
+          "seeds_tripped": {
+            "title": "Seeds Tripped",
+            "type": "integer"
+          },
+          "trips": {
+            "title": "Trips",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "recall_before_trip",
+          "detected_any",
+          "detected_before_trip_among_b_tripped",
+          "latency_s",
+          "lead_time_s",
+          "pre_onset_false",
+          "effective_mitigation_s",
+          "mitigated_s",
+          "maintenance_applied",
+          "resolved",
+          "final_states",
+          "trips",
+          "seeds_tripped",
+          "interruption_min",
+          "kwh",
+          "kwh_delta_vs_b",
+          "kwh_delta_while_derated"
+        ],
+        "title": "ArmFault",
+        "type": "object"
+      },
+      "ArmHealthy": {
+        "properties": {
+          "by_scenario": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Scenario",
+            "type": "object"
+          },
+          "false_alerts_per_connector_hour": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "False Alerts Per Connector Hour"
+          },
+          "incidents": {
+            "title": "Incidents",
+            "type": "integer"
+          },
+          "kwh": {
+            "title": "Kwh",
+            "type": "number"
+          },
+          "kwh_delta_vs_b": {
+            "title": "Kwh Delta Vs B",
+            "type": "number"
+          },
+          "runs_with_incident": {
+            "title": "Runs With Incident",
+            "type": "integer"
+          },
+          "trips": {
+            "title": "Trips",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "runs_with_incident",
+          "incidents",
+          "false_alerts_per_connector_hour",
+          "trips",
+          "kwh",
+          "kwh_delta_vs_b",
+          "by_scenario"
+        ],
+        "title": "ArmHealthy",
+        "type": "object"
+      },
       "Batch": {
         "properties": {
           "samples": {
@@ -384,6 +560,257 @@
         "title": "DemoRunOut",
         "type": "object"
       },
+      "Detector": {
+        "properties": {
+          "detected_any": {
+            "title": "Detected Any",
+            "type": "integer"
+          },
+          "detected_before_trip_among_b_tripped": {
+            "title": "Detected Before Trip Among B Tripped",
+            "type": "integer"
+          },
+          "healthy_alert_episodes_per_connector_hour": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Healthy Alert Episodes Per Connector Hour"
+          },
+          "healthy_by_scenario": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Healthy By Scenario",
+            "type": "object"
+          },
+          "healthy_runs_alerting": {
+            "title": "Healthy Runs Alerting",
+            "type": "integer"
+          },
+          "latency_s": {
+            "$ref": "#/components/schemas/Stats"
+          },
+          "lead_time_s": {
+            "$ref": "#/components/schemas/Stats"
+          },
+          "pre_onset_false": {
+            "title": "Pre Onset False",
+            "type": "integer"
+          },
+          "recall_before_trip": {
+            "title": "Recall Before Trip",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "recall_before_trip",
+          "detected_any",
+          "detected_before_trip_among_b_tripped",
+          "latency_s",
+          "lead_time_s",
+          "pre_onset_false",
+          "healthy_runs_alerting",
+          "healthy_alert_episodes_per_connector_hour",
+          "healthy_by_scenario"
+        ],
+        "title": "Detector",
+        "type": "object"
+      },
+      "EvaluationItem": {
+        "properties": {
+          "b_tripped_seeds": {
+            "title": "B Tripped Seeds",
+            "type": "integer"
+          },
+          "fault_seeds": {
+            "title": "Fault Seeds",
+            "type": "integer"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "healthy_seeds": {
+            "title": "Healthy Seeds",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "locked": {
+            "$ref": "#/components/schemas/Locked"
+          },
+          "protocol_version": {
+            "title": "Protocol Version",
+            "type": "string"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "runtime_s": {
+            "title": "Runtime S",
+            "type": "number"
+          },
+          "simulation_only": {
+            "const": true,
+            "default": true,
+            "title": "Simulation Only",
+            "type": "boolean"
+          },
+          "targets": {
+            "$ref": "#/components/schemas/Targets"
+          }
+        },
+        "required": [
+          "id",
+          "protocol_version",
+          "fingerprint",
+          "locked",
+          "fault_seeds",
+          "healthy_seeds",
+          "b_tripped_seeds",
+          "runs",
+          "runtime_s",
+          "targets"
+        ],
+        "title": "EvaluationItem",
+        "type": "object"
+      },
+      "EvaluationList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "title": "Next Cursor",
+            "type": "null"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "EvaluationList",
+        "type": "object"
+      },
+      "EvaluationOut": {
+        "properties": {
+          "arms": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Arm"
+            },
+            "propertyNames": {
+              "enum": [
+                "A",
+                "B",
+                "C"
+              ]
+            },
+            "title": "Arms",
+            "type": "object"
+          },
+          "b_tripped_seeds": {
+            "title": "B Tripped Seeds",
+            "type": "integer"
+          },
+          "detectors": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Detector"
+            },
+            "propertyNames": {
+              "enum": [
+                "fixed",
+                "residual"
+              ]
+            },
+            "title": "Detectors",
+            "type": "object"
+          },
+          "fault_seeds": {
+            "title": "Fault Seeds",
+            "type": "integer"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "healthy_connector_hours": {
+            "title": "Healthy Connector Hours",
+            "type": "number"
+          },
+          "healthy_seeds": {
+            "title": "Healthy Seeds",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "locked": {
+            "$ref": "#/components/schemas/Locked"
+          },
+          "protocol_version": {
+            "title": "Protocol Version",
+            "type": "string"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "runtime_s": {
+            "title": "Runtime S",
+            "type": "number"
+          },
+          "simulation_only": {
+            "const": true,
+            "default": true,
+            "title": "Simulation Only",
+            "type": "boolean"
+          },
+          "summary_markdown": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Markdown"
+          },
+          "targets": {
+            "$ref": "#/components/schemas/Targets"
+          }
+        },
+        "required": [
+          "id",
+          "protocol_version",
+          "fingerprint",
+          "locked",
+          "fault_seeds",
+          "healthy_seeds",
+          "b_tripped_seeds",
+          "runs",
+          "runtime_s",
+          "targets",
+          "healthy_connector_hours",
+          "arms",
+          "detectors",
+          "summary_markdown"
+        ],
+        "title": "EvaluationOut",
+        "type": "object"
+      },
       "FaultEventOut": {
         "properties": {
           "connector_id": {
@@ -451,6 +878,34 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Locked": {
+        "properties": {
+          "a_threshold_c": {
+            "title": "A Threshold C",
+            "type": "number"
+          },
+          "c_alert_c": {
+            "title": "C Alert C",
+            "type": "number"
+          },
+          "c_recovered_c": {
+            "title": "C Recovered C",
+            "type": "number"
+          },
+          "locked_at": {
+            "title": "Locked At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "a_threshold_c",
+          "c_alert_c",
+          "c_recovered_c",
+          "locked_at"
+        ],
+        "title": "Locked",
         "type": "object"
       },
       "LoginRequest": {
@@ -706,6 +1161,78 @@
           "measured_at"
         ],
         "title": "SampleOut",
+        "type": "object"
+      },
+      "Stats": {
+        "properties": {
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n",
+          "median",
+          "min",
+          "max"
+        ],
+        "title": "Stats",
+        "type": "object"
+      },
+      "Targets": {
+        "properties": {
+          "c_healthy_runs_with_incident_le_1": {
+            "title": "C Healthy Runs With Incident Le 1",
+            "type": "boolean"
+          },
+          "c_recall_before_trip_ge_18_of_20": {
+            "title": "C Recall Before Trip Ge 18 Of 20",
+            "type": "boolean"
+          },
+          "duplicate_commands_zero": {
+            "title": "Duplicate Commands Zero",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "c_recall_before_trip_ge_18_of_20",
+          "c_healthy_runs_with_incident_le_1",
+          "duplicate_commands_zero"
+        ],
+        "title": "Targets",
         "type": "object"
       },
       "TelemetryItem": {
@@ -1498,6 +2025,64 @@
           }
         },
         "summary": "Stop Run"
+      }
+    },
+    "/api/v1/evaluations": {
+      "get": {
+        "description": "Committed offline evaluation summaries (simulated clock), read-only and anonymous like other GETs.",
+        "operationId": "evaluations_api_v1_evaluations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Evaluations"
+      }
+    },
+    "/api/v1/evaluations/{evaluation_id}": {
+      "get": {
+        "operationId": "evaluation_api_v1_evaluations__evaluation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evaluation_id",
+            "required": true,
+            "schema": {
+              "title": "Evaluation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluation"
       }
     },
     "/api/v1/health": {

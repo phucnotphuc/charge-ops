@@ -1,5 +1,92 @@
 // Test-only fixtures, shaped like chargeops/api.py + domain.py (ConnectorOut, SampleOut). Never imported by app code.
-import type { Connector, Incident } from "../api/types";
+import type { Connector, Evaluation, Incident } from "../api/types";
+
+const stats = (n: number, median: number | null, min: number | null, max: number | null) => ({ n, median, min, max });
+const none = stats(0, null, null, null);
+
+/** Arm C and the fixed detector copy data/evaluation/b1-eval-v3.1/summary.json; A/B are trimmed variants. */
+const arm = (over: { recall: number; mitigation: ReturnType<typeof stats>; commands: number }) => ({
+  fault: {
+    recall_before_trip: over.recall,
+    detected_any: 20,
+    detected_before_trip_among_b_tripped: 7,
+    latency_s: stats(20, 155, 100, 455),
+    lead_time_s: stats(7, 575, 40, 885),
+    pre_onset_false: 0,
+    effective_mitigation_s: over.mitigation,
+    mitigated_s: over.commands ? stats(19, 705, 660, 750) : none,
+    maintenance_applied: 19,
+    resolved: 13,
+    final_states: { resolved: 13, verifying: 6, mitigating: 1 },
+    trips: 1,
+    seeds_tripped: 1,
+    interruption_min: 4.916666666666667,
+    kwh: 326.97,
+    kwh_delta_vs_b: -22.53789522541834,
+    kwh_delta_while_derated: -47.25,
+  },
+  healthy: {
+    runs_with_incident: 0,
+    incidents: 0,
+    false_alerts_per_connector_hour: 0,
+    trips: 0,
+    kwh: 416.96,
+    kwh_delta_vs_b: 0,
+    by_scenario: {},
+  },
+  duplicate_commands: 0,
+  rejected_commands: 0,
+  commands: over.commands,
+});
+
+export const evaluation = (): Evaluation => ({
+  id: "b1-eval-v3.1",
+  protocol_version: "b1-eval-v3.1",
+  fingerprint: "f54276de8d5584c85dfff12f98a90ed083a176543aed842a6f5b1a3a26fe0ab9",
+  locked: { a_threshold_c: 74, c_alert_c: 8, c_recovered_c: 3, locked_at: "2026-10-21T08:21:51.979853Z" },
+  fault_seeds: 20,
+  healthy_seeds: 20,
+  healthy_connector_hours: 10,
+  b_tripped_seeds: 7,
+  runs: 120,
+  runtime_s: 2.4,
+  simulation_only: true,
+  targets: {
+    c_recall_before_trip_ge_18_of_20: true,
+    c_healthy_runs_with_incident_le_1: true,
+    duplicate_commands_zero: true,
+  },
+  arms: {
+    A: arm({ recall: 8, mitigation: stats(9, 135, 135, 135), commands: 78 }),
+    B: arm({ recall: 20, mitigation: none, commands: 0 }),
+    C: arm({ recall: 20, mitigation: stats(20, 135, 135, 405), commands: 78 }),
+  },
+  detectors: {
+    fixed: {
+      recall_before_trip: 8,
+      detected_any: 10,
+      detected_before_trip_among_b_tripped: 5,
+      latency_s: stats(10, 415, 230, 740),
+      lead_time_s: stats(5, 435, 230, 600),
+      pre_onset_false: 2,
+      healthy_runs_alerting: 5,
+      healthy_alert_episodes_per_connector_hour: 0.5,
+      healthy_by_scenario: { healthy: 2, load_increase: 2, demand_drop: 1 },
+    },
+    residual: {
+      recall_before_trip: 20,
+      detected_any: 20,
+      detected_before_trip_among_b_tripped: 7,
+      latency_s: stats(20, 155, 100, 455),
+      lead_time_s: stats(7, 575, 40, 885),
+      pre_onset_false: 0,
+      healthy_runs_alerting: 0,
+      healthy_alert_episodes_per_connector_hour: 0,
+      healthy_by_scenario: {},
+    },
+  },
+  summary_markdown: null,
+});
 
 export const incident = (over: Partial<Incident> = {}): Incident => ({
   id: "inc-1",
