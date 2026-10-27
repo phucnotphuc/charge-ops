@@ -9,7 +9,7 @@ from chargeops.domain import AMBIENT_C, CONNECTORS, LOCATION, lag, now
 from chargeops.fleet import fleet_plan, physics
 from chargeops.logging import event, logger
 from chargeops.model import DEMO_PROFILE, PROFILES, STEP_S, replay  # noqa: F401  (re-exported)
-from chargeops.realism import ambient_c, noisy, sample_rng
+from chargeops.realism import Imperfections, ambient_c, noisy, sample_rng
 from chargeops.vehicles import SOC_PROFILES, minutes_to_full, soc_percent
 
 
@@ -25,6 +25,8 @@ class Simulator:
         self.delivered = {}  # per run: {connector_id: (kwh, last_measured)} from the actual current
         self.last_power = {}
         self.plans = None
+        self.imperfect = Imperfections() if realism else None
+        self.last_step = None
 
     def apply_commands(self):
         commands = self.client.get("/api/v1/simulator/commands")
@@ -61,6 +63,8 @@ class Simulator:
             vehicles = run.get("last_vehicles") or {}
             self.thermal = {"run_id": run["_id"]}
             self.delivered, self.last_power = {}, {}
+            if self.imperfect is not None:
+                self.imperfect.held = []  # a new run never inherits the previous run's late samples
             for cid in CONNECTORS:
                 stored = last.get(cid)
                 self.thermal[cid] = (
@@ -76,6 +80,7 @@ class Simulator:
                 )
         self.plans = plans
         step = int(elapsed // STEP_S)
+        self.last_step = step  # the same index the sample IDs and imperfections use
         out = []
         for cid in CONNECTORS:
             sim = dict((run.get("sim") or {}).get(cid) or {})
@@ -165,7 +170,13 @@ class Simulator:
             measured = measured or now()
             samples = self.samples(run, measured)
             vehicles = self.vehicles(run, self.plans, measured)
+            if self.imperfect is not None:  # faults hit telemetry only, never vehicle states or the integration
+                samples = self.imperfect.apply(samples, run["_id"], self.last_step)
             self.pending = {"run_id": run["_id"], "samples": samples, "vehicles": vehicles}
+        if not self.pending["samples"]:  # the API requires min_length=1; vehicle states still go out
+            self.post_vehicles(self.pending["vehicles"])
+            self.pending = None
+            return
         result = self.client.post("/api/v1/telemetry/batch", json={"samples": self.pending["samples"]})
         if result.status_code not in (409, 422):  # rejected batches are dropped, not retried
             result.raise_for_status()
