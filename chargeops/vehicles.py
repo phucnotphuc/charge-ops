@@ -15,6 +15,7 @@ class SocProfile:
     soc_end_percent: float
     energy_kwh: float
     capacity_kwh: float | None
+    soc_start_minute: int = 0  # first minute with a BMS SoC reading; delivered energy counts from here
 
 
 def load_soc_profiles():
@@ -26,6 +27,7 @@ def load_soc_profiles():
                 float(row["soc_end_percent"]),
                 float(row["energy_kwh"]),
                 float(row["capacity_kwh"]) if row["capacity_kwh"] else None,
+                int(row["soc_start_minute"]),
             )
             for row in csv.DictReader(f)
         }

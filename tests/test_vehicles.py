@@ -9,6 +9,7 @@ P = SocProfile(soc_start_percent=30.0, soc_end_percent=80.0, energy_kwh=30.0, ca
 def test_every_replayed_session_has_a_soc_row():
     assert set(SOC_PROFILES) == set(PROFILES)
     assert all(0 <= p.soc_start_percent <= 100 for p in SOC_PROFILES.values())
+    assert all(p.soc_start_minute >= 0 for p in SOC_PROFILES.values())
 
 
 def test_soc_rises_with_delivered_energy_and_caps_at_100():

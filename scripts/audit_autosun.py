@@ -7,6 +7,7 @@ Run from the repo root (raw/processed data stay git-ignored; only the manifest i
 import csv
 import hashlib
 import json
+import shutil
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +32,7 @@ FILES = {  # published SHA-256 from the Mendeley public API (version 3)
         "8d7c676bbf2042a4cc8124d12aa5652b6a335bc43e3d4d984e819a0078e08c70",
     ),
 }
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 SEED, SAMPLE = 20261020, 50
 
 
@@ -48,7 +50,11 @@ def fetch():
     for name, (file_id, published) in FILES.items():
         path = RAW / name
         if not path.exists():
-            urllib.request.urlretrieve(f"{BASE}/{file_id}/file_downloaded", path)
+            # Mendeley answers 403 to urllib's default User-Agent.
+            url = f"{BASE}/{file_id}/file_downloaded"
+            request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+            with urllib.request.urlopen(request) as response, path.open("wb") as f:
+                shutil.copyfileobj(response, f)
         actual = sha256(path)
         assert actual == published, f"{name}: SHA-256 {actual} != published {published}"
         modified = datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat(timespec="seconds")
@@ -168,7 +174,8 @@ def main():
     PROFILES.parent.mkdir(parents=True, exist_ok=True)
     profiles.to_csv(PROFILES, index=False, lineterminator="\n")
     # Station monitor: real SoC at session start/end and session energy for the replayed sessions.
-    replayed = data[data["transaction_id"].isin(chosen.index)]
+    replayed = data[data["transaction_id"].isin(chosen.index)].copy()
+    replayed["minute"] = replayed.groupby("transaction_id").cumcount()
     # Many sessions publish current_soc = 0 in the first minute before the BMS reports (0 -> 22 -> 23 ...).
     # Start at the first reported (non-zero) SoC and count only the energy charged after that reading.
     replayed = replayed[replayed.groupby("transaction_id")["current_soc"].cummax() > 0]
@@ -178,6 +185,7 @@ def main():
         soc_start_percent=("current_soc", "first"),
         soc_end_percent=("current_soc", "last"),
         energy_kwh=("out_power", lambda p: p.sum() / 60),
+        soc_start_minute=("minute", "first"),  # the simulator starts counting delivered energy here
     )
     rise = soc["soc_end_percent"] - soc["soc_start_percent"]
     soc["capacity_kwh"] = (soc["energy_kwh"] / (rise / 100)).where(rise >= 5).round(1)
