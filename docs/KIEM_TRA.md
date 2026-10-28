@@ -139,6 +139,7 @@ Các test này dùng MongoDB giả lập (mongomock), chỉ chứng minh logic, 
    - các bảng "Sự cố đang mở theo connector" và "Thời gian ở trạng thái hiện tại" có số liệu;
    - dashboard IT/SRE có "Worker heartbeat";
    - từ một dòng log mở được trace APM.
+7. (Tùy chọn) Kiểm tra RUM: điền `DD_RUM_APPLICATION_ID` và `DD_RUM_CLIENT_TOKEN` vào `.env`, build lại web (`docker compose --profile observability up --build -d web`), mở một sự cố, gửi một lệnh, rồi trên Datadog RUM Explorer tìm action `command_sent` của service `chargeops-web`.
 
 Lưu ý:
 

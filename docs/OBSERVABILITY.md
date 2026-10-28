@@ -69,7 +69,22 @@ Chỉ monitor composite gọi webhook; các monitor còn lại chỉ có link đ
 6. Mở link Logs trong cảnh báo để lọc toàn bộ log của `run_id`.
 7. Từ một dòng log, lấy `dd.trace_id` và mở trace APM tương ứng trên dashboard IT/SRE để xem độ trễ và lỗi của request hoặc vòng worker.
 
-## 5. Chưa kiểm chứng thật
+## 5. Browser RUM (giao diện vận hành)
+
+RUM chỉ bật khi lúc build web có `DD_RUM_APPLICATION_ID` và `DD_RUM_CLIENT_TOKEN`; để trống thì RUM tắt hoàn toàn, không có dữ liệu giả.
+
+1. Trên Datadog: UX Monitoring, RUM Applications, New Application, loại JavaScript. Chép `applicationId` và `clientToken` (token công khai, khác API key và App key).
+2. Điền hai giá trị vào `.env` (`DD_SITE` phải đúng site tài khoản), rồi build lại web: `docker compose --profile observability up --build -d web`. Giá trị được ghi vào bundle lúc build, nên đổi giá trị phải build lại.
+3. Dữ liệu gửi đi:
+   - service `chargeops-web`, env `hackathon`, version lấy từ `APP_VERSION`;
+   - action `command_sent` mỗi khi kỹ sư bấm gửi lệnh (kèm `type`, `incident_id`, `command_id`);
+   - timing `incident_seen_to_command_ms`: thời gian từ lúc kỹ sư mở sự cố đến lệnh đầu tiên (cũng nằm trong context của action);
+   - request tới `/api/` mang header trace, nên session RUM nối được với trace APM của API.
+4. Quyền riêng tư: `defaultPrivacyLevel` là `mask-user-input`, không ghi session replay (`sessionReplaySampleRate` 0). Bundle không chứa `DD_API_KEY` hay `DD_APP_KEY`.
+
+Ghi chú: tên option của `@datadog/browser-rum` 5.35.1 trùng kế hoạch (`allowedTracingUrls`, `sessionSampleRate`, `defaultPrivacyLevel`). `addTiming` đo từ đầu view, nên khoảng thời gian chính xác nằm ở `incident_seen_to_command_ms` trong context của action.
+
+## 6. Chưa kiểm chứng thật
 
 Các điểm sau chưa được chạy trên Datadog thật tại thời điểm viết tài liệu này; chúng sẽ được kiểm chứng ở Task 8:
 
@@ -77,3 +92,4 @@ Các điểm sau chưa được chạy trên Datadog thật tại thời điểm
 - Link template variable (`tpl_var_run_id`, `tpl_var_connector_id`) trong nội dung monitor composite.
 - Widget heartbeat dùng `as_rate()`.
 - Hành vi `no_data` của monitor worker.
+- Dữ liệu RUM (action `command_sent`, timing, liên kết APM) trên Datadog thật.

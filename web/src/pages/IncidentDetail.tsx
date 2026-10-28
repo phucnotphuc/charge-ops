@@ -5,6 +5,7 @@ import { api, ApiError, newIdempotencyKey } from "../api/client";
 import { useAuth } from "../api/auth";
 import { usePolling } from "../api/hooks";
 import { idOf, type Command, type CommandType, type Incident } from "../api/types";
+import { markIncidentSeen, trackCommand } from "../rum";
 import { Async, ErrorBox } from "../components/Async";
 import { SourceBadge, StateBadge, StateStepper } from "../components/Badges";
 import {
@@ -79,6 +80,10 @@ export function IncidentView({ incident, onChanged }: { incident: Incident; onCh
   const incidentId = idOf(incident);
   const ack = latestAppliedReduction(incident);
   const verifiedAt = incident.load_reduction_verified_at ?? null;
+
+  useEffect(() => {
+    markIncidentSeen(incidentId);
+  }, [incidentId]);
 
   return (
     <div className="stack">
@@ -229,6 +234,7 @@ function CommandPanel({
     setError(null);
     try {
       const accepted = await api.sendCommand(incidentId, type, newIdempotencyKey());
+      trackCommand(type, { incident_id: incidentId, command_id: accepted.command_id });
       setSent((s) => [{ commandId: accepted.command_id, type }, ...s]);
       onChanged?.();
     } catch (e) {
