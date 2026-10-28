@@ -12,6 +12,7 @@ from chargeops.datadog_client import DatadogClient, DatadogError
 from chargeops.domain import now
 from chargeops.logging import event, logger
 from chargeops.notebooks import investigation_notebook, notebook_url
+from chargeops.postmortem import postmortem_pipeline, report_markdown, report_summary
 from chargeops.storage import database
 
 BACKOFF_S = (30, 60, 120, 300)
@@ -61,8 +62,14 @@ class DatadogSync:
     def is_done(incident, state):
         if not state.get("dd_incident_id") or state.get("last_error") or not state.get("notebook_attached"):
             return False
+        if DatadogSync.is_closed(incident) and not (state.get("postmortem_done") and state.get("postmortem_notebook_updated")):
+            return False
         caught_up = state.get("synced_events", 0) >= len(incident.get("timeline", []))
         return caught_up and (incident["state"] != "resolved" or state.get("dd_resolved", False))
+
+    @staticmethod
+    def is_closed(incident):
+        return incident["state"] == "resolved" or bool(incident.get("run_stopped_at"))
 
     def sync_incident(self, incident, state, at):
         if not state.get("dd_incident_id"):
@@ -85,6 +92,7 @@ class DatadogSync:
         if incident["state"] == "resolved" and not state.get("dd_resolved"):
             self.client.resolve_incident(state["dd_incident_id"])
             self.put(state, dd_resolved=True)
+        self.sync_postmortem(incident, state, at)
 
     def sync_notebook(self, incident, state, at):
         """Notebook create + attach. A Datadog failure here is recorded and retried later; it never blocks the
@@ -125,6 +133,69 @@ class DatadogSync:
                 notebook_next_attempt_at=at + timedelta(seconds=delay),
             )
             event(self.log, "datadog_notebook_failed", incident_id=incident["_id"], status=error.status)
+
+    @staticmethod
+    def definitely_rejected(error):
+        """4xx and 503 mean Datadog did not act on the POST; status 0 / other 5xx may have landed."""
+        return 400 <= error.status < 500 or error.status == 503
+
+    def sync_postmortem(self, incident, state, at):
+        """Once per closed incident, in three independently flagged parts: the $merge report, the Incident summary
+        note and the notebook PUT (idempotent; waits for the notebook). A failure is recorded and retried with
+        backoff; it never blocks the timeline or resolve mirroring, nor the other parts."""
+        if not self.is_closed(incident) or (state.get("postmortem_done") and state.get("postmortem_notebook_updated")):
+            return
+        retry_at = state.get("postmortem_next_attempt_at")
+        if retry_at and retry_at.replace(tzinfo=at.tzinfo) > at:
+            return
+        errors = []
+        report = None
+        try:
+            if not state.get("postmortem_report_done"):
+                self.db.incidents.aggregate(postmortem_pipeline(incident["_id"]))
+            report = self.db.incident_reports.find_one({"_id": incident["_id"]})
+            if report is None:
+                raise LookupError("incident report missing")
+            self.put(state, postmortem_report_done=True)
+        except (PyMongoError, LookupError) as error:
+            errors.append(type(error).__name__)
+        if report is not None and not state.get("postmortem_note_done") and state.get("dd_incident_id"):
+            if state.get("postmortem_note_attempted_at"):
+                # incident_note is a POST that may have landed; prefer a missing note over a duplicate one.
+                event(self.log, "datadog_postmortem_note_skipped", incident_id=incident["_id"])
+                self.put(state, postmortem_note_done=True)
+            else:
+                try:
+                    self.put(state, postmortem_note_attempted_at=at)
+                    self.client.incident_note(state["dd_incident_id"], report_summary(report), at=at)
+                    self.put(state, postmortem_note_done=True)
+                except DatadogError as error:
+                    if self.definitely_rejected(error):
+                        self.put(state, postmortem_note_attempted_at=None)
+                    errors.append(f"HTTP {error.status}")
+        if report is not None and not state.get("postmortem_notebook_updated") and state.get("notebook_id"):
+            try:
+                closed = {**incident, "resolved_at": incident.get("resolved_at") or report.get("closed_at")}
+                payload = investigation_notebook(closed, self.site, postmortem_md=report_markdown(report), now=at)
+                self.client.update_notebook(state["notebook_id"], payload["data"]["attributes"])
+                self.put(state, postmortem_notebook_updated=True)
+            except DatadogError as error:
+                errors.append(f"HTTP {error.status}")
+        if state.get("postmortem_report_done") and state.get("postmortem_note_done"):
+            self.put(state, postmortem_done=True)
+        if errors or not state.get("postmortem_notebook_updated"):
+            attempts = state.get("postmortem_attempts", 0) + 1
+            delay = BACKOFF_S[min(attempts, len(BACKOFF_S)) - 1]
+            self.put(
+                state,
+                postmortem_error=",".join(errors) or None,
+                postmortem_attempts=attempts,
+                postmortem_next_attempt_at=at + timedelta(seconds=delay),
+            )
+            if errors:
+                event(self.log, "datadog_postmortem_failed", incident_id=incident["_id"], error=",".join(errors))
+        else:
+            self.put(state, postmortem_error=None, postmortem_attempts=0, postmortem_next_attempt_at=None)
 
     def run_forever(self, interval=5):
         while True:
