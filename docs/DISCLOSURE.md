@@ -29,6 +29,7 @@ Dependencies Python khóa tại `uv.lock`, frontend tại `web/package-lock.json
 | Recharts | 3.10.1 | MIT |
 | lucide-react | 1.60.0 | ISC |
 | Vite | 8.3.4 | MIT |
+| @datadog/browser-rum | 5.35.1 | Apache-2.0 |
 | FastAPI | 0.143.1 | MIT |
 | pydantic / pydantic-settings | 2.14.1 / 2.16.0 | MIT |
 | uvicorn | 0.54.0 | BSD-3-Clause |
