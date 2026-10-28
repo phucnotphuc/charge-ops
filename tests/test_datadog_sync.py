@@ -24,6 +24,7 @@ def setup(mode="datadog", timeline=None, state="open"):
     client.create_incident.return_value = {"id": "dd-1", "public_id": 7}
     client.incident_url.return_value = "https://app.ap1.datadoghq.com/incidents/7"
     client.find_incident.return_value = None
+    client.create_notebook.return_value = 12
     return db, client, DatadogSync(db, client, Mock(), Mock(), "ap1.datadoghq.com")
 
 
@@ -113,3 +114,34 @@ def test_incident_api_exposes_datadog_links(store):
     )
     body = http.get("/api/v1/incidents/inc-9").json()
     assert body["datadog_incident_url"].endswith("/incidents/1") and body["datadog_notebook_url"] == "https://nb"
+
+
+def test_notebook_created_and_attached_once():
+    db, client, sync = setup()
+    sync.sync_once(T)
+    sync.sync_once(T + timedelta(seconds=5))
+    client.create_notebook.assert_called_once()
+    assert client.create_notebook.call_args.args[0]["name"].endswith("[inc-1]")
+    client.attach_link.assert_called_once_with("dd-1", "https://app.ap1.datadoghq.com/notebook/12", "Notebook điều tra")
+    doc = db.datadog_sync.find_one({"_id": "inc-1"})
+    assert doc["notebook_id"] == 12 and doc["notebook_url"].endswith("/notebook/12")
+
+
+def test_notebook_failure_is_retried_without_duplicating_the_incident():
+    db, client, sync = setup()
+    client.create_notebook.side_effect = [DatadogError("POST", "/api/v1/notebooks", 503), 12]
+    sync.sync_once(T)
+    assert "503" in db.datadog_sync.find_one({"_id": "inc-1"})["last_error"]
+    sync.sync_once(T + timedelta(minutes=2))
+    client.create_incident.assert_called_once()
+    client.attach_link.assert_called_once()
+    assert db.datadog_sync.find_one({"_id": "inc-1"})["notebook_id"] == 12
+
+
+def test_attach_failure_retries_attach_only():
+    db, client, sync = setup()
+    client.attach_link.side_effect = [DatadogError("POST", "/attachments", 503), None]
+    sync.sync_once(T)
+    sync.sync_once(T + timedelta(minutes=2))
+    client.create_notebook.assert_called_once()
+    assert client.attach_link.call_count == 2

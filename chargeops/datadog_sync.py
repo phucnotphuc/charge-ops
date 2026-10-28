@@ -11,6 +11,7 @@ from chargeops.config import settings
 from chargeops.datadog_client import DatadogClient, DatadogError
 from chargeops.domain import now
 from chargeops.logging import event, logger
+from chargeops.notebooks import investigation_notebook, notebook_url
 from chargeops.storage import database
 
 BACKOFF_S = (30, 60, 120, 300)
@@ -77,6 +78,13 @@ class DatadogSync:
                 dd_public_id=found["public_id"],
                 dd_incident_url=self.client.incident_url(found["public_id"]),
             )
+        if not state.get("notebook_id"):
+            payload = investigation_notebook(incident, self.site, now=at)
+            notebook_id = self.client.create_notebook(payload["data"]["attributes"])
+            self.put(state, notebook_id=notebook_id, notebook_url=notebook_url(self.site, notebook_id))
+        if not state.get("notebook_attached"):
+            self.client.attach_link(state["dd_incident_id"], state["notebook_url"], "Notebook điều tra")
+            self.put(state, notebook_attached=True)
         for entry in incident.get("timeline", [])[state.get("synced_events", 0):]:
             self.client.incident_note(state["dd_incident_id"], note_text(incident, entry), at=entry["at"])
             self.put(state, synced_events=state.get("synced_events", 0) + 1)
