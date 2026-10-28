@@ -253,7 +253,15 @@ def slo_specs():
 
 def slo_widgets(ids):
     return [
-        {"type": "slo", "slo_id": ids[key], "view_type": "detail", "time_windows": SLO_WINDOWS}
+        # The dashboard API rejects an slo widget without show_error_budget (HTTP 400, 2026-10-28).
+        {
+            "type": "slo",
+            "slo_id": ids[key],
+            "view_type": "detail",
+            "view_mode": "overall",
+            "show_error_budget": True,
+            "time_windows": SLO_WINDOWS,
+        }
         for key in ("slo_mitigation", "slo_charging")
         if ids.get(key)
     ]

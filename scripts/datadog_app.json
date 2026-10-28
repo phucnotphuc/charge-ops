@@ -23,10 +23,12 @@
               ],
               "isVisible": true,
               "layout": {
-                "x": 0,
-                "y": 0,
-                "width": 12,
-                "height": 2
+                "default": {
+                  "x": 0,
+                  "y": 0,
+                  "width": 12,
+                  "height": 2
+                }
               }
             }
           },
@@ -69,10 +71,12 @@
               ],
               "isVisible": true,
               "layout": {
-                "x": 0,
-                "y": 2,
-                "width": 12,
-                "height": 8
+                "default": {
+                  "x": 0,
+                  "y": 2,
+                  "width": 12,
+                  "height": 8
+                }
               }
             }
           },
@@ -99,10 +103,12 @@
               ],
               "isVisible": true,
               "layout": {
-                "x": 0,
-                "y": 10,
-                "width": 3,
-                "height": 2
+                "default": {
+                  "x": 0,
+                  "y": 10,
+                  "width": 3,
+                  "height": 2
+                }
               }
             }
           },
@@ -129,10 +135,12 @@
               ],
               "isVisible": true,
               "layout": {
-                "x": 3,
-                "y": 10,
-                "width": 3,
-                "height": 2
+                "default": {
+                  "x": 3,
+                  "y": 10,
+                  "width": 3,
+                  "height": 2
+                }
               }
             }
           },
@@ -159,10 +167,12 @@
               ],
               "isVisible": true,
               "layout": {
-                "x": 6,
-                "y": 10,
-                "width": 3,
-                "height": 2
+                "default": {
+                  "x": 6,
+                  "y": 10,
+                  "width": 3,
+                  "height": 2
+                }
               }
             }
           },
@@ -189,10 +199,12 @@
               ],
               "isVisible": true,
               "layout": {
-                "x": 9,
-                "y": 10,
-                "width": 3,
-                "height": 2
+                "default": {
+                  "x": 9,
+                  "y": 10,
+                  "width": 3,
+                  "height": 2
+                }
               }
             }
           }

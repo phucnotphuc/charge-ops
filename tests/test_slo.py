@@ -99,6 +99,7 @@ def test_engineering_dashboard_has_slo_widgets():
         ("a", "detail", ["7d", "30d"]),
         ("b", "detail", ["7d", "30d"]),
     ]
+    assert all(d["show_error_budget"] is True for d in slos)  # required by the dashboard API
     assert not [d for d in sd.engineering_dashboard()["widgets"] if d["definition"]["type"] == "slo"]
 
 
