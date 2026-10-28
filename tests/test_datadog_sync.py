@@ -171,15 +171,48 @@ def test_notebook_api_down_does_not_block_timeline_or_resolve(monkeypatch):
     assert client.create_notebook.call_count == 1
 
 
-def test_attach_is_not_repeated_after_an_attempt():
+def test_attach_is_not_repeated_after_an_ambiguous_failure():
     db, client, sync = setup()
-    client.attach_link.side_effect = DatadogError("POST", "/attachments", 503)
+    client.attach_link.side_effect = DatadogError("POST", "/attachments", 0)
     sync.sync_once(T)
-    assert db.datadog_sync.find_one({"_id": "inc-1"})["notebook_error"] == "HTTP 503"
+    assert db.datadog_sync.find_one({"_id": "inc-1"})["notebook_error"] == "HTTP 0"
     sync.sync_once(T + timedelta(minutes=2))
     client.create_notebook.assert_called_once()
     client.attach_link.assert_called_once()
     assert db.datadog_sync.find_one({"_id": "inc-1"})["notebook_attached"] is True
+
+
+def test_rejected_attach_is_retried_not_marked_attached():
+    db, client, sync = setup()
+    client.attach_link.side_effect = [DatadogError("POST", "/attachments", 403), None]
+    sync.sync_once(T)
+    assert not db.datadog_sync.find_one({"_id": "inc-1"}).get("notebook_attached")
+    sync.sync_once(T + timedelta(minutes=2))
+    assert client.attach_link.call_count == 2
+    assert db.datadog_sync.find_one({"_id": "inc-1"})["notebook_attached"] is True
+
+
+def test_timeline_step_with_ambiguous_failure_is_not_repeated():
+    steps = [{"at": T, "event": e} for e in ("opened", "acknowledge")]
+    db, client, sync = setup(timeline=steps)
+    client.incident_note.side_effect = [None, DatadogError("POST", "/todos", 0), None]
+    sync.sync_once(T)
+    sync.sync_once(T + timedelta(minutes=2))
+    events = [c.args[1].split(" · ")[1] for c in client.incident_note.call_args_list]
+    assert events == ["opened", "acknowledge"]
+    assert db.datadog_sync.find_one({"_id": "inc-1"})["synced_events"] == 2
+
+
+def test_unexpected_error_backs_off_one_incident_and_the_next_still_syncs():
+    db, client, sync = setup()
+    db.incidents.insert_one(
+        {"_id": "inc-2", "run_id": RUN, "connector_id": "connector-5", "state": "open", "opened_at": T,
+         "unresolved": True, "timeline": [{"at": T, "event": "opened"}]}
+    )
+    client.create_incident.side_effect = [ValueError("bad Retry-After"), {"id": "dd-2", "public_id": 8}]
+    sync.sync_once(T)
+    assert db.datadog_sync.find_one({"_id": "inc-1"})["last_error"] == "ValueError"
+    assert db.datadog_sync.find_one({"_id": "inc-2"})["dd_incident_id"] == "dd-2"
 
 
 REPORT = {
@@ -220,8 +253,9 @@ def test_postmortem_for_run_stopped_unresolved_incident(monkeypatch):
     db, client, sync, calls = postmortem_setup(monkeypatch)
     db.incidents.update_one({"_id": "inc-1"}, {"$set": {"state": "open", "unresolved": True, "run_stopped_at": T}})
     sync.sync_once(T)
+    sync.sync_once(T + timedelta(minutes=10))
     assert len(calls) == 1
-    client.resolve_incident.assert_not_called()
+    client.resolve_incident.assert_called_once_with("dd-1")  # a stopped run must not leave the incident active
     assert db.datadog_sync.find_one({"_id": "inc-1"})["postmortem_done"] is True
 
 

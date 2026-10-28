@@ -63,6 +63,19 @@ def test_retries_on_429_then_succeeds():
     assert len(calls) == 3
 
 
+def test_http_date_retry_after_falls_back_to_backoff(monkeypatch):
+    monkeypatch.setattr("chargeops.datadog_client.time.sleep", lambda s: None)
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        if len(calls) < 2:
+            return httpx.Response(429, headers={"Retry-After": "Wed, 28 Oct 2026 07:28:00 GMT"})
+        return httpx.Response(201, json={"data": {"id": "x", "attributes": {"public_id": 1}}})
+
+    assert client(handler).create_incident("t", "inc-1")["id"] == "x"
+
+
 def test_incident_url():
     assert client(lambda r: httpx.Response(200)).incident_url(42) == "https://app.ap1.datadoghq.com/incidents/42"
 

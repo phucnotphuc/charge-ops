@@ -51,11 +51,14 @@ class DatadogSync:
             try:
                 self.sync_incident(incident, state, at)
                 self.put(state, attempts=0, last_error=None, next_attempt_at=None)
-            except DatadogError as error:
+            except PyMongoError:
+                raise
+            except Exception as error:  # DatadogError, or a bug: back off this incident only, never the others
                 attempts = state.get("attempts", 0) + 1
                 delay = BACKOFF_S[min(attempts, len(BACKOFF_S)) - 1]
-                self.put(state, attempts=attempts, last_error=str(error), next_attempt_at=at + timedelta(seconds=delay))
-                event(self.log, "datadog_sync_failed", incident_id=incident["_id"], status=error.status)
+                reason = str(error) if isinstance(error, DatadogError) else type(error).__name__
+                self.put(state, attempts=attempts, last_error=reason, next_attempt_at=at + timedelta(seconds=delay))
+                event(self.log, "datadog_sync_failed", incident_id=incident["_id"], status=getattr(error, "status", None))
             touched += 1
         return touched
 
@@ -66,7 +69,7 @@ class DatadogSync:
         if DatadogSync.is_closed(incident) and not (state.get("postmortem_done") and state.get("postmortem_notebook_updated")):
             return False
         caught_up = state.get("synced_events", 0) >= len(incident.get("timeline", []))
-        return caught_up and (incident["state"] != "resolved" or state.get("dd_resolved", False))
+        return caught_up and (not DatadogSync.is_closed(incident) or state.get("dd_resolved", False))
 
     @staticmethod
     def is_closed(incident):
@@ -88,9 +91,21 @@ class DatadogSync:
             )
         self.sync_notebook(incident, state, at)
         for entry in incident.get("timeline", [])[state.get("synced_events", 0):]:
-            self.client.incident_note(state["dd_incident_id"], note_text(incident, entry), at=entry["at"])
-            self.put(state, synced_events=state.get("synced_events", 0) + 1)
-        if incident["state"] == "resolved" and not state.get("dd_resolved"):
+            index = state.get("synced_events", 0)
+            if state.get("timeline_attempted") == index:
+                # incident_note is a POST that may have landed; prefer a missing step over a duplicate one.
+                event(self.log, "datadog_timeline_note_skipped", incident_id=incident["_id"], index=index)
+            else:
+                self.put(state, timeline_attempted=index)
+                try:
+                    self.client.incident_note(state["dd_incident_id"], note_text(incident, entry), at=entry["at"])
+                except DatadogError as error:
+                    if self.definitely_rejected(error):
+                        self.put(state, timeline_attempted=None)
+                    raise
+            self.put(state, synced_events=index + 1)
+        # A run_stopped incident is closed too; leaving it active would pile up stale Datadog incidents.
+        if self.is_closed(incident) and not state.get("dd_resolved"):
             self.client.resolve_incident(state["dd_incident_id"])
             self.put(state, dd_resolved=True)
         self.sync_postmortem(incident, state, at)
@@ -121,7 +136,12 @@ class DatadogSync:
                     event(self.log, "datadog_notebook_attach_skipped", incident_id=incident["_id"])
                 else:
                     self.put(state, notebook_attach_attempted_at=at)
-                    self.client.attach_link(state["dd_incident_id"], state["notebook_url"], "Notebook điều tra")
+                    try:
+                        self.client.attach_link(state["dd_incident_id"], state["notebook_url"], "Notebook điều tra")
+                    except DatadogError as error:
+                        if self.definitely_rejected(error):
+                            self.put(state, notebook_attach_attempted_at=None)
+                        raise
                 self.put(state, notebook_attached=True)
             self.put(state, notebook_error=None, notebook_attempts=0, notebook_next_attempt_at=None)
         except DatadogError as error:
@@ -208,6 +228,8 @@ class DatadogSync:
                 self.sync_once(now())
             except PyMongoError as error:
                 event(self.log, "datadog_sync_retry", error_type=type(error).__name__)
+            except Exception as error:  # an unexpected bug must not kill mirroring for every incident
+                event(self.log, "datadog_sync_crash", error_type=type(error).__name__)
             time.sleep(interval)
 
 

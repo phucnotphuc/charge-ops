@@ -19,6 +19,14 @@ class DatadogError(Exception):
         self.status = status
 
 
+def retry_after(response, default):
+    """Seconds from a numeric Retry-After; the HTTP-date form (or garbage) falls back to `default`."""
+    try:
+        return float(response.headers.get("Retry-After", default))
+    except ValueError:
+        return default
+
+
 class DatadogClient:
     def __init__(self, api_key, app_key, site, transport=None, retries=3):
         if retries < 1:
@@ -48,7 +56,7 @@ class DatadogClient:
                 raise DatadogError(method, path, 0) from None
             retryable = response.status_code == 429 if post else response.status_code in RETRY_STATUS
             if retryable and not last:
-                time.sleep(float(response.headers.get("Retry-After", 2**attempt)))
+                time.sleep(retry_after(response, 2**attempt))
                 continue
             if response.is_error:
                 raise DatadogError(method, path, response.status_code)
