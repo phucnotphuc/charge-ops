@@ -37,28 +37,41 @@ def test_charging_minutes_idle_or_missing_emits_nothing():
     stats.increment.assert_not_called()
 
 
+BASE = {"run_id": "run-1", "connector_id": "connector-4"}
+
+
 def test_incident_outcome_good_within_five_minutes():
     stats = Mock()
-    emit_incident_outcome(stats, {"seconds_to_effective_reduction": 300})
-    assert [c.args for c in stats.increment.call_args_list] == [
-        ("chargeops.slo.mitigation.total", 1),
-        ("chargeops.slo.mitigation.good", 1),
+    emit_incident_outcome(stats, {**BASE, "seconds_to_effective_reduction": 300})
+    assert [(c.args, c.kwargs) for c in stats.increment.call_args_list] == [
+        (("chargeops.slo.mitigation.total", 1), {"tags": TAGS}),
+        (("chargeops.slo.mitigation.good", 1), {"tags": TAGS}),
     ]
+    assert TAGS == ["run_id:run-1", "connector_id:connector-4", "station_id:" + TAGS[2][11:], "env:hackathon"]
 
 
 def test_incident_outcome_slow_is_total_only_and_no_reduction_is_ignored():
     stats = Mock()
-    emit_incident_outcome(stats, {"seconds_to_effective_reduction": 301})
-    assert [c.args for c in stats.increment.call_args_list] == [("chargeops.slo.mitigation.total", 1)]
+    emit_incident_outcome(stats, {**BASE, "seconds_to_effective_reduction": 301})
+    assert [(c.args, c.kwargs) for c in stats.increment.call_args_list] == [
+        (("chargeops.slo.mitigation.total", 1), {"tags": TAGS})
+    ]
     stats = Mock()
-    emit_incident_outcome(stats, {"seconds_to_effective_reduction": None, "seconds_to_mitigated": None})
+    emit_incident_outcome(stats, {**BASE, "seconds_to_effective_reduction": None, "seconds_to_mitigated": None})
     stats.increment.assert_not_called()
 
 
-def test_incident_outcome_derating_that_never_verified_counts_as_bad():
-    stats = Mock()
-    emit_incident_outcome(stats, {"seconds_to_effective_reduction": None, "seconds_to_mitigated": 40})
-    assert [c.args for c in stats.increment.call_args_list] == [("chargeops.slo.mitigation.total", 1)]
+def test_incident_outcome_counts_other_reduce_load_signals_as_bad():
+    for extra in (
+        {"seconds_to_mitigated": 40},
+        {"energy_kwh_while_derated": 0.0},
+        {"reached_reduce_load": True},
+    ):
+        stats = Mock()
+        emit_incident_outcome(stats, {**BASE, "seconds_to_effective_reduction": None, **extra})
+        assert [(c.args, c.kwargs) for c in stats.increment.call_args_list] == [
+            (("chargeops.slo.mitigation.total", 1), {"tags": TAGS})
+        ]
 
 
 def test_slo_specs_shape():

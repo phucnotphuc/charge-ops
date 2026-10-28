@@ -69,10 +69,18 @@ MITIGATION_TARGET_S = 300
 
 
 def emit_incident_outcome(stats, report):
-    """Once per incident: it counts when derating was verified, or reached mitigation without verification (bad)."""
+    """Once per incident, tagged like the other SLO series. It counts when derating was attempted (reduce_load
+    reached, mitigated or measured); it is good only when the reduction was verified within the target."""
     seconds = report.get("seconds_to_effective_reduction")
-    if seconds is None and report.get("seconds_to_mitigated") is None:
+    reached = (
+        report.get("reached_reduce_load")
+        or seconds is not None
+        or report.get("seconds_to_mitigated") is not None
+        or report.get("energy_kwh_while_derated") is not None
+    )
+    if not reached:
         return
-    stats.increment("chargeops.slo.mitigation.total", 1)
+    tags = connector_tags(report["run_id"], report["connector_id"])
+    stats.increment("chargeops.slo.mitigation.total", 1, tags=tags)
     if seconds is not None and seconds <= MITIGATION_TARGET_S:
-        stats.increment("chargeops.slo.mitigation.good", 1)
+        stats.increment("chargeops.slo.mitigation.good", 1, tags=tags)

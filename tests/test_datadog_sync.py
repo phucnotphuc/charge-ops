@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from chargeops.api import app
 from chargeops.datadog_client import DatadogError
 from chargeops.datadog_sync import DatadogSync
+from chargeops.observability import connector_tags
 
 T = datetime(2026, 10, 28, 3, 0, tzinfo=UTC)
 RUN = "00000000-0000-4000-8000-0000000000f9"
@@ -298,6 +299,10 @@ def outcome_calls(sync):
     return [c.args[0] for c in sync.stats.increment.call_args_list if c.args[0].startswith("chargeops.slo.mitigation")]
 
 
+def outcome_tags(sync):
+    return [c.kwargs["tags"] for c in sync.stats.increment.call_args_list if c.args[0].startswith("chargeops.slo.mitigation")]
+
+
 def test_incident_outcome_emitted_once_from_report_without_waiting_for_notebook(monkeypatch):
     db, client, sync, calls = postmortem_setup(monkeypatch)
     monkeypatch.setitem(REPORT, "seconds_to_effective_reduction", 120)
@@ -306,6 +311,7 @@ def test_incident_outcome_emitted_once_from_report_without_waiting_for_notebook(
     sync.sync_once(T + timedelta(minutes=2))
     sync.sync_once(T + timedelta(minutes=10))
     assert outcome_calls(sync) == ["chargeops.slo.mitigation.total", "chargeops.slo.mitigation.good"]
+    assert outcome_tags(sync) == [connector_tags(RUN, "connector-4")] * 2
     assert db.datadog_sync.find_one({"_id": "inc-1"})["outcome_emitted"] is True
 
 

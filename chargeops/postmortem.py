@@ -131,6 +131,20 @@ def postmortem_pipeline(incident_id):
                 "seconds_to_resolved": 1,
                 "peak_residual_c": {"$max": "$windows.residual_mean"},
                 "retest_resets": 1,
+                "reached_reduce_load": {
+                    "$gt": [
+                        {
+                            "$size": {
+                                "$filter": {
+                                    "input": "$timeline",
+                                    "as": "t",
+                                    "cond": {"$in": ["$$t.event", ["reduce_load", "reduce_load_dispatched"]]},
+                                }
+                            }
+                        },
+                        0,
+                    ]
+                },
                 "reference_current_a": {"$ifNull": ["$reference_current_a", None]},
                 "target_current_a": {"$ifNull": ["$target_current_a", None]},
                 "energy_kwh_while_derated": {
