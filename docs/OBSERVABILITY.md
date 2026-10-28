@@ -2,6 +2,43 @@
 
 Tài liệu này mô tả các tín hiệu, dashboard, monitor và cách điều tra một sự cố nhiệt. Tất cả được tạo bởi `scripts/setup_datadog.py` (chạy lại là cập nhật tại chỗ theo id trong `artifacts/datadog-resources.json`).
 
+## 0. Kiến trúc quan sát
+
+```mermaid
+flowchart LR
+  subgraph Local["Máy demo (Docker Compose)"]
+    API[api<br/>FastAPI + ddtrace]
+    W[worker<br/>ddtrace + DogStatsD]
+    SIM[simulator]
+    SYNC[datadog-sync]
+    WEB[web<br/>Browser RUM]
+    AG[Datadog Agent<br/>DogStatsD, APM, log tail]
+    GW[webhook-gateway<br/>Caddy: 3 route]
+    T[cloudflared<br/>quick tunnel]
+    M[(MongoDB)]
+  end
+  API & W & SIM -->|traces| AG
+  W -->|metrics, events| AG
+  API & W & SIM & SYNC -->|log JSON có trace_id| AG
+  AG --> DD[(Datadog US1)]
+  WEB -->|RUM + header trace /api/| DD
+  DD -->|composite monitor → webhook| T --> GW --> API
+  DD -->|Datadog App: X-Action-Secret| T
+  SYNC -->|REST: Incidents, Notebooks| DD
+  API & W & SYNC --- M
+```
+
+| Lớp | Thành phần | Nối với lớp khác bằng |
+|---|---|---|
+| Metrics | DogStatsD từ worker: residual, mẫu, chất lượng cửa sổ, nhiệt/dòng, sự cố, heartbeat, SLO | Tag `run_id`, `connector_id`, `station_id`, `env:hackathon` |
+| Logs | JSON một dòng từ mọi service, Agent đọc volume `app-logs` | `run_id`, `connector_id`, `incident_id`, `dd.trace_id` |
+| APM | `ddtrace` cho FastAPI, vòng worker, request của simulator | `trace_id` trong log; header trace từ RUM |
+| RUM | `@datadog/browser-rum` trên giao diện vận hành | `allowedTracingUrls` cho `/api/`, `trackResources: true` |
+| Events | Mỗi bước timeline sự cố thành event `source:chargeops` | `aggregation_key = incident_id`, phủ lên biểu đồ dashboard |
+| Phát hiện | Monitor thermal + quality → composite → webhook | Webhook mang `run_id`, `connector_id`, `monitor_id` |
+| Phản ứng | Datadog App gọi route có `X-Action-Secret`; web gọi API bằng session | Cùng cổng trạng thái của worker; `actor` ghi trên command |
+| Hậu kiểm | `datadog-sync`: Incident, todo cho từng bước, Notebook điều tra, postmortem | `_id` sự cố ChargeOps nằm trong tiêu đề Incident và tên Notebook |
+
 ## 1. Tín hiệu theo chế độ chạy
 
 | Tín hiệu | Chế độ local | Chế độ `datadog` |
@@ -51,11 +88,11 @@ Tài liệu này mô tả các tín hiệu, dashboard, monitor và cách điều
 | `ChargeOps thermal residual` (thermal) | residual trung bình theo mẫu, `last_1m` | > 8 °C, phục hồi 3 °C | không |
 | `ChargeOps valid telemetry window` (quality) | `min:chargeops.quality`, `last_1m` | > 0.5 | không |
 | `ChargeOps thermal incident` (composite) | `thermal && quality` | cả hai cùng cảnh báo | **có** (`@webhook-chargeops-minimal`), duy nhất |
-| `ChargeOps telemetry stale` (stale) | `sum:chargeops.samples` theo `run_id,connector_id`, `last_2m` | < 12 mẫu; `notify_no_data` bật (4 phút) | không |
+| `ChargeOps telemetry stale` (stale) | `sum:chargeops.samples` theo `run_id,connector_id`, `last_2m` | < 12 mẫu; `notify_no_data` tắt | không |
 | `ChargeOps worker heartbeat` (worker) | `sum:chargeops.worker.tick`, `last_2m` | < 1; `notify_no_data` bật (4 phút) | không |
 | `ChargeOps derating not resolving` (stuck) | `max:chargeops.incident.state_age_s{state:mitigating}`, `last_5m` | > 600 s | không |
 
-Lưu ý: monitor `stale` cũng chuyển sang cảnh báo no-data khoảng 4 phút sau khi một run kết thúc (bình thường, không gọi webhook). Monitor `worker` sẽ cảnh báo bất cứ khi nào `DD_METRICS_ENABLED=false`, vì khi đó không có heartbeat.
+Lưu ý: worker vẫn gửi `chargeops.samples = 0` khi một connector im lặng, nên monitor `stale` bắt được connector mất dữ liệu bằng điều kiện `< 12`; không có dữ liệu chỉ xảy ra khi run kết thúc (bình thường) hoặc worker chết (việc của monitor `worker`), nên `stale` không cảnh báo no-data. Monitor `worker` sẽ cảnh báo bất cứ khi nào `DD_METRICS_ENABLED=false`, vì khi đó không có heartbeat.
 
 Chỉ monitor composite gọi webhook; các monitor còn lại chỉ có link điều tra trong nội dung cảnh báo.
 
@@ -104,12 +141,19 @@ App Builder app "ChargeOps - xu ly su co" liệt kê sự cố đang mở và c�
 - Bấm đúp có thể xếp hai lệnh vào hàng đợi; lệnh thứ hai bị worker từ chối (`command_rejected`) vì sự cố đã đổi trạng thái, không gây tác dụng kép.
 - Không bao giờ ghi `DATADOG_ACTION_SECRET` vào log, commit hay ảnh chụp. Đổi secret: sửa `.env`, tạo lại api, chạy lại `--with-app`.
 
-## 6. Chưa kiểm chứng thật
+## 6. Đã và chưa kiểm chứng trên Datadog thật
 
-Các điểm sau chưa được chạy trên Datadog thật tại thời điểm viết tài liệu này; chúng sẽ được kiểm chứng ở Task 8:
+**Đã kiểm chứng ngày 28/10/2026 (tài khoản US1):**
 
-- Truy vấn lớp phủ event `tags:source:chargeops`.
-- Link template variable (`tpl_var_run_id`, `tpl_var_connector_id`) trong nội dung monitor composite.
-- Widget heartbeat dùng `as_rate()`.
-- Hành vi `no_data` của monitor worker.
-- Dữ liệu RUM (action `command_sent`, timing, liên kết APM) trên Datadog thật.
+- `setup_datadog.py --with-app` tạo/cập nhật webhook, 6 monitor, 2 SLO, 2 dashboard, HTTP connection và Datadog App (đã publish). Hai lỗi chỉ lộ ra với API thật (widget SLO thiếu `show_error_budget`, layout App) đã sửa ở commit `8075a57`.
+- `datadog-sync` tạo 6 Datadog Incident cho 6 sự cố của các run Datadog: mỗi Incident có đúng một todo cho mỗi bước timeline cộng một ghi chú postmortem, một link Notebook, trạng thái `resolved`; không có Incident hay todo trùng sau các lần retry 403/429. Ghi vào Incident cần seat Incident Management cho chủ App key.
+- Run `5e2bd546…` (`thermal_fault`, seed 42): composite monitor → webhook → sự cố `source=datadog` trên `connector-1` lúc t+480 s, residual cửa sổ 9,74 °C; không có operator xử lý nên run tự dừng ở t+1800 s, sự cố đóng với `closed_by: run_stopped` và Datadog Incident #6 được resolve.
+- RUM: session thật 09:23–09:26 UTC với 17 view và 20 action, service `chargeops-web`, env `hackathon`. SDK 5.35.1 mặc định không ghi resource, nên đã bật `trackResources` (commit `f456dbb`).
+- Gateway qua tunnel: route webhook, `actions`, `incidents` trả 401 khi thiếu secret; đường khác trả 404.
+
+**Chưa kiểm chứng trên Datadog thật:**
+
+- Gửi lệnh từ Datadog App tới một sự cố đang mở (mới thử được xác thực).
+- Action `command_sent` và liên kết RUM → APM sau khi bật `trackResources`.
+- Một vòng phát hiện → giảm tải → bảo trì → phục hồi trọn vẹn trên code hiện tại; vòng trọn vẹn gần nhất trên Datadog thật là run `39207f81…` ngày 20/10 (một connector, code cũ hơn, xem MINIMAL_LOOP.md).
+- Link template variable (`tpl_var_run_id`, `tpl_var_connector_id`) trong nội dung monitor composite; hành vi `no_data` của monitor worker.

@@ -2,6 +2,16 @@
 
 Plan: PLAN.md. Phạm vi hiện tại: chuẩn bị; phần cốt lõi từ 17/10 theo quyết định người dùng.
 
+## Cập nhật 28/10/2026 — PR #3 merge, triển khai Datadog đầy đủ, hồ sơ dự thi
+
+- PR #3 (`feat/station-observability`) review, sửa 10 lỗi (commit `adbd20d`, `4bcead4`, `ff19266`, `3e86c86`) và 2 lỗi chỉ lộ ra với API thật (`8075a57`), merge vào `main` ở `9dd4ea2`. Bật RUM `trackResources` ở `f456dbb`. Test: 333 passed, 2 skipped; 38 test web.
+- Stack đầy đủ chạy code `main` trên Datadog US1; `setup_datadog.py --with-app` tạo webhook, 6 monitor, 2 SLO, 2 dashboard (`wm9-b8d-raw`, `zkd-9yp-pbf`), connection và Datadog App.
+- `datadog-sync`: 6 Datadog Incident (#1–#6), mỗi Incident có todo bằng số bước timeline + 1 postmortem, 1 link Notebook, `resolved`; không trùng sau retry 403 "Seat Required" và 429. Ghi vào Incident cần seat Incident Management.
+- Run Datadog `5e2bd546…` (`thermal_fault`, seed 42, lượt 10/20): sự cố `4d404f9e…` `source=datadog` trên `connector-1` lúc t+480 s, residual 9,74 °C; không có operator xử lý, đóng `run_stopped` ở t+1800 s.
+- RUM application `chargeops-web`: session thật 09:23–09:26 UTC, 17 view, 20 action.
+- Hồ sơ: thêm SUBMISSION.md, DATA_MODEL.md, DEMO_SCRIPT.md; viết lại README; cập nhật OBSERVABILITY.md, KIEM_TRA.md, DISCLOSURE.md.
+- Còn lại: quay video vòng trọn vẹn trên code hiện tại trước khi trial hết hạn (~29/10), slide, cấp quyền repo cho giám khảo.
+
 ## Cập nhật 20/10/2026 (tối) — simulator replay đường tải thật
 
 Chi tiết: MINIMAL_LOOP.md, mục "Vòng xử lý G2".

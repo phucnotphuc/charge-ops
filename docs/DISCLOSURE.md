@@ -16,6 +16,27 @@ Luồng tối thiểu ngày 14/10 do Codex hỗ trợ viết code, tests, cấu 
 
 Phần lớn mã trong thời gian build do **Claude Code** viết: một phiên điều phối (controller, Claude Opus 5.5) chia việc theo gói, giao cho sub-agent (Claude Sonnet 5.5 và Claude Opus 5.5), mỗi gói có review độc lập bởi sub-agent khác trước khi merge, và một lượt review toàn nhánh cuối cùng. Phạm vi do AI viết: backend API và đăng nhập/session, observability (metrics/logs/APM, dashboard/monitor/webhook), giao diện web React, Compose/Caddy/Dockerfile, đánh giá offline A/B/C, fleet 2 trạm × 3 connector, tests và phần lớn tài liệu. Nhóm quyết định quy tắc sản phẩm (ví dụ các thay đổi v2/v3 ngày 21/10, xem EVALUATION_PROTOCOL.md), duyệt kết quả và chịu trách nhiệm hiểu, giải thích giải pháp. Unit test do AI viết chỉ chứng minh logic; không coi là bằng chứng chạy thật.
 
+### Thời gian build 22–31/10
+
+Cập nhật 28/10/2026. Nhóm tiếp tục dùng **Claude Code** (Claude Opus 5.5 và Claude Sonnet 5.5) theo cùng cách: chia việc theo nhánh (`task/*`, `dd/*`), review độc lập trước khi merge qua pull request #2 và #3. Phạm vi AI hỗ trợ viết trong giai đoạn này:
+
+- Màn hình trạm cho người lái và operator, mô hình SoC xe từ dữ liệu Autosun, endpoint trạm công khai.
+- Lớp "realism" của simulator: nhiệt môi trường theo ngày cho từng trạm, nhiễu cảm biến, mất/trùng/trễ mẫu có seed (`SIM_REALISM`).
+- Tích hợp Datadog nâng cao: `datadog-sync` (Incidents, Notebooks), postmortem bằng `$merge`, hai SLO, Datadog App có cổng lệnh, Browser RUM.
+- Ngày 28/10: review PR #3 và sửa 10 lỗi tìm được, hai lỗi chỉ lộ ra khi chạy với API Datadog thật (commit `8075a57`), bật `trackResources` cho RUM (`f456dbb`), triển khai lên Datadog thật và soạn các tài liệu hồ sơ (DATA_MODEL.md, SUBMISSION.md, DEMO_SCRIPT.md, README).
+
+Nhóm quyết định phạm vi, duyệt và merge từng pull request, chạy và kiểm chứng trên MongoDB/Datadog thật, chịu trách nhiệm hiểu và giải thích giải pháp.
+
+### Mốc thời gian theo lịch sử Git
+
+| Giai đoạn | Số commit | Nội dung |
+|---|---|---|
+| Trước 17/10 | 3 | Chỉ tài liệu chuẩn bị (plan, contract, tasks) |
+| 17–21/10 | 39 | Commit code đầu tiên 20/10 (luồng tối thiểu, xem mục "Trước thời gian build"), kiểm định dataset, fleet 6 connector, UI, đánh giá A/B/C |
+| 22–28/10 | 70 | Các hạng mục ở mục trên; 51 commit có trailer `Co-Authored-By: Claude` |
+
+Từ 22/10 tới 28/10, mã trong `chargeops/`, `web/src/`, `scripts/` và `tests/` thay đổi 64 file, thêm khoảng 6.000 dòng. Tổng cộng 83/112 commit có trailer AI; trailer chỉ ghi nhận hỗ trợ, không đo tỷ lệ mã do AI viết.
+
 ## Dữ liệu và thành phần tái sử dụng
 
 Nguồn ứng viên: Autosun–Hong Kong Polytechnic, Mendeley v3, https://data.mendeley.com/datasets/c7gg94tmvz/3 (CC BY 4.0 theo trang nguồn). Đã tải và kiểm định ngày 20/10 (SHA-256 khớp nguồn), dùng làm mẫu đường tải; xem DATA_CARD.md. Khi dùng thực tế phải ghi phiên bản/checksum/biến đổi và nguồn từng trường.

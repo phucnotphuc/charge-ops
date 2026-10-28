@@ -104,7 +104,7 @@ uv run python -m chargeops.evaluation run --protocol b1-eval-v3.1 --out .pytest-
 
 Kỳ vọng:
 
-- `325 passed, 2 skipped`. Hai test bị bỏ qua cần MongoDB thật qua `MONGODB_TEST_URI`.
+- `333 passed, 2 skipped`. Hai test bị bỏ qua cần MongoDB thật qua `MONGODB_TEST_URI`.
 - ruff sạch.
 - Lệnh đánh giá in ra `(120 runs, …)`. Nếu lock không còn hợp lệ, lệnh sẽ từ chối chạy.
 
@@ -128,7 +128,7 @@ Các test này dùng MongoDB giả lập (mongomock) và HTTP giả lập, chỉ
    - `DD_TRACE_ENABLED=true`;
    - `DD_METRICS_ENABLED=true`.
 
-   `DD_APP_KEY` cần quyền dashboards, monitors, SLO, incidents, notebooks. Nếu dùng Datadog App (mục 8) thì thêm `apps_write`, `connections_resolve`, `workflows_run`.
+   `DD_APP_KEY` cần quyền dashboards, monitors, SLO, incidents, notebooks. Nếu dùng Datadog App (mục 8) thì thêm `apps_write`, `connections_resolve`, `workflows_run`. Ghi todo và link vào Datadog Incident còn cần **seat Incident Management** cho user sở hữu App key; thiếu seat thì API trả 403 "Seat Required".
 2. Chạy stack đầy đủ: Agent, webhook gateway, tunnel, và `datadog-sync`.
    ```bash
    docker compose --profile observability up --build -d
@@ -188,7 +188,7 @@ Chạy trong cùng run Datadog ở mục 7.
       ```bash
       python scripts/setup_datadog.py --webhook-url https://YOUR-TUNNEL.trycloudflare.com/api/v1/webhooks/datadog --with-app
       ```
-      Script in link app (Datadog > Apps). Nếu script in hướng dẫn "Import JSON", làm theo từng bước, vì định nghĩa app (`scripts/datadog_app.json`) chưa được thử trên tài khoản thật.
+      Script in link app (Datadog > Apps). Nếu script in hướng dẫn "Import JSON", làm theo từng bước. Định nghĩa app (`scripts/datadog_app.json`) đã được tạo và publish qua API trên tài khoản US1 ngày 28/10.
    3. Mở app "ChargeOps - xu ly su co", chọn một sự cố `open`, bấm **Xác nhận**.
 
    Kỳ vọng:
@@ -204,7 +204,7 @@ Chạy trong cùng run Datadog ở mục 7.
 Lưu ý:
 
 - Tunnel đổi URL mỗi lần khởi động lại. Khi đó phải chạy lại bước 4 của mục 7 (kèm `--with-app` nếu dùng app).
-- Monitor "ChargeOps telemetry stale" vào trạng thái no-data khoảng 4 phút sau khi run kết thúc.
+- Monitor "ChargeOps telemetry stale" không cảnh báo khi run kết thúc (`notify_no_data` tắt); connector im lặng trong run vẫn bị bắt vì worker gửi số mẫu bằng 0.
 - Monitor "ChargeOps worker heartbeat" báo khi `DD_METRICS_ENABLED=false`. Hai monitor này không gọi webhook và không tạo sự cố.
 - Recovery từ Datadog không tự đóng sự cố; chỉ worker đóng sự cố sau retest 120 giây.
 - Bấm đúp một nút trong app có thể tạo lệnh thứ hai; worker từ chối lệnh đó (`command_rejected`).
@@ -217,7 +217,8 @@ Lưu ý:
 | Container không lên hoặc restart liên tục | `docker compose logs --tail 50 <service>` với `api`, `worker`, `simulator`, `web`, `mongo`, `datadog-sync` |
 | Đăng nhập báo sai | Hash trong `.env` có nằm trong nháy đơn không; có đang vào bằng `localhost:8080` không |
 | Datadog không có dữ liệu | `DD_SITE` sai site, key không hợp lệ, run đang ở mode `local`, hoặc `.env` có biến trùng dòng |
-| Không có Datadog Incident / Notebook | `docker compose logs datadog-sync`. HTTP 403 nghĩa là `DD_APP_KEY` thiếu quyền incidents/notebooks |
+| Không có Datadog Incident / Notebook | `docker compose logs datadog-sync`. HTTP 403 nghĩa là `DD_APP_KEY` thiếu quyền incidents/notebooks, hoặc user sở hữu key chưa có seat Incident Management. Có quyền rồi thì `datadog-sync` tự gửi lại |
+| Webhook hoặc Datadog App qua tunnel trả 404 sau khi đổi `infra/Caddyfile` (ví dụ chuyển commit) | Tạo lại gateway để nạp Caddyfile mới: `docker compose --profile observability up -d --force-recreate --no-deps webhook-gateway` (URL tunnel giữ nguyên) |
 | Không có sự cố | Scenario có phải `thermal_fault` không; xem `docker compose logs worker` |
 | App trả 503 `actions_disabled` | `.env` thiếu `DATADOG_ACTION_SECRET`, hoặc chưa tạo lại api sau khi thêm |
 | `setup_datadog.py` báo thiếu module | `python -m pip install httpx python-dotenv` |
@@ -230,16 +231,22 @@ docker compose --profile observability down -v
 
 ## Những gì đã kiểm chứng và chưa
 
-- **Đã kiểm chứng:**
-  - 325 test Python, 38 test web, `check:api`.
-  - Khóa đánh giá v3.1 vẫn được chấp nhận.
-  - `docker compose config` hợp lệ, `caddy validate` cho gateway.
-  - Ngày 20/10 đã chạy live luồng **1 connector** với MongoDB và Datadog thật (xem [MINIMAL_LOOP.md](MINIMAL_LOOP.md)).
-- **Chưa chạy live trên nhánh này:**
-  - fleet 6 connector, màn hình trạm, simulator realism;
-  - dashboard/monitor/SLO mới;
-  - `datadog-sync` (Incident, Notebook, postmortem trên MongoDB 8 thật);
-  - RUM;
-  - Datadog App: định nghĩa app và placeholder header `{{ actionSecret }}` chỉ kiểm được khi import thật.
+Cập nhật 28/10/2026 trên `main`.
 
-  Kết quả sẽ được ghi vào MINIMAL_LOOP.md sau lần chạy live đầu tiên.
+- **Đã kiểm chứng:**
+  - 333 test Python, 38 test web, `check:api`; khóa đánh giá v3.1 vẫn được chấp nhận.
+  - `docker compose config` hợp lệ, `caddy validate` cho gateway.
+  - 20/10: vòng trọn vẹn **1 connector** với MongoDB và Datadog thật, run `39207f81…` (xem [MINIMAL_LOOP.md](MINIMAL_LOOP.md)).
+  - 28/10, stack đầy đủ trên code hiện tại với Datadog US1:
+    - fleet 6 connector và màn hình trạm;
+    - `setup_datadog.py --with-app`: webhook, 6 monitor, 2 SLO, 2 dashboard, connection và Datadog App (đã publish);
+    - `datadog-sync`: 6 Datadog Incident, todo cho từng bước, Notebook và postmortem, không trùng;
+    - run `5e2bd546…`: monitor → webhook → đúng 1 sự cố `source=datadog`;
+    - RUM nhận session, view và action thật;
+    - gateway qua tunnel trả 401 khi thiếu secret.
+- **Chưa kiểm chứng live:**
+  - vòng giảm tải → bảo trì → phục hồi trên code hiện tại (run 28/10 dừng khi chưa có operator xử lý);
+  - gửi lệnh từ Datadog App vào sự cố đang mở;
+  - action `command_sent` và liên kết RUM → APM sau khi bật `trackResources`.
+
+Chi tiết: [OBSERVABILITY.md §6](OBSERVABILITY.md).

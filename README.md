@@ -1,59 +1,116 @@
 # ChargeOps
 
-Hệ thống demo cảnh báo sớm bất thường nhiệt connector: telemetry → phát hiện → điều tra → operator duyệt giảm tải → bảo trì mô phỏng → kiểm tra phục hồi.
+Cảnh báo sớm quá nhiệt connector trạm sạc xe điện và xử lý có kiểm chứng, với **MongoDB** làm nền tảng dữ liệu vận hành và **Datadog** để quan sát, phát hiện, điều tra và phản ứng.
 
-## Trạng thái ngày 21/10/2026
+Telemetry → phát hiện theo residual nhiệt → điều tra → operator giảm tải (từ web hoặc Datadog App) → kiểm chứng dòng giảm và nhiệt hồi phục → bảo trì mô phỏng → kiểm tra phục hồi 120 giây.
 
-**Đã viết và kiểm thử logic (mongomock/vitest):** fleet 2 trạm × 3 connector (mỗi connector replay một phiên Autosun–PolyU v3 đã kiểm định, lỗi gieo theo seed, 4 kịch bản), API FastAPI + đăng nhập operator, worker và vòng đời incident (giảm tải → bảo trì → kiểm tra phục hồi), quan sát Datadog (metrics/logs/APM, monitor/webhook), giao diện web React, đánh giá offline A/B/C (`b1-eval-v3.1`, kết quả mô phỏng trong `data/evaluation/`).
+Bài dự thi MUGVN Mini Hackathon 2026. Hồ sơ đầy đủ: **[docs/SUBMISSION.md](docs/SUBMISSION.md)**.
 
-**Kiểm chứng thật:** gate ngày 20/10 chạy container, MongoDB thật và Datadog thật nhưng **chỉ với một connector** (xem [MINIMAL_LOOP](docs/MINIMAL_LOOP.md)). Fleet 6 connector, giao diện web, đăng nhập, Caddy/web image và endpoint đánh giá trên nhánh này **chưa chạy thật**. Phần viết trước 17/10 được khai báo trong DISCLOSURE.md.
+## Điểm chính
 
-- Local-first, mục tiêu chi phí dịch vụ 0 đồng; không EC2, Atlas, domain hay AI trả phí.
-- GitHub private; cấp quyền giám khảo khi BTC cung cấp tài khoản.
-- Datadog trial dùng trong thời gian thi; nghiệm thu cuộc thi phải có dashboard/monitor/logs hoặc APM thật.
-- Dữ liệu công khai làm nền nếu đạt kiểm định; fault thiết bị và phản ứng can thiệp được mô phỏng, ghi rõ provenance.
+- **Phát hiện theo vật lý, không theo ngưỡng cố định.** Residual = nhiệt đo − nhiệt kỳ vọng từ nhiệt môi trường, dòng sạc (k·I²) và quán tính nhiệt. Báo động khi trung bình cửa sổ 60 giây hợp lệ > 8 °C; cửa sổ thiếu hoặc cũ bị chặn.
+- **Xử lý phải có bằng chứng.** Xác nhận hay gửi lệnh chưa đủ; sự cố chỉ `mitigated` khi telemetry chứng minh dòng thực tế giảm và residual hồi phục, chỉ `resolved` sau retest 120 giây ở tải gần như ban đầu.
+- **Kết quả đánh giá offline** (120 lượt mô phỏng, protocol khóa trước, `data/evaluation/b1-eval-v3.1/`): phát hiện trước trip **20/20** (ngưỡng cố định 8/20), **0** báo nhầm (ngưỡng cố định 0,9 lần/connector-giờ), trip giảm từ **14 xuống 1** so với chỉ phát hiện mà không xử lý. Số mô phỏng, không phải số trạm thật.
+- **MongoDB:** Time Series + TTL, aggregation cửa sổ residual, `$setWindowFields`, `$facet`, `$lookup`/`$dateDiff`/`$merge`, Change Streams có resume token, unique partial index, idempotency. Xem [DATA_MODEL.md](docs/DATA_MODEL.md).
+- **Datadog:** 2 dashboard, composite monitor gọi webhook và 3 monitor vận hành, Logs ↔ APM ↔ RUM, Datadog Incidents với todo cho từng bước, Notebook điều tra, postmortem, 2 SLO, Datadog App gửi lệnh có kiểm soát. Xem [OBSERVABILITY.md](docs/OBSERVABILITY.md).
 
-## Tài liệu
+## Kiến trúc
 
-- [Kiểm tra từ clone sạch](docs/KIEM_TRA.md): từng bước từ checkout tới trọn vòng sự cố, mode local và Datadog, kèm kết quả kỳ vọng.
-- [tasks.md](tasks.md): checklist theo thể lệ cuộc thi, ưu tiên, phụ thuộc và bằng chứng nghiệm thu.
-- [PLAN.md](PLAN.md): phạm vi, triển khai và nghiệm thu đã duyệt.
-- [Dependencies](docs/DEPENDENCIES.md): công cụ và package dự kiến, cách khóa phiên bản khi build.
-- [Contract](docs/CONTRACT.md): hợp đồng cho frontend/backend/simulator.
-- [Architecture](docs/ARCHITECTURE.md): seams lõi/adapter, đường mở rộng tải và lộ trình sau cuộc thi.
-- [Implementation](docs/IMPLEMENTATION.md): phân công và thứ tự sub-agent.
-- [Data card](docs/DATA_CARD.md): nguồn, giấy phép, giới hạn bằng chứng.
-- [Environment](docs/ENVIRONMENT.md): trạng thái môi trường đã kiểm tra.
-- [Disclosure](docs/DISCLOSURE.md): khai báo phần chuẩn bị trước thời gian build và AI.
-- [Runbook luồng tối thiểu](docs/MINIMAL_LOOP.md): cách chạy, thiết lập Datadog, kiểm chứng và giới hạn hiện tại.
+| Service (Docker Compose) | Vai trò |
+|---|---|
+| `mongo` | MongoDB 8.0.5, replica set một node |
+| `api` | FastAPI `/api/v1`: telemetry, sự cố, lệnh, webhook, đăng nhập operator |
+| `worker` | Writer duy nhất của trạng thái sự cố: cửa sổ, detector, vòng đời, kiểm chứng giảm tải, metric Datadog |
+| `simulator` | 2 trạm × 3 connector, replay đường tải 50 phiên Autosun–PolyU v3, mô hình nhiệt, lỗi có seed |
+| `web` | Giao diện tiếng Việt (React), proxy `/api` cùng origin ở `:8080` |
+| `datadog`, `webhook-gateway`, `tunnel`, `datadog-sync` | Profile `observability`: Agent, cổng chỉ mở 3 route, quick tunnel, đồng bộ Datadog Incidents/Notebooks |
 
-## Khởi chạy từ clone sạch
+Sơ đồ và luồng dữ liệu: [SUBMISSION.md §3](docs/SUBMISSION.md), [DATA_MODEL.md §2](docs/DATA_MODEL.md), [OBSERVABILITY.md §0](docs/OBSERVABILITY.md).
 
-Hướng dẫn đầy đủ, có kết quả kỳ vọng từng bước: [docs/KIEM_TRA.md](docs/KIEM_TRA.md).
+## Yêu cầu môi trường
 
-Cần Docker Linux Engine đang chạy (không cần Node trên máy host: image `web` tự build UI). Script `init_env.py` không ghi đè `.env` cũ và không in secrets.
+- Docker Engine (Linux containers) và Docker Compose v2. Không cần Node hay Python trên host để chạy: image tự build UI và backend. Đã chạy trên Windows 11 với Docker Desktop (WSL2).
+- Python ≥ 3.12 trên host chỉ để chạy `scripts/init_env.py` và `scripts/setup_datadog.py` (cần `httpx`, `python-dotenv`).
+- Mode Datadog: tài khoản Datadog (trial), API key, App key có quyền dashboards, monitors, SLO, incidents, notebooks (thêm App Builder nếu dùng Datadog App), seat Incident Management cho user sở hữu App key.
+- Để chạy test: `uv` (Python 3.12) và Node 22 + npm.
+
+## Chạy nhanh (mode local, không cần Datadog)
 
 ```powershell
 git clone <repo> chargeops; cd chargeops
-python scripts/init_env.py --operator-user operator   # hỏi mật khẩu operator; hash được ghi trong dấu nháy đơn
+python scripts/init_env.py --operator-user operator   # hỏi mật khẩu; tạo .env với secret ngẫu nhiên, không ghi đè .env cũ
 docker compose up --build -d
+docker compose exec api python -m chargeops.check_mongo   # kỳ vọng: "$setWindowFields ok", "postmortem $merge ok"
 ```
 
-1. Mở http://localhost:8080 (giao diện web; `/api/*`, `/docs`, `/redoc`, `/openapi.json` được proxy tới API trong cùng origin).
-2. Đăng nhập operator bằng user/mật khẩu vừa đặt. Không cần profile `observability` cho chế độ local.
-3. Kiểm tra hạ tầng: `docker compose exec api python -m chargeops.check_mongo`; CLI: `docker compose exec api python -m chargeops.cli start --mode local`.
+1. Mở http://localhost:8080, đăng nhập operator.
+2. **Điều khiển demo**: tạo run mode `local`, scenario `thermal_fault`, seed bất kỳ, bấm **Bắt đầu**.
+3. Trong 2–7 phút có đúng 1 sự cố. Mở sự cố: **Xác nhận** → **Giảm tải** → **Bảo trì** → **Kiểm tra phục hồi**, chờ "Đã giải quyết".
+4. Màn hình người lái: http://localhost:8080/stations/station-1 (không cần đăng nhập).
 
-Cấu hình trong `.env` (xem `.env.example`): `OPERATOR_USERNAME`, `OPERATOR_PASSWORD_HASH` (nếu tự dán hash từ `python -m chargeops.auth hash`, giữ nguyên và đặt trong dấu nháy đơn, ví dụ `OPERATOR_PASSWORD_HASH='scrypt$16384$8$1$…'`; Compose và pydantic-settings đều đọc giá trị nháy đơn nguyên văn nên cùng một dòng dùng được cho container và khi chạy trên host; không viết `$$` vì khi chạy trên host giá trị bị đọc nguyên `$$` và đăng nhập thất bại. Đã kiểm bằng `docker compose config` và python-dotenv, chưa kiểm bằng container chạy thật), `ALLOWED_ORIGINS` (mặc định `http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173`), `DD_TRACE_ENABLED`, `APP_VERSION`. Có thể truyền mật khẩu không tương tác: `python scripts/init_env.py --operator-user operator --operator-password-stdin`.
+Hướng dẫn đầy đủ từng bước, có kết quả kỳ vọng: [docs/KIEM_TRA.md](docs/KIEM_TRA.md).
 
-Kịch bản `thermal_fault` gieo lỗi trên một connector theo seed, bắt đầu từ giây 120–300; mỗi run tự dừng sau 30 phút (`RUN_MAX_S = 1800`). `POST /auth/login` và `/auth/logout` từ chối Origin lạ; client không gửi Origin (curl, CLI) vẫn dùng được. Mode local không thay nghiệm thu Datadog; xem runbook để thiết lập dashboard/monitor/webhook và chạy mode datadog (`docker compose --profile observability up`). Gateway webhook chỉ mở `/api/v1/webhooks/datadog`.
+## Mode Datadog
 
-Kiểm thử:
+```powershell
+docker compose --profile observability up --build -d
+docker compose logs tunnel        # lấy URL https://….trycloudflare.com
+python scripts/setup_datadog.py --webhook-url https://<tunnel>/api/v1/webhooks/datadog --with-app
+```
+
+Chép `DD_MONITOR_ID` script in ra vào `.env`, tạo lại worker, rồi chạy run mode `datadog`. Mỗi trial cho phép tối đa 20 run Datadog. Các bước điều tra, Datadog Incident, Notebook, SLO, RUM và Datadog App: [KIEM_TRA.md §7–8](docs/KIEM_TRA.md).
+
+## Cấu hình (`.env`, xem `.env.example`)
+
+| Biến | Ý nghĩa |
+|---|---|
+| `SIMULATOR_SECRET`, `WEBHOOK_SECRET`, `OPERATOR_SECRET` | Secret riêng cho simulator, webhook Datadog, CLI operator (`init_env.py` sinh ngẫu nhiên) |
+| `OPERATOR_USERNAME`, `OPERATOR_PASSWORD_HASH` | Đăng nhập operator; hash scrypt đặt trong nháy đơn |
+| `ALLOWED_ORIGINS` | Origin được dùng session cookie (mặc định `localhost:8080`, `127.0.0.1:8080`, `localhost:5173`) |
+| `DD_API_KEY`, `DD_APP_KEY`, `DD_SITE` | Datadog; `DD_SITE` phải đúng site tài khoản |
+| `DD_MONITOR_ID` | Id composite monitor do `setup_datadog.py` in ra |
+| `DD_TRACE_ENABLED`, `DD_METRICS_ENABLED` | Bật APM và heartbeat worker (dùng với profile `observability`) |
+| `DATADOG_ACTION_SECRET` | Secret cho route Datadog App (≥ 24 ký tự; để trống là tắt) |
+| `DD_RUM_APPLICATION_ID`, `DD_RUM_CLIENT_TOKEN` | Browser RUM; ghi vào bundle lúc build, đổi giá trị phải build lại `web` |
+| `SIM_REALISM` | Nhiệt môi trường theo ngày, nhiễu cảm biến, mất/trùng/trễ mẫu (mặc định `true`) |
+| `APP_VERSION`, `DD_TRIAL_ID` | Tag phiên bản; khóa bộ đếm 20 run Datadog |
+
+## Kiểm thử
 
 ```powershell
 uv sync --frozen; uv run pytest -q; uv run ruff check chargeops scripts tests
-cd web; npm ci; npm test -- --run; npm run build
+uv run python -m chargeops.evaluation run --protocol b1-eval-v3.1 --out .pytest-tmp/eval
+cd web; npm ci; npm test -- --run; npm run build; npm run check:api
 ```
 
-Khi API đổi: `uv run python scripts/export_openapi.py` rồi `cd web; npm run gen:api` (hoặc `npm run check:api` để kiểm tra `schema.d.ts` không lệch). Tests Python dùng MongoDB giả lập chỉ chứng minh logic; `chargeops.check_mongo` cần MongoDB thật.
+Kết quả ngày 28/10/2026: 333 passed, 2 skipped (cần MongoDB thật qua `MONGODB_TEST_URI`); 38 test web. Test dùng mongomock và HTTP giả lập, chỉ chứng minh logic; `chargeops.check_mongo` và các run thật mới là bằng chứng chạy trên MongoDB/Datadog.
 
-**Chưa chạy thật:** `docker compose up --build`, build image `web`/Caddy, đăng nhập qua http://localhost:8080 và MongoDB/Datadog thật (Docker Engine chưa chạy). Mới xác nhận `docker compose config` hợp lệ cho profile mặc định và `observability`, cùng pytest/ruff/vitest/`npm run build`. Video/benchmark chỉ được tạo từ hệ thống thực đã chạy, không thay kết quả thật bằng fixture.
+## Trạng thái kiểm chứng (28/10/2026)
+
+- **Vòng trọn vẹn trên MongoDB và Datadog thật:** run `39207f81…` ngày 20/10 (một connector): monitor → webhook → sự cố t+425 s → giảm tải 200 A/60 A → 30 A → `mitigated` t+612 s → `resolved` t+776 s.
+- **Code hiện tại trên Datadog US1:** fleet 6 connector; `setup_datadog.py --with-app` tạo đủ tài nguyên; `datadog-sync` tạo 6 Datadog Incident với todo, Notebook, postmortem, không trùng; run `5e2bd546…` mở đúng 1 sự cố `source=datadog`; RUM nhận session thật.
+- **Chưa kiểm chứng live:** vòng giảm tải → phục hồi trên code hiện tại, lệnh từ Datadog App vào sự cố đang mở, RUM → APM sau khi bật `trackResources`.
+
+Chi tiết: [OBSERVABILITY.md §6](docs/OBSERVABILITY.md), [KIEM_TRA.md](docs/KIEM_TRA.md).
+
+## Tài liệu
+
+| Tài liệu | Nội dung |
+|---|---|
+| [SUBMISSION.md](docs/SUBMISSION.md) | Hồ sơ dự thi: bài toán, giải pháp, kiến trúc, kịch bản sự cố, kết quả, đối chiếu yêu cầu |
+| [DATA_MODEL.md](docs/DATA_MODEL.md) | Kiến trúc dữ liệu, collection, index, aggregation pipeline, bảo đảm nhất quán |
+| [OBSERVABILITY.md](docs/OBSERVABILITY.md) | Kiến trúc quan sát, dashboard, monitor, SLO, RUM, Datadog App, lộ trình điều tra |
+| [KIEM_TRA.md](docs/KIEM_TRA.md) | Kiểm tra từ clone sạch, mode local và Datadog, xử lý lỗi |
+| [DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) | Kịch bản video demo, ảnh cần chụp, dàn ý slide |
+| [CONTRACT.md](docs/CONTRACT.md) | API, detector, vòng đời sự cố, quy tắc giảm tải và kiểm chứng |
+| [EVALUATION_PROTOCOL.md](docs/EVALUATION_PROTOCOL.md) | Protocol đánh giá A/B/C |
+| [DATA_CARD.md](docs/DATA_CARD.md) | Dataset Autosun–PolyU v3: nguồn, license, kiểm định, giới hạn |
+| [DISCLOSURE.md](docs/DISCLOSURE.md) | Phần làm trước 17/10, AI, thành phần tái sử dụng và license |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Seam mở rộng và lộ trình sau cuộc thi |
+| [MINIMAL_LOOP.md](docs/MINIMAL_LOOP.md), [PROGRESS.md](docs/PROGRESS.md) | Nhật ký kiểm chứng live và tiến độ |
+
+## Dữ liệu và giới hạn
+
+- Đường tải (dòng, điện áp) replay từ dataset công khai [Autosun–PolyU v3](https://data.mendeley.com/datasets/c7gg94tmvz/3) (CC BY 4.0) sau kiểm định; nhiệt độ, lỗi và phản ứng sau lệnh là mô phỏng. Không dùng dữ liệu cá nhân hay dữ liệu vận hành thật.
+- Ngưỡng 8 °C/3 °C và chính sách giảm tải là cấu hình demo, không phải chuẩn an toàn thiết bị.
+- Chạy local-first: không EC2, Atlas hay dịch vụ trả phí; Datadog dùng bản trial.
