@@ -12,6 +12,7 @@ from chargeops.datadog_client import DatadogClient, DatadogError
 from chargeops.domain import now
 from chargeops.logging import event, logger
 from chargeops.notebooks import investigation_notebook, notebook_url
+from chargeops.observability import emit_incident_outcome
 from chargeops.postmortem import postmortem_pipeline, report_markdown, report_summary
 from chargeops.storage import database
 
@@ -157,6 +158,10 @@ class DatadogSync:
             if report is None:
                 raise LookupError("incident report missing")
             self.put(state, postmortem_report_done=True)
+            if not state.get("outcome_emitted"):
+                # Flag first: a missed SLO sample is preferable to counting one incident twice.
+                self.put(state, outcome_emitted=True)
+                emit_incident_outcome(self.stats, report)
         except (PyMongoError, LookupError) as error:
             errors.append(type(error).__name__)
         if report is not None and not state.get("postmortem_note_done") and state.get("dd_incident_id"):

@@ -20,6 +20,12 @@ def test_pipeline_shape():
     assert stages[-1] == {"$merge": {"into": "incident_reports", "whenMatched": "replace", "whenNotMatched": "insert"}}
 
 
+def test_report_projects_reached_reduce_load_from_timeline():
+    project = next(s["$project"] for s in postmortem_pipeline("inc-1") if "$project" in s)
+    text = str(project["reached_reduce_load"])
+    assert "$timeline" in text and "reduce_load" in text and "$size" in text
+
+
 def test_telemetry_lookup_dedups_samples_and_skips_when_never_verified():
     lookups = [s["$lookup"] for s in postmortem_pipeline("inc-1") if "$lookup" in s]
     telemetry = next(item for item in lookups if item["from"] == "telemetry")["pipeline"]

@@ -78,6 +78,8 @@ def test_main_orders_resources_and_second_run_only_puts(monkeypatch, tmp_path):
         calls.append((request.method, request.url.path, body))
         if request.method == "GET":
             return httpx.Response(404, json={})
+        if request.url.path.endswith("/slo") or "/slo/" in request.url.path:
+            return httpx.Response(200, json={"data": [{"id": f"slo{next(counter)}"}]})
         return httpx.Response(200, json={"id": next(counter)})
 
     real_client = httpx.Client

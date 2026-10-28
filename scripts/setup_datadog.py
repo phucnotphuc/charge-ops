@@ -212,7 +212,46 @@ def extra_monitor_specs(engineering_url):
     }
 
 
-def engineering_dashboard():
+SLO_WINDOWS = ["7d", "30d"]
+
+
+def slo_specs():
+    def spec(name, description, series):
+        return {
+            "name": name,
+            "type": "metric",
+            "description": description,
+            "query": {
+                "numerator": f"sum:chargeops.slo.{series}.good{{env:hackathon}}.as_count()",
+                "denominator": f"sum:chargeops.slo.{series}.total{{env:hackathon}}.as_count()",
+            },
+            "thresholds": [{"timeframe": window, "target": 95.0} for window in SLO_WINDOWS],
+            "tags": ["env:hackathon", "service:chargeops"],
+        }
+
+    return {
+        "slo_mitigation": spec(
+            "ChargeOps effective derating within 5 min",
+            "Share of incidents whose derating was verified within 300 s of opening.",
+            "mitigation",
+        ),
+        "slo_charging": spec(
+            "ChargeOps uninterrupted charging minutes",
+            "Share of requested charging minutes that actually delivered current.",
+            "charging_minutes",
+        ),
+    }
+
+
+def slo_widgets(ids):
+    return [
+        {"type": "slo", "slo_id": ids[key], "view_type": "detail", "time_windows": SLO_WINDOWS}
+        for key in ("slo_mitigation", "slo_charging")
+        if ids.get(key)
+    ]
+
+
+def engineering_dashboard(slo_ids=None):
     thresholds = [(8, "error dashed", "cảnh báo 8 °C"), (3, "ok dashed", "phục hồi 3 °C")]
     return dashboard(
         "ChargeOps — Kỹ sư điện / vận hành trạm",
@@ -266,6 +305,7 @@ def engineering_dashboard():
                 [metric("ambient", f"avg:chargeops.ambient_temperature_c{SCOPE} by {{station_id}}")],
             ),
             *incident_widgets(),
+            *slo_widgets(slo_ids or {}),
             log_stream("Webhook và lệnh vận hành", COMMAND_LOGS),
         ],
     )
@@ -338,7 +378,10 @@ def platform_dashboard():
     )
 
 
-DASHBOARDS = {"dashboard": engineering_dashboard, "dashboard_platform": platform_dashboard}
+DASHBOARDS = {
+    "dashboard": lambda state: engineering_dashboard(state),
+    "dashboard_platform": lambda state: platform_dashboard(),
+}
 
 
 def main():
@@ -425,11 +468,20 @@ def main():
             )
             state[key] = result["id"]
             save()
+        # SLOs first: the engineering dashboard's SLO widgets need their ids.
+        for key, spec in slo_specs().items():
+            result = call(
+                "PUT" if key in state else "POST",
+                f"/slo/{state[key]}" if key in state else "/slo",
+                spec,
+            )
+            state[key] = result["data"][0]["id"] if key not in state else state[key]
+            save()
         for key, build in DASHBOARDS.items():
             result = call(
                 "PUT" if key in state else "POST",
                 f"/dashboard/{state[key]}" if key in state else "/dashboard",
-                build(),
+                build(state),
             )
             state[key] = result["id"]
             save()

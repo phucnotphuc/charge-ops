@@ -59,6 +59,15 @@ Lưu ý: monitor `stale` cũng chuyển sang cảnh báo no-data khoảng 4 phú
 
 Chỉ monitor composite gọi webhook; các monitor còn lại chỉ có link điều tra trong nội dung cảnh báo.
 
+### SLO
+
+Hai SLO dạng metric, tạo bởi `scripts/setup_datadog.py` (trước các dashboard) và hiện thành widget SLO trên dashboard kỹ sư điện. Chỉ run chế độ `datadog` phát các metric này.
+
+| SLO | Good / Total | Mục tiêu | Ý nghĩa |
+|---|---|---|---|
+| `ChargeOps effective derating within 5 min` | `chargeops.slo.mitigation.good` / `.total` (mỗi sự cố một lần, do `datadog-sync` phát khi báo cáo postmortem đã ghi) | 95 % (7 ngày, 30 ngày) | Sự cố được giảm tải hiệu quả (đã xác minh) trong 300 s kể từ khi mở. Sự cố đã giảm thiểu nhưng chưa xác minh giảm tải tính là không đạt. |
+| `ChargeOps uninterrupted charging minutes` | `chargeops.slo.charging_minutes.good` / `.total` (0,25 phút mỗi block 15 s do worker phát) | 95 % (7 ngày, 30 ngày) | Trong số phút xe yêu cầu dòng sạc (`requested_current_a > 0`), tỷ lệ phút thực sự có dòng (`current_a > 0`). |
+
 ## 4. Lộ trình điều tra một sự cố
 
 1. Monitor composite cảnh báo. Nội dung chứa link dashboard kỹ sư dự kiến lọc sẵn (chưa kiểm chứng) theo `run_id` và `connector_id` (template variable) và link Logs.
