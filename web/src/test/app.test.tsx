@@ -71,6 +71,39 @@ describe("incident screen", () => {
     else expect(button).toBeDisabled();
   });
 
+  it("shows Datadog links only when present", async () => {
+    const withLinks = {
+      ...incident(),
+      datadog_incident_url: "https://app.datadoghq.com/incidents/7",
+      datadog_notebook_url: "https://app.datadoghq.com/notebook/12",
+    };
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) return unauthenticated;
+      if (url.endsWith("/incidents/inc-1")) return { body: withLinks };
+      return { status: 404 };
+    });
+    const first = renderAt("/incidents/inc-1", <IncidentDetail />, "/incidents/:id");
+    const open = await screen.findByRole("link", { name: "Mở trên Datadog" });
+    expect(open).toHaveAttribute("href", withLinks.datadog_incident_url);
+    expect(open).toHaveAttribute("target", "_blank");
+    expect(open).toHaveAttribute("rel", "noreferrer");
+    expect(screen.getByRole("link", { name: "Notebook điều tra" })).toHaveAttribute(
+      "href",
+      withLinks.datadog_notebook_url,
+    );
+    first.unmount();
+
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) return unauthenticated;
+      if (url.endsWith("/incidents/inc-1")) return { body: incident() };
+      return { status: 404 };
+    });
+    renderAt("/incidents/inc-1", <IncidentDetail />, "/incidents/:id");
+    await screen.findByTestId("state-badge");
+    expect(screen.queryByRole("link", { name: "Mở trên Datadog" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Notebook điều tra" })).not.toBeInTheDocument();
+  });
+
   it("renders state, source and the two-step proof, and disables commands for a viewer", async () => {
     mockFetch((url) => {
       if (url.endsWith("/auth/me")) return unauthenticated;

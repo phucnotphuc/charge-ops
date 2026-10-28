@@ -96,6 +96,21 @@ export function IncidentView({ incident, onChanged }: { incident: Incident; onCh
         Mã: {incidentId} · Run: {incident.run_id} · Mở lúc {fmtTime(incident.opened_at)} · Trạng thái từ{" "}
         {fmtTime(incident.state_since)}
       </p>
+      {(incident.datadog_incident_url || incident.datadog_notebook_url) && (
+        <p className="small" data-testid="datadog-links">
+          {incident.datadog_incident_url && (
+            <a href={incident.datadog_incident_url} target="_blank" rel="noreferrer">
+              Mở trên Datadog
+            </a>
+          )}
+          {incident.datadog_incident_url && incident.datadog_notebook_url && " · "}
+          {incident.datadog_notebook_url && (
+            <a href={incident.datadog_notebook_url} target="_blank" rel="noreferrer">
+              Notebook điều tra
+            </a>
+          )}
+        </p>
+      )}
       <StateStepper state={incident.state} />
 
       <div className="grid two">
