@@ -1,7 +1,19 @@
 """Postmortem: one $merge pipeline turns a closed incident into an incident_reports document (MongoDB 8 only;
-mongomock cannot run $merge, $dateDiff or $lookup with a pipeline)."""
+mongomock cannot run $merge, $dateDiff or $lookup with a pipeline).
+
+Assumptions:
+- Run only for closed incidents (resolved, or run stopped while unresolved); `closed_by` is "resolved" when a
+  resolved event exists and "run_stopped" otherwise, so it is meaningless for an open incident.
+- Event times use `$first` per event name. After a recurrence (a later cycle repeats the same events) the report
+  therefore carries the cycle-1 timestamps.
+- Windows: only `quality: true` windows count toward peak_residual_c, and the span starts 60 s before opened_at so
+  the evidence window that triggered the incident (it ends just before the incident opens) is included.
+- Energy is simulated: telemetry between load_reduction_verified and mitigated (or close), deduplicated by
+  sample_id, power_kw * 5 s / 3600.
+"""
 
 SAMPLE_PERIOD_S = 5
+LEAD_MS = 60_000
 
 
 def _event_at(name):
@@ -65,12 +77,13 @@ def postmortem_pipeline(incident_id):
                                 "$and": [
                                     {"$eq": ["$run_id", "$$run"]},
                                     {"$eq": ["$connector_id", "$$connector"]},
-                                    {"$gte": ["$end", "$$opened"]},
+                                    {"$gte": ["$end", {"$subtract": ["$$opened", LEAD_MS]}]},
                                     {"$lte": ["$end", {"$ifNull": ["$$closed", "$$opened"]}]},
                                 ]
                             }
                         }
                     },
+                    {"$match": {"quality": True}},
                     {"$project": {"residual_mean": 1, "end": 1}},
                 ],
                 "as": "windows",
@@ -90,6 +103,7 @@ def postmortem_pipeline(incident_id):
                         "$match": {
                             "$expr": {
                                 "$and": [
+                                    {"$ne": ["$$from", None]},
                                     {"$eq": ["$meta.run_id", "$$run"]},
                                     {"$eq": ["$meta.connector_id", "$$connector"]},
                                     {"$gte": ["$measured_at", "$$from"]},
@@ -98,7 +112,8 @@ def postmortem_pipeline(incident_id):
                             }
                         }
                     },
-                    {"$project": {"power_kw": 1}},
+                    # Retried samples share a sample_id but not a document id: count each sample once.
+                    {"$group": {"_id": "$sample_id", "power_kw": {"$first": "$power_kw"}}},
                 ],
                 "as": "derated",
             }

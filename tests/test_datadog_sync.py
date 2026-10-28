@@ -154,9 +154,10 @@ def test_lost_notebook_response_adopts_existing_notebook_instead_of_creating_ano
     client.attach_link.assert_called_once()
 
 
-def test_notebook_api_down_does_not_block_timeline_or_resolve():
+def test_notebook_api_down_does_not_block_timeline_or_resolve(monkeypatch):
     steps = [{"at": T, "event": "opened"}, {"at": T, "event": "resolved"}]
     db, client, sync = setup(state="resolved", timeline=steps)
+    monkeypatch.setattr(db.incidents, "aggregate", lambda pipeline: iter(()))  # mongomock cannot run $merge
     client.create_notebook.side_effect = DatadogError("POST", "/api/v1/notebooks", 403)
     client.find_notebook.return_value = None
     sync.sync_once(T)
@@ -235,13 +236,59 @@ def test_postmortem_failure_is_retried_and_never_blocks_resolve(monkeypatch):
     client.update_notebook.side_effect = [DatadogError("PUT", "/api/v1/notebooks/12", 503), None]
     sync.sync_once(T)
     doc = db.datadog_sync.find_one({"_id": "inc-1"})
-    assert doc["postmortem_error"] == "HTTP 503" and not doc.get("postmortem_done")
+    assert doc["postmortem_error"] == "HTTP 503" and doc["postmortem_done"] and not doc.get("postmortem_notebook_updated")
     assert doc["dd_resolved"] and doc["synced_events"] == 2 and not doc.get("last_error")
     sync.sync_once(T + timedelta(seconds=5))  # backoff
     assert len(calls) == 1
     sync.sync_once(T + timedelta(minutes=2))
     doc = db.datadog_sync.find_one({"_id": "inc-1"})
-    assert doc["postmortem_done"] is True and doc["postmortem_error"] is None
+    assert doc["postmortem_notebook_updated"] is True and doc["postmortem_error"] is None
     assert client.update_notebook.call_count == 2
-    notes = [c for c in client.incident_note.call_args_list if "Postmortem" in c.args[1]]
-    assert len(notes) == 1
+    assert len(postmortem_notes(client)) == 1
+
+
+def postmortem_notes(client):
+    return [c for c in client.incident_note.call_args_list if "Postmortem" in c.args[1]]
+
+
+def test_notebook_403_does_not_block_report_note_or_done_and_put_happens_once_when_notebook_exists(monkeypatch):
+    db, client, sync, calls = postmortem_setup(monkeypatch)
+    client.create_notebook.side_effect = DatadogError("POST", "/api/v1/notebooks", 403)
+    client.find_notebook.return_value = None
+    sync.sync_once(T)
+    doc = db.datadog_sync.find_one({"_id": "inc-1"})
+    assert doc["postmortem_report_done"] and doc["postmortem_note_done"] and doc["postmortem_done"]
+    assert not doc.get("postmortem_notebook_updated") and len(postmortem_notes(client)) == 1
+    client.update_notebook.assert_not_called()
+    client.create_notebook.side_effect = None
+    client.create_notebook.return_value = 12
+    sync.sync_once(T + timedelta(minutes=10))
+    sync.sync_once(T + timedelta(minutes=20))
+    client.update_notebook.assert_called_once()
+    assert len(calls) == 1 and len(postmortem_notes(client)) == 1
+    assert db.datadog_sync.find_one({"_id": "inc-1"})["postmortem_notebook_updated"] is True
+
+
+def test_note_rejected_with_503_is_retried(monkeypatch):
+    db, client, sync, calls = postmortem_setup(monkeypatch)
+    real = client.incident_note
+    outcomes = iter([None, None, DatadogError("POST", "/todos", 503)])  # two mirrored steps, then postmortem
+    real.side_effect = lambda *a, **k: (lambda o: (_ for _ in ()).throw(o) if o else None)(next(outcomes, None))
+    sync.sync_once(T)
+    assert not db.datadog_sync.find_one({"_id": "inc-1"}).get("postmortem_note_done")
+    sync.sync_once(T + timedelta(minutes=2))
+    doc = db.datadog_sync.find_one({"_id": "inc-1"})
+    assert doc["postmortem_note_done"] and doc["postmortem_done"]
+    assert len(postmortem_notes(client)) == 2  # failed attempt + successful retry
+
+
+def test_note_with_ambiguous_failure_is_not_repeated(monkeypatch):
+    db, client, sync, calls = postmortem_setup(monkeypatch)
+    outcomes = iter([None, None, DatadogError("POST", "/todos", 0)])
+    client.incident_note.side_effect = lambda *a, **k: (lambda o: (_ for _ in ()).throw(o) if o else None)(
+        next(outcomes, None)
+    )
+    sync.sync_once(T)
+    sync.sync_once(T + timedelta(minutes=2))
+    assert len(postmortem_notes(client)) == 1
+    assert db.datadog_sync.find_one({"_id": "inc-1"})["postmortem_note_done"] is True

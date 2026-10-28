@@ -100,6 +100,8 @@ def check_postmortem(db, connector_id="connector-1"):
             "timeline": [
                 {"at": opened, "event": "opened"},
                 {"at": opened + timedelta(seconds=20), "event": "acknowledge"},
+                {"at": opened + timedelta(seconds=30), "event": "load_reduction_verified"},
+                {"at": opened + timedelta(seconds=60), "event": "mitigated"},
                 {"at": opened + timedelta(seconds=75), "event": "resolved"},
             ],
         }
@@ -110,14 +112,24 @@ def check_postmortem(db, connector_id="connector-1"):
                 "run_id": run_id,
                 "connector_id": connector_id,
                 "end": opened + timedelta(seconds=15 * i),
+                "quality": True,
                 "residual_mean": float(i),
             }
             for i in range(4)
         ]
     )
+    meta = {"run_id": run_id, "connector_id": connector_id}
+    rows = [("a", 30, 10.0), ("b", 35, 10.0), ("b", 35, 10.0), ("c", 40, 10.0), ("late", 70, 99.0)]
+    db.telemetry.insert_many(
+        [
+            {"sample_id": sid, "meta": meta, "measured_at": opened + timedelta(seconds=s), "power_kw": kw}
+            for sid, s, kw in rows
+        ]
+    )
     list(db.incidents.aggregate(postmortem_pipeline(incident_id)))
     report = db.incident_reports.find_one({"_id": incident_id})
     assert report["peak_residual_c"] == 3.0 and report["seconds_to_resolved"] == 75 and report["simulated"] is True
+    assert abs(report["energy_kwh_while_derated"] - 30 * 5 / 3600) < 1e-9  # duplicate sample counted once
     print("postmortem $merge ok")
 
 

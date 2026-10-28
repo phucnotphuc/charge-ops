@@ -20,6 +20,21 @@ def test_pipeline_shape():
     assert stages[-1] == {"$merge": {"into": "incident_reports", "whenMatched": "replace", "whenNotMatched": "insert"}}
 
 
+def test_telemetry_lookup_dedups_samples_and_skips_when_never_verified():
+    lookups = [s["$lookup"] for s in postmortem_pipeline("inc-1") if "$lookup" in s]
+    telemetry = next(item for item in lookups if item["from"] == "telemetry")["pipeline"]
+    group = next(stage["$group"] for stage in telemetry if "$group" in stage)
+    assert group == {"_id": "$sample_id", "power_kw": {"$first": "$power_kw"}}
+    assert {"$ne": ["$$from", None]} in telemetry[0]["$match"]["$expr"]["$and"]
+
+
+def test_windows_lookup_keeps_quality_windows_from_a_minute_before_opening():
+    lookups = [s["$lookup"] for s in postmortem_pipeline("inc-1") if "$lookup" in s]
+    windows = next(item for item in lookups if item["from"] == "windows")["pipeline"]
+    assert {"$match": {"quality": True}} in windows
+    assert {"$gte": ["$end", {"$subtract": ["$$opened", 60_000]}]} in windows[0]["$match"]["$expr"]["$and"]
+
+
 def test_report_markdown_formats_durations_nulls_and_simulated_label():
     md = report_markdown(
         {"closed_by": "resolved", "seconds_to_ack": 125, "seconds_to_mitigated": None, "seconds_to_resolved": 60,
@@ -47,18 +62,28 @@ def test_pipeline_on_real_mongo():
              "timeline": [
                  {"at": T, "event": "opened"},
                  {"at": T + timedelta(seconds=30), "event": "acknowledge"},
+                 {"at": T + timedelta(seconds=40), "event": "load_reduction_verified"},
+                 {"at": T + timedelta(seconds=60), "event": "mitigated"},
                  {"at": T + timedelta(seconds=90), "event": "resolved"},
              ]}
         )
         db.windows.insert_many(
-            [{"run_id": "r", "connector_id": "c", "end": T + timedelta(seconds=15 * i), "residual_mean": v}
+            [{"run_id": "r", "connector_id": "c", "end": T + timedelta(seconds=15 * i), "residual_mean": v,
+              "quality": True}
              for i, v in enumerate([1.0, 6.5, 3.0])]
+        )
+        meta = {"run_id": "r", "connector_id": "c"}
+        rows = [("a", 40, 10.0), ("b", 45, 10.0), ("b", 45, 10.0), ("c", 50, 10.0), ("late", 70, 99.0)]
+        db.telemetry.insert_many(
+            [{"sample_id": sid, "meta": meta, "measured_at": T + timedelta(seconds=s), "power_kw": kw}
+             for sid, s, kw in rows]
         )
         list(db.incidents.aggregate(postmortem_pipeline("inc-1")))
         report = db.incident_reports.find_one({"_id": "inc-1"})
         assert report["peak_residual_c"] == 6.5
         assert report["seconds_to_resolved"] == 90 and report["seconds_to_ack"] == 30
         assert report["closed_by"] == "resolved" and report["simulated"] is True
+        assert abs(report["energy_kwh_while_derated"] - 30 * 5 / 3600) < 1e-9  # duplicate sample counted once
     finally:
         client.drop_database(db.name)
         client.close()
