@@ -15,6 +15,7 @@ Hệ thống demo cảnh báo sớm bất thường nhiệt connector: telemetry
 
 ## Tài liệu
 
+- [Kiểm tra từ clone sạch](docs/KIEM_TRA.md): từng bước từ checkout tới trọn vòng sự cố, mode local và Datadog, kèm kết quả kỳ vọng.
 - [tasks.md](tasks.md): checklist theo thể lệ cuộc thi, ưu tiên, phụ thuộc và bằng chứng nghiệm thu.
 - [PLAN.md](PLAN.md): phạm vi, triển khai và nghiệm thu đã duyệt.
 - [Dependencies](docs/DEPENDENCIES.md): công cụ và package dự kiến, cách khóa phiên bản khi build.
@@ -27,6 +28,8 @@ Hệ thống demo cảnh báo sớm bất thường nhiệt connector: telemetry
 - [Runbook luồng tối thiểu](docs/MINIMAL_LOOP.md): cách chạy, thiết lập Datadog, kiểm chứng và giới hạn hiện tại.
 
 ## Khởi chạy từ clone sạch
+
+Hướng dẫn đầy đủ, có kết quả kỳ vọng từng bước: [docs/KIEM_TRA.md](docs/KIEM_TRA.md).
 
 Cần Docker Linux Engine đang chạy (không cần Node trên máy host: image `web` tự build UI). Script `init_env.py` không ghi đè `.env` cũ và không in secrets.
 
