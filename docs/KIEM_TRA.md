@@ -1,6 +1,6 @@
-# Kiểm tra ChargeOps từ clone sạch đến trọn vòng sự cố
+# Hướng dẫn chạy và kiểm tra ChargeOps từ clone sạch
 
-Hướng dẫn cho người mới checkout nhánh `feat/station-observability`. Lệnh dùng được trong PowerShell hoặc Git Bash, chạy ở thư mục gốc repo. Mục 3–5 không cần Datadog; mục 7 cần trial Datadog. Ngày cập nhật: 28/10/2026.
+Hướng dẫn cho người mới checkout nhánh `feat/station-observability`. Lệnh chạy trong PowerShell hoặc Git Bash, ở thư mục gốc repo. Mục 3–5 không cần Datadog; mục 7–8 cần tài khoản Datadog (trial). Ngày cập nhật: 28/10/2026.
 
 ## 0. Chuẩn bị máy
 
@@ -28,13 +28,24 @@ git switch feat/station-observability
 python scripts/init_env.py --operator-user operator
 ```
 
-Script hỏi mật khẩu operator, tạo secret ngẫu nhiên, không in secret và không ghi đè `.env` đã có. Mặc định đã đủ cho mode local: Compose đặt `SIM_REALISM=true` (nhiệt môi trường theo giờ, nhiễu cảm biến, khoảng 1% mẫu mất/trùng/đến muộn) và `DD_METRICS_ENABLED=false`.
+Script hỏi mật khẩu operator, tạo các secret ngẫu nhiên (gồm `DATADOG_ACTION_SECRET` cho Datadog App), không in secret và không ghi đè `.env` đã có.
+
+Mặc định đã đủ cho mode local. Compose đặt sẵn:
+
+- `SIM_REALISM=true`: nhiệt môi trường theo giờ, nhiễu cảm biến, khoảng 1% mẫu mất/trùng/đến muộn.
+- `DD_METRICS_ENABLED=false`.
+
+Nếu `.env` tạo từ trước ngày 28/10 và thiếu `DATADOG_ACTION_SECRET`, thêm một dòng với giá trị ngẫu nhiên ≥ 24 ký tự. Có thể tạo bằng:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
 
 Quy tắc khi sửa `.env` bằng tay:
 
 - Mỗi biến chỉ có **một** dòng; nếu trùng, dòng cuối thắng.
 - `OPERATOR_PASSWORD_HASH` đặt trong nháy đơn `'scrypt$…'`, không viết `$$`.
-- Không commit `.env` và không đưa key vào ảnh chụp.
+- Không commit `.env` và không để key lọt vào ảnh chụp.
 
 ## 3. Chạy local (không cần Datadog)
 
@@ -45,13 +56,13 @@ docker compose ps
 
 Kỳ vọng: `mongo` và `api` ở trạng thái **healthy**; `worker`, `simulator`, `web` ở trạng thái **running**. Lần build đầu mất vài phút.
 
-Kiểm tra MongoDB thật (time series, aggregation, window functions):
+Kiểm tra MongoDB thật (time series, aggregation, window functions, postmortem):
 
 ```bash
 docker compose exec api python -m chargeops.check_mongo
 ```
 
-Kỳ vọng: có dòng **`$setWindowFields ok`**.
+Kỳ vọng: có hai dòng **`$setWindowFields ok`** và **`postmortem $merge ok`**.
 
 ## 4. Kiểm tra giao diện
 
@@ -65,14 +76,14 @@ Kỳ vọng: có dòng **`$setWindowFields ok`**.
 2. Mở song song:
    - màn hình người dùng `/stations/station-1` hoặc `station-2`;
    - mục **Trạm**, tức màn hình vận hành (cần đăng nhập).
-3. Trong 1–2 phút đầu: 6 đầu sạc hiện pin %, công suất, dòng điện, nhiệt độ đầu sạc và thời gian đến khi đầy. Pin % tăng dần.
+3. Trong 1–2 phút đầu: 6 đầu sạc hiện pin % (SoC thật từ dữ liệu Autosun), công suất, dòng điện, nhiệt độ đầu sạc và thời gian đến khi đầy. Pin % tăng dần.
 4. Trong khoảng 2–7 phút: một đầu sạc nóng bất thường. Mục **Sự cố** có đúng **1** sự cố mới, đúng connector đó.
 5. Mở sự cố và thao tác lần lượt:
    1. **Xác nhận**.
    2. **Giảm tải**. Màn hình người dùng chuyển đầu sạc đó sang "Đang sạc chậm để bảo vệ đầu sạc", pin % tăng chậm lại.
    3. Chờ đến khi nút **Bảo trì** sáng, rồi bấm.
    4. **Kiểm tra phục hồi**. Chờ khoảng 2 phút tới trạng thái **Đã giải quyết**.
-6. Màn hình vận hành hiện residual, xu hướng (MongoDB `$setWindowFields`), phễu trạng thái và MTTA/MTTR.
+6. Màn hình vận hành hiện residual, xu hướng (MongoDB `$setWindowFields`), phễu trạng thái và MTTA/MTTR. Danh sách lệnh của sự cố có cột **Nguồn**, ở đây là "Operator".
 
 **Đạt khi:**
 
@@ -91,7 +102,11 @@ uv run ruff check chargeops scripts tests
 uv run python -m chargeops.evaluation run --protocol b1-eval-v3.1 --out .pytest-tmp/eval
 ```
 
-Kỳ vọng: `230 passed, 1 skipped` (test bị skip cần MongoDB thật qua `MONGODB_TEST_URI`), ruff sạch, đánh giá in ra `(120 runs, …)`. Nếu lock không còn hợp lệ, lệnh đánh giá sẽ từ chối chạy.
+Kỳ vọng:
+
+- `325 passed, 2 skipped`. Hai test bị bỏ qua cần MongoDB thật qua `MONGODB_TEST_URI`.
+- ruff sạch.
+- Lệnh đánh giá in ra `(120 runs, …)`. Nếu lock không còn hợp lệ, lệnh sẽ từ chối chạy.
 
 ```bash
 cd web
@@ -101,18 +116,20 @@ npm run build
 npm run check:api
 ```
 
-Kỳ vọng: `32 passed`, build thành công, `check:api` không báo lệch kiểu API.
+Kỳ vọng: `38 passed`, build thành công, `check:api` không báo lệch kiểu API. Luôn chạy `npm ci` sau khi pull, vì thiếu package mới (ví dụ `@datadog/browser-rum`) thì một số file test không chạy.
 
-Các test này dùng MongoDB giả lập (mongomock), chỉ chứng minh logic, không thay cho mục 3–5 và 7.
+Các test này dùng MongoDB giả lập (mongomock) và HTTP giả lập, chỉ chứng minh logic, không thay cho mục 3–5 và 7–8.
 
-## 7. Mode Datadog (cần trial Datadog)
+## 7. Mode Datadog: phát hiện, dashboard, monitor
 
 1. Trong `.env`, mỗi biến một dòng:
-   - `DD_API_KEY`, `DD_APP_KEY`: key của trial;
+   - `DD_API_KEY`, `DD_APP_KEY`: key của tài khoản;
    - `DD_SITE`: đúng site của tài khoản, ví dụ `ap1.datadoghq.com`;
    - `DD_TRACE_ENABLED=true`;
    - `DD_METRICS_ENABLED=true`.
-2. Chạy stack có Datadog Agent, webhook gateway và tunnel:
+
+   `DD_APP_KEY` cần quyền dashboards, monitors, SLO, incidents, notebooks. Nếu dùng Datadog App (mục 8) thì thêm `apps_write`, `connections_resolve`, `workflows_run`.
+2. Chạy stack đầy đủ: Agent, webhook gateway, tunnel, và `datadog-sync`.
    ```bash
    docker compose --profile observability up --build -d
    docker compose --profile observability exec datadog agent status
@@ -122,7 +139,7 @@ Các test này dùng MongoDB giả lập (mongomock), chỉ chứng minh logic, 
    ```bash
    docker compose logs tunnel
    ```
-4. Tạo hoặc cập nhật 2 dashboard (kỹ sư trạm, IT/SRE), các monitor và webhook:
+4. Tạo hoặc cập nhật webhook, monitor, 2 SLO và 2 dashboard (kỹ sư trạm, IT/SRE):
    ```bash
    python scripts/setup_datadog.py --webhook-url https://YOUR-TUNNEL.trycloudflare.com/api/v1/webhooks/datadog
    ```
@@ -139,25 +156,70 @@ Các test này dùng MongoDB giả lập (mongomock), chỉ chứng minh logic, 
    - các bảng "Sự cố đang mở theo connector" và "Thời gian ở trạng thái hiện tại" có số liệu;
    - dashboard IT/SRE có "Worker heartbeat";
    - từ một dòng log mở được trace APM.
-7. (Tùy chọn) Kiểm tra RUM: điền `DD_RUM_APPLICATION_ID` và `DD_RUM_CLIENT_TOKEN` vào `.env`, build lại web (`docker compose --profile observability up --build -d web`), mở một sự cố, gửi một lệnh, rồi trên Datadog RUM Explorer tìm action `command_sent` của service `chargeops-web`.
-8. (Tùy chọn) Datadog App (B8): đặt `DATADOG_ACTION_SECRET` (đã có nếu `.env` tạo bằng `init_env.py`; thêm vào `.env` cũ, tối thiểu 24 ký tự), tạo lại api (`docker compose --profile observability up -d api`), rồi chạy lại bước 4 với thêm `--with-app`. Nếu script in hướng dẫn "Import JSON", làm theo từng bước. Trong Datadog App Builder mở app "ChargeOps - xu ly su co", chọn một sự cố `open`, bấm Xác nhận. Kỳ vọng: sự cố chuyển `acknowledged` trong ChargeOps, danh sách lệnh của sự cố trong giao diện ChargeOps hiện nguồn "Datadog App" (cột Nguồn; `actor: datadog-app` trong dữ liệu), các nút không hợp lệ bị tắt. Kiểm tra gateway: `curl -i https://YOUR-TUNNEL.trycloudflare.com/api/v1/incidents` trả 404.
+
+## 8. Mode Datadog: điều tra, xử lý và hậu kiểm trên Datadog
+
+Chạy trong cùng run Datadog ở mục 7.
+
+1. **Datadog Incident.** Do `datadog-sync` tạo. Trong vòng khoảng 10 giây sau khi sự cố mở trong ChargeOps, Datadog > Incidents có một Incident tên "ChargeOps connector-N quá nhiệt [mã sự cố]". Mỗi bước (xác nhận, giảm tải, bảo trì…) hiện thành một todo đã hoàn thành. Khi ChargeOps "Đã giải quyết", Incident chuyển `resolved`.
+2. **Notebook điều tra.** Incident có link "Notebook điều tra". Trang sự cố trong ChargeOps cũng có link "Mở trên Datadog" và "Notebook điều tra". Notebook có biểu đồ residual, nhiệt đo/kỳ vọng, dòng/giới hạn, đã lọc đúng run và connector, kèm luồng log của sự cố.
+3. **Postmortem.** Sau khi giải quyết, hoặc khi dừng run mà sự cố chưa giải quyết, Notebook có thêm ô "Postmortem" và Incident có ghi chú tóm tắt. Nội dung:
+   - thời gian từng bước;
+   - residual đỉnh;
+   - số lần retest bị reset;
+   - năng lượng trong lúc giảm tải (ghi rõ "Dữ liệu mô phỏng").
+
+   Báo cáo được tính bằng MongoDB `$lookup` + `$dateDiff` + `$merge` vào collection `incident_reports`.
+4. **SLO.** Dashboard kỹ sư có 2 widget SLO: "Giảm tải có tác dụng trong 5 phút" và "Phút sạc không gián đoạn" (mục tiêu 95%, 7 và 30 ngày). Giá trị thay đổi sau run.
+5. **RUM (tùy chọn).**
+   1. Tạo một RUM application loại JavaScript trên Datadog.
+   2. Điền `DD_RUM_APPLICATION_ID` và `DD_RUM_CLIENT_TOKEN` vào `.env`.
+   3. Build lại web:
+      ```bash
+      docker compose --profile observability up --build -d web
+      ```
+   4. Mở một sự cố và gửi một lệnh. Trên RUM Explorer, service `chargeops-web` phải có action `command_sent`, kèm thời gian từ lúc thấy sự cố tới lúc gửi lệnh.
+6. **Datadog App: thao tác ngay trong Datadog (tùy chọn).**
+   1. Đảm bảo `.env` có `DATADOG_ACTION_SECRET` (mục 2). Tạo lại api:
+      ```bash
+      docker compose --profile observability up -d api
+      ```
+   2. Chạy lại bước 4 của mục 7, thêm `--with-app`:
+      ```bash
+      python scripts/setup_datadog.py --webhook-url https://YOUR-TUNNEL.trycloudflare.com/api/v1/webhooks/datadog --with-app
+      ```
+      Script in link app (Datadog > Apps). Nếu script in hướng dẫn "Import JSON", làm theo từng bước, vì định nghĩa app (`scripts/datadog_app.json`) chưa được thử trên tài khoản thật.
+   3. Mở app "ChargeOps - xu ly su co", chọn một sự cố `open`, bấm **Xác nhận**.
+
+   Kỳ vọng:
+   - sự cố chuyển `acknowledged` trong ChargeOps;
+   - danh sách lệnh trong ChargeOps hiện nguồn "Datadog App";
+   - nút không hợp lệ bị tắt.
+7. **Kiểm tra gateway.** Tunnel chỉ mở 3 đường; mọi đường khác trả 404:
+   ```bash
+   curl -i https://YOUR-TUNNEL.trycloudflare.com/api/v1/incidents
+   ```
+   Kỳ vọng `404`. Thử thêm với chữ hoa (`/API/V1/INTEGRATIONS/DATADOG/INCIDENTS`) hoặc `//`, cũng phải là `404`.
 
 Lưu ý:
 
-- Tunnel đổi URL mỗi lần khởi động lại, nên phải chạy lại bước 4.
+- Tunnel đổi URL mỗi lần khởi động lại. Khi đó phải chạy lại bước 4 của mục 7 (kèm `--with-app` nếu dùng app).
 - Monitor "ChargeOps telemetry stale" vào trạng thái no-data khoảng 4 phút sau khi run kết thúc.
-- Monitor "ChargeOps worker heartbeat" báo khi `DD_METRICS_ENABLED=false`.
-- Hai monitor này không gọi webhook và không tạo sự cố.
+- Monitor "ChargeOps worker heartbeat" báo khi `DD_METRICS_ENABLED=false`. Hai monitor này không gọi webhook và không tạo sự cố.
 - Recovery từ Datadog không tự đóng sự cố; chỉ worker đóng sự cố sau retest 120 giây.
+- Bấm đúp một nút trong app có thể tạo lệnh thứ hai; worker từ chối lệnh đó (`command_rejected`).
+- Lỗi Datadog API, ví dụ thiếu quyền key, không ảnh hưởng phát hiện hay lệnh. Xem `docker compose logs datadog-sync` (sự kiện `datadog_sync_failed`, `datadog_notebook_failed`, `datadog_postmortem_failed`).
 
-## 8. Khi gặp lỗi
+## 9. Khi gặp lỗi
 
 | Hiện tượng | Kiểm tra |
 |---|---|
-| Container không lên hoặc restart liên tục | `docker compose logs --tail 50 <service>` với `api`, `worker`, `simulator`, `web`, `mongo` |
+| Container không lên hoặc restart liên tục | `docker compose logs --tail 50 <service>` với `api`, `worker`, `simulator`, `web`, `mongo`, `datadog-sync` |
 | Đăng nhập báo sai | Hash trong `.env` có nằm trong nháy đơn không; có đang vào bằng `localhost:8080` không |
 | Datadog không có dữ liệu | `DD_SITE` sai site, key không hợp lệ, run đang ở mode `local`, hoặc `.env` có biến trùng dòng |
+| Không có Datadog Incident / Notebook | `docker compose logs datadog-sync`. HTTP 403 nghĩa là `DD_APP_KEY` thiếu quyền incidents/notebooks |
 | Không có sự cố | Scenario có phải `thermal_fault` không; xem `docker compose logs worker` |
+| App trả 503 `actions_disabled` | `.env` thiếu `DATADOG_ACTION_SECRET`, hoặc chưa tạo lại api sau khi thêm |
 | `setup_datadog.py` báo thiếu module | `python -m pip install httpx python-dotenv` |
 
 Dọn dẹp, kể cả xóa dữ liệu MongoDB:
@@ -168,5 +230,16 @@ docker compose --profile observability down -v
 
 ## Những gì đã kiểm chứng và chưa
 
-- **Đã kiểm chứng:** test Python và web, khóa đánh giá v3.1, `docker compose config`. Ngày 20/10 đã chạy live luồng **1 connector** với MongoDB và Datadog thật (xem [MINIMAL_LOOP.md](MINIMAL_LOOP.md)).
-- **Chưa chạy live trên nhánh này:** fleet 6 connector, màn hình trạm, dashboard/monitor mới, simulator realism. Kết quả sẽ được ghi vào MINIMAL_LOOP.md sau lần chạy live đầu tiên.
+- **Đã kiểm chứng:**
+  - 325 test Python, 38 test web, `check:api`.
+  - Khóa đánh giá v3.1 vẫn được chấp nhận.
+  - `docker compose config` hợp lệ, `caddy validate` cho gateway.
+  - Ngày 20/10 đã chạy live luồng **1 connector** với MongoDB và Datadog thật (xem [MINIMAL_LOOP.md](MINIMAL_LOOP.md)).
+- **Chưa chạy live trên nhánh này:**
+  - fleet 6 connector, màn hình trạm, simulator realism;
+  - dashboard/monitor/SLO mới;
+  - `datadog-sync` (Incident, Notebook, postmortem trên MongoDB 8 thật);
+  - RUM;
+  - Datadog App: định nghĩa app và placeholder header `{{ actionSecret }}` chỉ kiểm được khi import thật.
+
+  Kết quả sẽ được ghi vào MINIMAL_LOOP.md sau lần chạy live đầu tiên.
