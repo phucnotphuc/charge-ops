@@ -292,3 +292,25 @@ def test_note_with_ambiguous_failure_is_not_repeated(monkeypatch):
     sync.sync_once(T + timedelta(minutes=2))
     assert len(postmortem_notes(client)) == 1
     assert db.datadog_sync.find_one({"_id": "inc-1"})["postmortem_note_done"] is True
+
+
+def outcome_calls(sync):
+    return [c.args[0] for c in sync.stats.increment.call_args_list if c.args[0].startswith("chargeops.slo.mitigation")]
+
+
+def test_incident_outcome_emitted_once_from_report_without_waiting_for_notebook(monkeypatch):
+    db, client, sync, calls = postmortem_setup(monkeypatch)
+    monkeypatch.setitem(REPORT, "seconds_to_effective_reduction", 120)
+    client.update_notebook.side_effect = DatadogError("PUT", "/api/v1/notebooks/12", 503)
+    sync.sync_once(T)
+    sync.sync_once(T + timedelta(minutes=2))
+    sync.sync_once(T + timedelta(minutes=10))
+    assert outcome_calls(sync) == ["chargeops.slo.mitigation.total", "chargeops.slo.mitigation.good"]
+    assert db.datadog_sync.find_one({"_id": "inc-1"})["outcome_emitted"] is True
+
+
+def test_no_incident_outcome_while_incident_open(monkeypatch):
+    db, client, sync, calls = postmortem_setup(monkeypatch)
+    db.incidents.update_one({"_id": "inc-1"}, {"$set": {"state": "open", "unresolved": True}})
+    sync.sync_once(T)
+    assert outcome_calls(sync) == []

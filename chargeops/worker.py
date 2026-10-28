@@ -19,7 +19,7 @@ from chargeops.domain import (
 )
 from chargeops.lifecycle import advance_incidents, expire_commands, on_alert, process_commands
 from chargeops.logging import event, logger
-from chargeops.observability import emit_heartbeat, emit_run_signals
+from chargeops.observability import emit_charging_slo, emit_heartbeat, emit_run_signals
 from chargeops.storage import database, fleet_window_rows, initialize
 
 WATCHED = ("inbox", "commands", "run_events")
@@ -331,6 +331,7 @@ def evaluate_window(db, stats, log, run, at, end, connector_id, rows):
     # Block means for the engineering dashboard only; alerting stays on the sample-weighted residual above.
     for field in GAUGE_FIELDS if block else ():
         stats.gauge(f"chargeops.{field}", sum(r[field] for r in block) / len(block), tags=tags)
+    emit_charging_slo(stats, run["_id"], connector_id, block[-1] if block else None)
     event(
         log,
         "metrics_emitted",

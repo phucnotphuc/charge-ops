@@ -53,3 +53,26 @@ def emit_timeline_events(db, stats, incident, tags):
         )
     if len(timeline) != cursor_before:
         db.dd_event_cursor.update_one({"_id": incident["_id"]}, {"$set": {"sent": len(timeline)}}, upsert=True)
+
+
+def emit_charging_slo(stats, run_id, connector_id, latest):
+    """One 15-second block = 0.25 charging minutes. Total: charging was requested; good: current was delivered."""
+    if not latest or latest.get("requested_current_a", 0) <= 0:
+        return
+    tags = connector_tags(run_id, connector_id)
+    stats.increment("chargeops.slo.charging_minutes.total", 0.25, tags=tags)
+    if latest.get("current_a", 0) > 0:
+        stats.increment("chargeops.slo.charging_minutes.good", 0.25, tags=tags)
+
+
+MITIGATION_TARGET_S = 300
+
+
+def emit_incident_outcome(stats, report):
+    """Once per incident: it counts when derating was verified, or reached mitigation without verification (bad)."""
+    seconds = report.get("seconds_to_effective_reduction")
+    if seconds is None and report.get("seconds_to_mitigated") is None:
+        return
+    stats.increment("chargeops.slo.mitigation.total", 1)
+    if seconds is not None and seconds <= MITIGATION_TARGET_S:
+        stats.increment("chargeops.slo.mitigation.good", 1)
