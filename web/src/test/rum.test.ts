@@ -46,6 +46,7 @@ describe("rum", () => {
       sessionSampleRate: 100,
       sessionReplaySampleRate: 0,
       trackUserInteractions: true,
+      trackResources: true,
       defaultPrivacyLevel: "mask-user-input",
     });
     const urls = cfg.allowedTracingUrls as { match: string }[];

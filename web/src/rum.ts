@@ -24,6 +24,8 @@ export function initRum(env: Env = import.meta.env): boolean {
     sessionSampleRate: 100,
     sessionReplaySampleRate: 0,
     trackUserInteractions: true,
+    // Off by default in SDK 5.x; without resource events a session cannot link its /api/ calls to APM traces.
+    trackResources: true,
     defaultPrivacyLevel: "mask-user-input",
     allowedTracingUrls: [{ match: `${window.location.origin}/api/`, propagatorTypes: ["datadog", "tracecontext"] }],
   });
