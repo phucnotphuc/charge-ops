@@ -93,6 +93,15 @@ RUM chỉ bật khi lúc build web có `DD_RUM_APPLICATION_ID` và `DD_RUM_CLIEN
 
 Ghi chú: tên option của `@datadog/browser-rum` 5.35.1 trùng kế hoạch (`allowedTracingUrls`, `sessionSampleRate`, `defaultPrivacyLevel`). `addTiming` đo từ đầu view, nên khoảng thời gian chính xác nằm ở `incident_seen_to_command_ms` trong context của action.
 
+## 5b. Datadog App: thao tác từ Datadog (B8)
+
+App Builder app "ChargeOps - xu ly su co" liệt kê sự cố đang mở và có bốn nút: Xác nhận, Giảm tải, Bảo trì, Kiểm tra phục hồi. Mỗi nút chỉ bật khi lệnh nằm trong `allowed_commands` của dòng đang chọn.
+
+- Tạo: `python scripts/setup_datadog.py --webhook-url https://TUNNEL/api/v1/webhooks/datadog --with-app`. Script tạo hoặc cập nhật HTTP connection `chargeops-actions` (base URL là origin của tunnel, header `X-Action-Secret` lấy từ `DATADOG_ACTION_SECRET`, không in ra) rồi tạo hoặc cập nhật app. Id lưu trong state (`app_connection`, `app`).
+- Nếu App Builder API trả 403/404 với key của tài khoản, script in các bước nhập tay (Import JSON với `scripts/datadog_app.json`) và tiếp tục.
+- Ranh giới an ninh: tunnel chỉ chuyển tiếp đúng ba đường dẫn: webhook, `POST /api/v1/integrations/datadog/actions` và `GET /api/v1/integrations/datadog/incidents`; mọi đường khác trả 404 và body tối đa 4 KB cho hai route App. Hai route App chỉ nhận `X-Action-Secret`; không dùng cookie hay secret của operator, không có demo-run, inject-fault, đăng nhập. Lệnh đi qua cùng cổng trạng thái với giao diện (worker kiểm lại), command ghi `actor: datadog-app`, và luôn cần một người bấm nút.
+- Không bao giờ ghi `DATADOG_ACTION_SECRET` vào log, commit hay ảnh chụp. Đổi secret: sửa `.env`, tạo lại api, chạy lại `--with-app`.
+
 ## 6. Chưa kiểm chứng thật
 
 Các điểm sau chưa được chạy trên Datadog thật tại thời điểm viết tài liệu này; chúng sẽ được kiểm chứng ở Task 8:

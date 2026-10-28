@@ -55,6 +55,7 @@ def main(argv=None, target=Path(".env")):
         file.write(f"SIMULATOR_SECRET={secrets.token_urlsafe(32)}\n")
         file.write(f"WEBHOOK_SECRET={secrets.token_urlsafe(32)}\n")
         file.write(f"OPERATOR_SECRET={secrets.token_urlsafe(32)}\n")
+        file.write(f"DATADOG_ACTION_SECRET={secrets.token_urlsafe(32)}\n")
         file.write(
             "DD_API_KEY=\nDD_APP_KEY=\nDD_SITE=datadoghq.com\nDD_MONITOR_ID=\nDD_TRIAL_ID=hackathon-2026\n"
         )
