@@ -49,6 +49,11 @@ def test_summary_pipeline_facets():
     assert incident_summary_pipeline(None)[0] == {"$match": {}}
 
 
+def test_mttm_is_time_to_verified_load_reduction():
+    durations = incident_summary_pipeline("run-1")[-1]["$facet"]["durations"]
+    assert "load_reduction_verified" in str(durations[0]) and "'mitigated'" not in str(durations[0])
+
+
 def test_summary_pipeline_filters_by_connectors():
     assert incident_summary_pipeline("r", ["connector-4"])[0] == {
         "$match": {"run_id": "r", "connector_id": {"$in": ["connector-4"]}}

@@ -71,4 +71,4 @@ def test_exact_queries_and_log_columns():
 
 
 def test_url():
-    assert notebook_url("ap1.datadoghq.com", 12) == "https://app.ap1.datadoghq.com/notebook/12"
+    assert notebook_url("ap1.datadoghq.com", 12) == "https://ap1.datadoghq.com/notebook/12"

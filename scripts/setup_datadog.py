@@ -161,8 +161,14 @@ def heartbeat_widget():
     )
 
 
+# Standalone script (no chargeops import): same rule as chargeops.datadog_client.ui_base.
+def ui_base(site):
+    """Datadog web UI origin: app.{site} for US1/EU/gov, the bare regional host for us3/us5/ap1/ap2."""
+    return f"https://{site}" if site.count(".") >= 2 else f"https://app.{site}"
+
+
 def dashboard_url(site, dashboard_id):
-    return f"https://app.{site}/dashboard/{dashboard_id}"
+    return f"{ui_base(site)}/dashboard/{dashboard_id}"
 
 
 def investigate(url):
@@ -170,7 +176,7 @@ def investigate(url):
 
 
 def composite_message(engineering_url, site):
-    logs = f"https://app.{site}/logs?query=" + quote("service:chargeops @run_id:{{run_id.name}}")
+    logs = f"{ui_base(site)}/logs?query=" + quote("service:chargeops @run_id:{{run_id.name}}")
     return "\n".join(
         ["ChargeOps thermal anomaly. @webhook-chargeops-minimal", investigate(engineering_url), f"Logs: {logs}"]
     )
@@ -465,7 +471,7 @@ def provision_app(client, state, tunnel, action_secret, save, site):
     published = client.post(f"/api/v2/app-builder/apps/{state['app']}/deployment")
     if published.is_error:
         print(f"App saved but not published (HTTP {published.status_code}); publish it in App Builder.")
-    print(f"App: https://app.{site}/app-builder/apps/{state['app']} (also under Datadog > Apps)")
+    print(f"App: {ui_base(site)}/app-builder/apps/{state['app']} (also under Datadog > Apps)")
     return True
 
 
@@ -607,7 +613,7 @@ def main():
     print("Extra monitors: stale, worker heartbeat, derating not resolving (no webhook).")
     print(f"Set DD_MONITOR_ID={state['composite']} in .env, then recreate worker.")
     for key in DASHBOARDS:
-        print(f"Dashboard: https://app.{site}/dashboard/{state[key]}")
+        print(f"Dashboard: {ui_base(site)}/dashboard/{state[key]}")
     if args.with_app:
         tunnel = f"{parsed.scheme}://{parsed.netloc}"
         with httpx.Client(

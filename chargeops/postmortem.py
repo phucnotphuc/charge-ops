@@ -12,20 +12,10 @@ Assumptions:
   sample_id, power_kw * 5 s / 3600.
 """
 
+from chargeops.insights import first_event_at
+
 SAMPLE_PERIOD_S = 5
 LEAD_MS = 60_000
-
-
-def _event_at(name):
-    return {
-        "$first": {
-            "$map": {
-                "input": {"$filter": {"input": "$timeline", "as": "t", "cond": {"$eq": ["$$t.event", name]}}},
-                "as": "t",
-                "in": "$$t.at",
-            }
-        }
-    }
 
 
 def _seconds(field):
@@ -43,11 +33,11 @@ def postmortem_pipeline(incident_id):
         {"$match": {"_id": incident_id}},
         {
             "$set": {
-                "ack_at": _event_at("acknowledge"),
-                "verified_at": _event_at("load_reduction_verified"),
-                "mitigated_at": _event_at("mitigated"),
-                "resolved_at": _event_at("resolved"),
-                "stopped_at": _event_at("run_stopped"),
+                "ack_at": first_event_at("acknowledge"),
+                "verified_at": first_event_at("load_reduction_verified"),
+                "mitigated_at": first_event_at("mitigated"),
+                "resolved_at": first_event_at("resolved"),
+                "stopped_at": first_event_at("run_stopped"),
             }
         },
         {"$set": {"closed_at": {"$ifNull": ["$resolved_at", "$stopped_at"]}}},

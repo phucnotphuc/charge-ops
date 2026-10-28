@@ -38,15 +38,15 @@ export function markIncidentSeen(incidentId: string): void {
   lastSeen = incidentId;
 }
 
-/** Records an operator command as a RUM action and, once per incident, the seen-to-command timing. */
+/** Records an operator command as a RUM action carrying, once per incident, incident_seen_to_command_ms. */
 export function trackCommand(type: string, context: Record<string, unknown>): void {
   if (!enabled) return;
   const ctx: Record<string, unknown> = { type, ...context };
   const id = typeof context.incident_id === "string" ? context.incident_id : lastSeen;
   const started = id ? seenAt.get(id) : undefined;
   if (id && started !== undefined) {
+    // Not addTiming: it measures from the current view's start, not from seenAt.
     ctx.incident_seen_to_command_ms = Date.now() - started;
-    datadogRum.addTiming("incident_seen_to_command_ms");
     seenAt.delete(id);
   }
   datadogRum.addAction("command_sent", ctx);

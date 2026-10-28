@@ -61,8 +61,7 @@ describe("rum", () => {
     rum.markIncidentSeen("i1");
     rum.markIncidentSeen("i1");
     rum.trackCommand("reduce_load", { incident_id: "i1" });
-    expect(sdk.addTiming).toHaveBeenCalledTimes(1);
-    expect(sdk.addTiming).toHaveBeenCalledWith("incident_seen_to_command_ms");
+    expect(sdk.addTiming).not.toHaveBeenCalled();
     expect(sdk.addAction).toHaveBeenLastCalledWith(
       "command_sent",
       expect.objectContaining({ type: "reduce_load", incident_seen_to_command_ms: expect.any(Number) }),

@@ -104,7 +104,7 @@ def incident_summary_pipeline(run_id, connector_ids=None):
                         "$project": {
                             "opened_at": 1,
                             "ack_at": first_event_at("acknowledge"),
-                            "mitigated_at": first_event_at("mitigated"),
+                            "verified_at": first_event_at("load_reduction_verified"),
                             "resolved_at": first_event_at("resolved"),
                         }
                     },
@@ -112,7 +112,8 @@ def incident_summary_pipeline(run_id, connector_ids=None):
                         "$group": {
                             "_id": None,
                             "mtta_s": {"$avg": seconds_between("$opened_at", "$ack_at")},
-                            "mttm_s": {"$avg": seconds_between("$opened_at", "$mitigated_at")},
+                            # MTTM = time to verified load reduction, like the postmortem and the 5-minute SLO.
+                            "mttm_s": {"$avg": seconds_between("$opened_at", "$verified_at")},
                             "mttr_s": {"$avg": seconds_between("$opened_at", "$resolved_at")},
                         }
                     },

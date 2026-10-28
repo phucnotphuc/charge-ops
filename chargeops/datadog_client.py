@@ -13,6 +13,11 @@ import httpx
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
 
+def ui_base(site):
+    """Datadog web UI origin: app.{site} for US1/EU/gov, the bare regional host for us3/us5/ap1/ap2."""
+    return f"https://{site}" if site.count(".") >= 2 else f"https://app.{site}"
+
+
 class DatadogError(Exception):
     def __init__(self, method, path, status):
         super().__init__(f"Datadog {method} {path}: HTTP {status}")
@@ -67,7 +72,7 @@ class DatadogClient:
                 raise DatadogError(method, path, response.status_code) from None
 
     def incident_url(self, public_id):
-        return f"https://app.{self.site}/incidents/{public_id}"
+        return f"{ui_base(self.site)}/incidents/{public_id}"
 
     def create_incident(self, title, chargeops_incident_id):
         # The ChargeOps id stays in the title so find_incident can recover it after a restart.

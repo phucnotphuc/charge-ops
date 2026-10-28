@@ -23,7 +23,7 @@ def setup(mode="datadog", timeline=None, state="open"):
     )
     client = Mock()
     client.create_incident.return_value = {"id": "dd-1", "public_id": 7}
-    client.incident_url.return_value = "https://app.ap1.datadoghq.com/incidents/7"
+    client.incident_url.return_value = "https://ap1.datadoghq.com/incidents/7"
     client.find_incident.return_value = None
     client.create_notebook.return_value = 12
     return db, client, DatadogSync(db, client, Mock(), Mock(), "ap1.datadoghq.com")
@@ -124,7 +124,7 @@ def test_notebook_created_and_attached_once():
     sync.sync_once(T + timedelta(seconds=5))
     client.create_notebook.assert_called_once()
     assert client.create_notebook.call_args.args[0]["name"].endswith("[inc-1]")
-    client.attach_link.assert_called_once_with("dd-1", "https://app.ap1.datadoghq.com/notebook/12", "Notebook điều tra")
+    client.attach_link.assert_called_once_with("dd-1", "https://ap1.datadoghq.com/notebook/12", "Notebook điều tra")
     doc = db.datadog_sync.find_one({"_id": "inc-1"})
     assert doc["notebook_id"] == 12 and doc["notebook_url"].endswith("/notebook/12")
 

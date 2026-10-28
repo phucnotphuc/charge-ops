@@ -7,11 +7,13 @@ be "investigation" or "postmortem"; status is "published"."""
 
 from datetime import UTC, datetime, timedelta
 
+from chargeops.datadog_client import ui_base
+
 PAD = timedelta(minutes=5)
 
 
 def notebook_url(site, notebook_id):
-    return f"https://app.{site}/notebook/{notebook_id}"
+    return f"{ui_base(site)}/notebook/{notebook_id}"
 
 
 def _ts(title, queries):

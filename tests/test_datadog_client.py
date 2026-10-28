@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from chargeops.datadog_client import DatadogClient, DatadogError
+from chargeops.datadog_client import DatadogClient, DatadogError, ui_base
 
 
 def client(handler):
@@ -76,8 +76,15 @@ def test_http_date_retry_after_falls_back_to_backoff(monkeypatch):
     assert client(handler).create_incident("t", "inc-1")["id"] == "x"
 
 
+def test_ui_base_per_site():
+    assert ui_base("datadoghq.com") == "https://app.datadoghq.com"
+    assert ui_base("datadoghq.eu") == "https://app.datadoghq.eu"
+    assert ui_base("us5.datadoghq.com") == "https://us5.datadoghq.com"
+    assert ui_base("ap1.datadoghq.com") == "https://ap1.datadoghq.com"
+
+
 def test_incident_url():
-    assert client(lambda r: httpx.Response(200)).incident_url(42) == "https://app.ap1.datadoghq.com/incidents/42"
+    assert client(lambda r: httpx.Response(200)).incident_url(42) == "https://ap1.datadoghq.com/incidents/42"
 
 
 def test_incident_note_creates_a_completed_todo():

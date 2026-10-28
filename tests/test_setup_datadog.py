@@ -5,7 +5,7 @@ spec = importlib.util.spec_from_file_location("setup_datadog", Path(__file__).pa
 sd = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sd)
 
-URL = "https://app.ap1.datadoghq.com/dashboard/abc-def-ghi"
+URL = "https://ap1.datadoghq.com/dashboard/abc-def-ghi"
 
 
 def titles(board):
@@ -51,7 +51,7 @@ def test_composite_message_links_dashboard_and_logs_and_keeps_webhook():
     message = sd.composite_message(URL, "ap1.datadoghq.com")
     assert "@webhook-chargeops-minimal" in message
     assert URL + "?tpl_var_run_id={{run_id.name}}&tpl_var_connector_id={{connector_id.name}}" in message
-    assert "https://app.ap1.datadoghq.com/logs?query=" in message
+    assert "https://ap1.datadoghq.com/logs?query=" in message
 
 
 def test_dashboard_url():
