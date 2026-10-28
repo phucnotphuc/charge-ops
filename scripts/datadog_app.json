@@ -1,0 +1,107 @@
+{
+  "name": "ChargeOps - xu ly su co",
+  "description": "List open ChargeOps incidents and send gated commands (acknowledge, reduce load, maintenance, verify recovery). A human click is required; the worker re-checks every gate.",
+  "rootInstanceName": "grid0",
+  "components": [
+    {
+      "name": "grid0",
+      "type": "grid",
+      "properties": { "children": [
+        { "name": "title", "type": "text", "properties": { "content": "# ChargeOps - su co dang mo", "contentType": "markdown" }, "events": [] },
+        {
+          "name": "incidentsTable",
+          "type": "table",
+          "properties": {
+            "data": "${listIncidents.outputs.body.items}",
+            "columns": [
+              { "dataPath": "incident_id", "header": "Incident" },
+              { "dataPath": "station_id", "header": "Tram" },
+              { "dataPath": "connector_id", "header": "Connector" },
+              { "dataPath": "state", "header": "Trang thai" },
+              { "dataPath": "allowed_commands", "header": "Lenh cho phep" }
+            ],
+            "selectionType": "single"
+          },
+          "events": []
+        },
+        {
+          "name": "ackButton", "type": "button",
+          "properties": { "label": "Xac nhan", "isDisabled": "${!(incidentsTable.selectedRow?.allowed_commands || []).includes('acknowledge')}" },
+          "events": [{ "name": "click", "type": "triggerQuery", "queryName": "actAcknowledge" }]
+        },
+        {
+          "name": "reduceButton", "type": "button",
+          "properties": { "label": "Giam tai", "isDisabled": "${!(incidentsTable.selectedRow?.allowed_commands || []).includes('reduce_load')}" },
+          "events": [{ "name": "click", "type": "triggerQuery", "queryName": "actReduceLoad" }]
+        },
+        {
+          "name": "maintenanceButton", "type": "button",
+          "properties": { "label": "Bao tri", "isDisabled": "${!(incidentsTable.selectedRow?.allowed_commands || []).includes('maintenance')}" },
+          "events": [{ "name": "click", "type": "triggerQuery", "queryName": "actMaintenance" }]
+        },
+        {
+          "name": "verifyButton", "type": "button",
+          "properties": { "label": "Kiem tra phuc hoi", "isDisabled": "${!(incidentsTable.selectedRow?.allowed_commands || []).includes('verify_recovery')}" },
+          "events": [{ "name": "click", "type": "triggerQuery", "queryName": "actVerifyRecovery" }]
+        }
+      ] }
+    }
+  ],
+  "queries": [
+    {
+      "id": "listIncidents-query",
+      "name": "listIncidents",
+      "type": "action",
+      "events": [],
+      "properties": {
+        "spec": {
+          "fqn": "com.datadoghq.http.request",
+          "connectionId": "__CONNECTION_ID__",
+          "inputs": { "verb": "GET", "url": "__TUNNEL__/api/v1/integrations/datadog/incidents" }
+        },
+        "onlyTriggerManually": false,
+        "mockedOutputs": "{\"body\": {\"items\": []}}"
+      }
+    },
+    {
+      "id": "actAcknowledge-query", "name": "actAcknowledge", "type": "action",
+      "events": [{ "name": "success", "type": "triggerQuery", "queryName": "listIncidents" }],
+      "properties": { "spec": {
+        "fqn": "com.datadoghq.http.request", "connectionId": "__CONNECTION_ID__",
+        "inputs": { "verb": "POST", "url": "__TUNNEL__/api/v1/integrations/datadog/actions",
+          "headers": [{ "key": "Idempotency-Key", "value": [ "${'dd-' + incidentsTable.selectedRow?.incident_id + '-acknowledge-' + Date.now()}" ] }],
+          "body": { "incident_id": "${incidentsTable.selectedRow?.incident_id}", "command": "acknowledge" }, "bodyType": "application/json" } },
+        "onlyTriggerManually": true }
+    },
+    {
+      "id": "actReduceLoad-query", "name": "actReduceLoad", "type": "action",
+      "events": [{ "name": "success", "type": "triggerQuery", "queryName": "listIncidents" }],
+      "properties": { "spec": {
+        "fqn": "com.datadoghq.http.request", "connectionId": "__CONNECTION_ID__",
+        "inputs": { "verb": "POST", "url": "__TUNNEL__/api/v1/integrations/datadog/actions",
+          "headers": [{ "key": "Idempotency-Key", "value": [ "${'dd-' + incidentsTable.selectedRow?.incident_id + '-reduce_load-' + Date.now()}" ] }],
+          "body": { "incident_id": "${incidentsTable.selectedRow?.incident_id}", "command": "reduce_load" }, "bodyType": "application/json" } },
+        "onlyTriggerManually": true }
+    },
+    {
+      "id": "actMaintenance-query", "name": "actMaintenance", "type": "action",
+      "events": [{ "name": "success", "type": "triggerQuery", "queryName": "listIncidents" }],
+      "properties": { "spec": {
+        "fqn": "com.datadoghq.http.request", "connectionId": "__CONNECTION_ID__",
+        "inputs": { "verb": "POST", "url": "__TUNNEL__/api/v1/integrations/datadog/actions",
+          "headers": [{ "key": "Idempotency-Key", "value": [ "${'dd-' + incidentsTable.selectedRow?.incident_id + '-maintenance-' + Date.now()}" ] }],
+          "body": { "incident_id": "${incidentsTable.selectedRow?.incident_id}", "command": "maintenance" }, "bodyType": "application/json" } },
+        "onlyTriggerManually": true }
+    },
+    {
+      "id": "actVerifyRecovery-query", "name": "actVerifyRecovery", "type": "action",
+      "events": [{ "name": "success", "type": "triggerQuery", "queryName": "listIncidents" }],
+      "properties": { "spec": {
+        "fqn": "com.datadoghq.http.request", "connectionId": "__CONNECTION_ID__",
+        "inputs": { "verb": "POST", "url": "__TUNNEL__/api/v1/integrations/datadog/actions",
+          "headers": [{ "key": "Idempotency-Key", "value": [ "${'dd-' + incidentsTable.selectedRow?.incident_id + '-verify_recovery-' + Date.now()}" ] }],
+          "body": { "incident_id": "${incidentsTable.selectedRow?.incident_id}", "command": "verify_recovery" }, "bodyType": "application/json" } },
+        "onlyTriggerManually": true }
+    }
+  ]
+}

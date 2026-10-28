@@ -48,7 +48,7 @@ services:
       retries: 20
   api:
     <<: *app
-    environment: {<<: *env, DD_SERVICE: chargeops-api}
+    environment: {<<: *env, DD_SERVICE: chargeops-api, DATADOG_ACTION_SECRET: "${DATADOG_ACTION_SECRET:-}"}
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/ready')"]
       interval: 5s

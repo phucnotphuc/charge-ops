@@ -9,6 +9,27 @@
         }
         reverse_proxy api:8000
     }
+    # Datadog App (App Builder): exactly these two routes; the API requires X-Action-Secret on both.
+    @actions {
+        method POST
+        path /api/v1/integrations/datadog/actions
+    }
+    @incidents {
+        method GET
+        path /api/v1/integrations/datadog/incidents
+    }
+    handle @actions {
+        request_body {
+            max_size 4KB
+        }
+        reverse_proxy api:8000
+    }
+    handle @incidents {
+        request_body {
+            max_size 4KB
+        }
+        reverse_proxy api:8000
+    }
     handle {
         respond "Not found" 404
     }

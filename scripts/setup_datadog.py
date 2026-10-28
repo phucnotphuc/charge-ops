@@ -378,6 +378,79 @@ def platform_dashboard():
     )
 
 
+APP_FILE = Path(__file__).with_name("datadog_app.json")
+CONNECTION_NAME = "chargeops-actions"
+MANUAL_APP_STEPS = """App Builder API unavailable for this account/key; import the app by hand instead:
+  1. Datadog > Actions > Connections > New: HTTP, base URL = {tunnel}, authentication = Token Auth,
+     secret token 'actionSecret' = the value of DATADOG_ACTION_SECRET in .env,
+     header 'X-Action-Secret' = {{{{ actionSecret }}}}. Name it '{name}'. (Never paste the secret anywhere else.)
+  2. Datadog > App Builder > New App > Import JSON, paste scripts/datadog_app.json after replacing
+     __TUNNEL__ with {tunnel} and __CONNECTION_ID__ with the id of the connection from step 1.
+  3. Save and publish the app."""
+
+
+def app_definition(tunnel, connection_id):
+    text = APP_FILE.read_text(encoding="utf-8").replace("__TUNNEL__", tunnel).replace("__CONNECTION_ID__", connection_id)
+    return json.loads(text)
+
+
+def provision_app(client, state, tunnel, action_secret, save, site):
+    """Create/update the HTTP connection and the App via the v2 API. Returns False (after printing the
+    manual Import JSON steps) when App Builder or Action Connections are not reachable (403/404).
+    `client` is rooted at https://api.<site>; the action secret only ever goes into the connection body."""
+
+    def fall_back(step, response):
+        # Never print the response body: it could echo the connection payload.
+        print(f"{step}: HTTP {response.status_code}.")
+        print(MANUAL_APP_STEPS.format(tunnel=tunnel, name=CONNECTION_NAME))
+        return False
+
+    connection = {
+        "data": {
+            "type": "action_connection",
+            "attributes": {
+                "name": CONNECTION_NAME,
+                "integration": {
+                    "type": "HTTP",
+                    "base_url": tunnel,
+                    "credentials": {
+                        "type": "HTTPTokenAuth",
+                        "tokens": [{"name": "actionSecret", "type": "SECRET", "value": action_secret}],
+                        "headers": [{"name": "X-Action-Secret", "value": "{{ actionSecret }}"}],
+                    },
+                },
+            },
+        }
+    }
+    if "app_connection" in state:
+        response = client.patch(f"/api/v2/actions/connections/{state['app_connection']}", json=connection)
+    else:
+        response = client.post("/api/v2/actions/connections", json=connection)
+    if response.status_code in (403, 404):
+        return fall_back("Action connection", response)
+    if response.is_error:
+        raise SystemExit(f"Action connection: HTTP {response.status_code}")
+    state["app_connection"] = state.get("app_connection") or response.json()["data"]["id"]
+    save()
+    attributes = app_definition(tunnel, state["app_connection"])
+    if "app" in state:
+        body = {"data": {"type": "appDefinitions", "id": state["app"], "attributes": attributes}}
+        response = client.patch(f"/api/v2/app-builder/apps/{state['app']}", json=body)
+    else:
+        response = client.post("/api/v2/app-builder/apps", json={"data": {"type": "appDefinitions", "attributes": attributes}})
+    if response.status_code in (403, 404):
+        return fall_back("App Builder", response)
+    if response.is_error:
+        raise SystemExit(f"App Builder: HTTP {response.status_code}")
+    state["app"] = state.get("app") or response.json()["data"]["id"]
+    save()
+    published = client.post(f"/api/v2/app-builder/apps/{state['app']}/deployment")
+    if published.is_error:
+        print(f"App saved but not published (HTTP {published.status_code}); publish it in App Builder.")
+    print(f"App: https://app.{site}/app-builder/apps/{state['app']}")
+    return True
+
+
 DASHBOARDS = {
     "dashboard": lambda state: engineering_dashboard(state),
     "dashboard_platform": lambda state: platform_dashboard(),
@@ -388,6 +461,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--webhook-url", required=True)
     parser.add_argument("--state", default="artifacts/datadog-resources.json")
+    parser.add_argument("--with-app", action="store_true", help="also create/update the Datadog App (B8)")
     args = parser.parse_args()
     load_dotenv()
     site = os.getenv("DD_SITE", "datadoghq.com")
@@ -406,6 +480,8 @@ def main():
     for key in ["DD_API_KEY", "DD_APP_KEY", "WEBHOOK_SECRET"]:
         if not os.getenv(key):
             parser.error(f"Missing {key}; configure locally in .env")
+    if args.with_app and not os.getenv("DATADOG_ACTION_SECRET"):
+        parser.error("Missing DATADOG_ACTION_SECRET; run scripts/init_env.py or add it to .env")
     state_path = Path(args.state)
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
@@ -510,6 +586,14 @@ def main():
         )
         state["composite"] = result["id"]
         save()
+    if args.with_app:
+        tunnel = f"{parsed.scheme}://{parsed.netloc}"
+        with httpx.Client(
+            base_url=f"https://api.{site}",
+            headers={"DD-API-KEY": os.environ["DD_API_KEY"], "DD-APPLICATION-KEY": os.environ["DD_APP_KEY"]},
+            timeout=30,
+        ) as app_client:
+            provision_app(app_client, state, tunnel, os.environ["DATADOG_ACTION_SECRET"], save, site)
     print("Extra monitors: stale, worker heartbeat, derating not resolving (no webhook).")
     print(f"Set DD_MONITOR_ID={state['composite']} in .env, then recreate worker.")
     for key in DASHBOARDS:
