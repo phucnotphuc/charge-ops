@@ -2,7 +2,8 @@
 
 Optional operator login:  --operator-user NAME  (prompts for the password)
                           --operator-password-stdin  (read the password from stdin instead)
-The scrypt hash is written with `$` doubled to `$$` so Compose does not interpolate it.
+The scrypt hash is written single-quoted: Compose and pydantic-settings (python-dotenv) both read a
+single-quoted .env value literally, so the same line works in containers and in host runs.
 """
 
 import argparse
@@ -15,10 +16,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from chargeops.auth import hash_password  # noqa: E402
 
 DEFAULT_ORIGINS = "http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173"
+EDIT_HINT = (
+    "edit the OPERATOR_USERNAME and OPERATOR_PASSWORD_HASH lines in .env "
+    "(python -m chargeops.auth hash, value in single quotes); keep the other lines, including Datadog keys"
+)
 
 
-def compose_escape(value):
-    return value.replace("$", "$$")
+def env_quote(value):
+    """Single-quoted .env value; a scrypt hash (base64 fields joined by `$`) never contains a quote."""
+    if "'" in value:
+        raise ValueError("value must not contain a single quote")
+    return f"'{value}'"
 
 
 def main(argv=None, target=Path(".env")):
@@ -28,6 +36,9 @@ def main(argv=None, target=Path(".env")):
     args = parser.parse_args(argv)
     if args.operator_password_stdin and not args.operator_user:
         parser.error("--operator-password-stdin requires --operator-user")
+    if target.exists():  # before any prompt: never overwrite secrets or ask for a password in vain
+        print(f"{target} already exists and was left unchanged. To set the operator login, {EDIT_HINT}.")
+        raise SystemExit(1)
 
     username, password_hash = "operator", ""
     if args.operator_user:
@@ -38,12 +49,13 @@ def main(argv=None, target=Path(".env")):
             password = getpass.getpass("Operator password: ")
         if not password:
             parser.error("operator password must not be empty")
-        password_hash = compose_escape(hash_password(password))
+        password_hash = env_quote(hash_password(password))
 
     with target.open("x", encoding="utf-8") as file:
         file.write(f"SIMULATOR_SECRET={secrets.token_urlsafe(32)}\n")
         file.write(f"WEBHOOK_SECRET={secrets.token_urlsafe(32)}\n")
         file.write(f"OPERATOR_SECRET={secrets.token_urlsafe(32)}\n")
+        file.write(f"DATADOG_ACTION_SECRET={secrets.token_urlsafe(32)}\n")
         file.write(
             "DD_API_KEY=\nDD_APP_KEY=\nDD_SITE=datadoghq.com\nDD_MONITOR_ID=\nDD_TRIAL_ID=hackathon-2026\n"
         )
@@ -53,7 +65,7 @@ def main(argv=None, target=Path(".env")):
     if args.operator_user:
         print(f"Operator login configured for user '{username}'.")
     else:
-        print("No operator login yet: delete .env and rerun with --operator-user NAME, or set the hash by hand.")
+        print(f"No operator login yet: {EDIT_HINT}.")
 
 
 if __name__ == "__main__":

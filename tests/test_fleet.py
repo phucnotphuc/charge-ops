@@ -1,24 +1,28 @@
 """WP-W2B: two stations × three connectors, seeded faults, per-connector worker and command routing."""
 
-from datetime import UTC, datetime, timedelta
-from unittest.mock import Mock
+from datetime import timedelta
 from uuid import UUID, uuid5
 
 import pytest
-from fastapi.testclient import TestClient
+from conftest import OPERATOR, RUN, T0
 
-from chargeops.api import app
 from chargeops.domain import CONNECTORS, LOCATION, MANIFEST, window_evidence
 from chargeops.fleet import fleet_plan, physics, steady_load
 from chargeops.model import ORIGINAL_LIMIT_A, PROFILES
 from chargeops.simulator import Simulator
-from chargeops.worker import process_event, tick
+from chargeops.worker import process_event
 
-SIMULATOR = {"X-Simulator-Secret": "s" * 32}
-OPERATOR = {"X-Operator-Secret": "o" * 32}
+
+def test_realistic_healthy_run_opens_no_incident(fleet, store):
+    fleet.simulator = Simulator(fleet.sim_client, realism=True)
+    fleet.start("healthy", seed=3)
+    fleet.run_until(1800, worker=True)
+    assert store.incidents.count_documents({}) == 0
+    rows = sorted(store.telemetry.find({"meta.connector_id": "connector-1"}), key=lambda s: s["measured_at"])
+    assert rows[-1]["measured_at"] - rows[0]["measured_at"] >= timedelta(minutes=30)
+    assert rows[0]["ambient_temperature_c"] != rows[-1]["ambient_temperature_c"]  # ambient drifts over the run
+
 WEBHOOK = {"X-Webhook-Secret": "w" * 32}
-RUN = "00000000-0000-4000-8000-0000000000f1"
-T0 = datetime(2026, 10, 21, 3, 0, tzinfo=UTC)  # on a 15-second boundary
 
 
 def test_retry_old_fault_event_preserves_new_injection(store):
@@ -32,66 +36,6 @@ def test_retry_old_fault_event_preserves_new_injection(store):
     })
     assert consume_event("old", store) == {"status": "duplicate"}
     assert store.runs.find_one({"_id": RUN})["sim"]["connector-1"]["fault_injected_at"] == newer
-
-
-class Harness:
-    """Simulator, API and worker on one simulated clock; the simulator talks to the API over HTTP only."""
-
-    def __init__(self, store, monkeypatch):
-        self.store, self.clock = store, [T0]
-        monkeypatch.setattr("chargeops.api.now", lambda: self.clock[0])
-        monkeypatch.setattr("chargeops.worker.now", lambda: self.clock[0])
-        self.client = TestClient(app)
-        self.sim_client = TestClient(app, headers=SIMULATOR)
-        self.simulator = Simulator(self.sim_client)
-        self.stats = Mock()
-        self.t = 0
-
-    def start(self, scenario, seed, mode="local", profile=None):
-        self.store.runs.insert_one(
-            {
-                "_id": RUN,
-                "status": "active",
-                "mode": mode,
-                "scenario": scenario,
-                "seed": seed,
-                "profile_id": profile,
-                "created_at": T0,
-                "started_at": T0,
-                "active_slot": "single",
-                "stop_requested": False,
-            }
-        )
-
-    def run_until(self, seconds, worker=True):
-        while self.t <= seconds:
-            self.clock[0] = T0 + timedelta(seconds=self.t)
-            self.simulator.step(self.clock[0])
-            if worker:
-                tick(self.store, self.stats, Mock())
-            self.t += 5
-
-    def run_while(self, busy, limit):
-        """Advance step by step while `busy()` holds, up to `limit` seconds."""
-        while busy() and self.t <= limit:
-            self.run_until(self.t)
-
-    def command(self, incident_id, kind):
-        response = self.client.post(
-            f"/api/v1/incidents/{incident_id}/commands",
-            json={"type": kind},
-            headers={**OPERATOR, "Idempotency-Key": f"{incident_id}-{kind}"},
-        )
-        assert response.status_code == 202
-        return response.json()["command_id"]
-
-    def incidents(self):
-        return list(self.store.incidents.find())
-
-
-@pytest.fixture
-def fleet(store, monkeypatch):
-    return Harness(store, monkeypatch)
 
 
 def test_two_stations_three_connectors_each():
@@ -374,6 +318,16 @@ def test_datadog_metrics_tagged_per_connector_and_station(fleet, store):
         (f"connector_id:{c}", f"station_id:{LOCATION[c][0]}") for c in CONNECTORS
     }
     assert all(t[0] == f"run_id:{RUN}" for t in tags)
+    names = {call.args[0] for call in fleet.stats.gauge.call_args_list}
+    assert "chargeops.incident.open" in names
+
+
+def test_local_mode_emits_no_incident_signals(fleet, store):
+    fleet.start("healthy", 3, mode="local")
+    fleet.run_until(120, worker=True)
+    names = {call.args[0] for call in fleet.stats.gauge.call_args_list}
+    assert "chargeops.incident.open" not in names
+    fleet.stats.event.assert_not_called()
 
 
 def test_inject_fault_accepts_every_connector_of_the_run(fleet, store):
@@ -444,3 +398,177 @@ def test_check_mongo_core_path_runs_on_the_fleet_scheme(store):
     store.runs.delete_many({})  # frees the single active slot for a second smoke run
     check_loop(store, "connector-6")
     assert store.incidents.count_documents({"connector_id": {"$in": ["connector-1", "connector-6"]}}) == 2
+
+
+def test_fleet_window_rows_equals_per_connector_window_rows(fleet, store):
+    """The worker's single fleet aggregation must give each connector exactly what window_rows gives it,
+    including the first-arrival dedup of a poisoned duplicate and a sample_id shared across connectors."""
+    from chargeops.storage import fleet_window_rows, window_rows
+
+    fleet.start("thermal_fault", seed=11)
+    fleet.run_until(180, worker=False)
+    end = T0 + timedelta(seconds=180)
+    original = store.telemetry.find_one(
+        {"meta.connector_id": "connector-2", "measured_at": end - timedelta(seconds=20)}
+    )
+    poisoned = {k: v for k, v in original.items() if k != "_id"}
+    poisoned.update(connector_temperature_c=999.0, received_at=original["received_at"] + timedelta(seconds=30))
+    store.telemetry.insert_one(poisoned)  # a later replay of the same sample_id must not win
+    shared = {k: v for k, v in original.items() if k != "_id"}
+    shared.update(connector_id="connector-5", meta={**original["meta"], "connector_id": "connector-5"})
+    store.telemetry.insert_one(shared)  # same sample_id on another connector is a different sample
+
+    fleet_rows = fleet_window_rows(store, RUN, end)
+    assert set(fleet_rows) == set(CONNECTORS)
+    for cid in CONNECTORS:
+        assert fleet_rows[cid] == window_rows(store, RUN, end, cid), cid
+    temps = [r["connector_temperature_c"] for r in fleet_rows["connector-2"]]
+    assert 999.0 not in temps and len(temps) == 12
+    assert sum(r["sample_id"] == original["sample_id"] for r in fleet_rows["connector-5"]) == 1
+
+
+def test_derating_slows_the_soc_rise_on_the_faulty_connector(fleet, store):
+    """What the station screen explains to drivers: a limited connector charges visibly slower."""
+    seed = 4
+    plan = fleet_plan(seed, "thermal_fault")
+    faulty = next(c for c, p in plan.items() if p.fault_onset_s is not None)
+    fleet.start("thermal_fault", seed)
+    fleet.run_while(lambda: not fleet.incidents(), plan[faulty].fault_onset_s + 300)
+    incident = fleet.incidents()[0]
+    assert incident["connector_id"] == faulty
+
+    def soc():
+        return store.vehicle_states.find_one({"_id": f"{RUN}:{faulty}"})["soc_percent"]
+
+    def rise_over(seconds):
+        start = soc()
+        fleet.run_until(fleet.t + seconds)
+        return soc() - start
+
+    fleet.command(incident["_id"], "acknowledge")
+    before = rise_over(120)
+    fleet.command(incident["_id"], "reduce_load")
+    fleet.run_while(lambda: store.commands.find_one({"type": "reduce_load"})["status"] != "applied", 900)
+    fleet.run_until(fleet.t + 5)
+    assert store.incidents.find_one()["state"] == "mitigating"
+    after = rise_over(120)
+    assert 0 < after < before
+    latest = store.telemetry.find_one({"meta.connector_id": faulty}, sort=[("measured_at", -1)])
+    assert latest["current_limit_a"] < latest["requested_current_a"]
+    station = fleet.client.get(f"/api/v1/stations/{LOCATION[faulty][0]}").json()
+    assert {c["connector_id"]: c["status"] for c in station["connectors"]}[faulty] == "limited"
+
+
+def test_imperfect_telemetry_keeps_one_incident_on_the_faulty_connector(fleet, store):
+    fleet.simulator = Simulator(fleet.sim_client, realism=True)
+    plan = fleet_plan(4, "thermal_fault")
+    planned = next(c for c, p in plan.items() if p.fault_onset_s is not None)
+    fleet.start("thermal_fault", seed=4)
+    fleet.run_until(plan[planned].fault_onset_s + 300, worker=True)
+    opened = list(store.incidents.find({}, {"connector_id": 1}))
+    assert [i["connector_id"] for i in opened] == [planned]
+    ids = [s["sample_id"] for s in store.telemetry.find({})]
+    assert len(ids) > len(set(ids))  # duplicates were stored and must be deduped by the pipeline
+
+
+def test_empty_batch_still_posts_vehicles_and_new_run_drops_held_samples(fleet, store):
+    fleet.simulator = Simulator(fleet.sim_client, realism=True)
+    fleet.simulator.imperfect.late = 1.0
+    fleet.start("thermal_fault", seed=4)
+    fleet.run_until(0, worker=False)
+    assert store.telemetry.count_documents({}) == 0
+    assert store.vehicle_states.count_documents({}) == len(CONNECTORS)
+    assert fleet.simulator.imperfect.held
+    fleet.simulator.thermal = {}  # as if a new run started
+    run = {**store.runs.find_one(), "started_at": T0.isoformat()}
+    fleet.simulator.samples(run, T0 + timedelta(seconds=5))
+    assert fleet.simulator.imperfect.held == []
+
+
+def run_document(store, run_id):
+    return {**store.runs.find_one(), "_id": run_id, "started_at": T0.isoformat()}
+
+
+def test_realism_does_not_change_delivered_energy_or_soc(fleet, store):
+    """Sensor noise and telemetry faults touch reported samples only, never the integration behind the SoC."""
+    fleet.start("thermal_fault", seed=4)
+    run = run_document(store, RUN)
+    plain, realistic = Simulator(fleet.sim_client), Simulator(fleet.sim_client, realism=True)
+    for seconds in range(0, 1200, 5):
+        measured = T0 + timedelta(seconds=seconds)
+        _, plans, _ = plain.samples(run, measured)
+        realistic.samples(run, measured)
+    assert plain.delivered == realistic.delivered
+    assert plain.vehicles(run, plans, measured) == realistic.vehicles(run, plans, measured)
+    assert all(kwh > 0 for kwh, _ in plain.delivered.values())
+
+
+def test_failed_post_retries_the_identical_batch_without_rerolling_imperfections(fleet, store):
+    import httpx
+
+    fleet.simulator = Simulator(fleet.sim_client, realism=True)
+    fleet.simulator.imperfect.drop, fleet.simulator.imperfect.duplicate = 0.0, 0.0
+    fleet.simulator.imperfect.late = 0.5
+    fleet.start("healthy", seed=5)
+    original, posted = fleet.sim_client.post, []
+
+    def flaky(url, **kwargs):
+        if url.endswith("/telemetry/batch"):
+            posted.append(kwargs["json"]["samples"])
+            if len(posted) == 1:
+                raise httpx.ConnectError("down")
+        return original(url, **kwargs)
+
+    fleet.sim_client.post = flaky
+    with pytest.raises(httpx.ConnectError):
+        fleet.simulator.step(T0)
+    held = list(fleet.simulator.imperfect.held)
+    assert held and len(posted[0]) == len(CONNECTORS) - len(held)
+    fleet.simulator.step(T0 + timedelta(seconds=5))  # retry: same batch, nothing re-rolled or re-released
+    assert posted[1] == posted[0]
+    assert fleet.simulator.imperfect.held == held
+    fleet.simulator.imperfect.late = 0.0
+    fleet.simulator.step(T0 + timedelta(seconds=10))
+    sent = [s["sample_id"] for batch in (posted[0], posted[2]) for s in batch]
+    assert len(sent) == len(set(sent))  # a held sample is released exactly once
+    assert {h["sample_id"] for h in held} <= set(sent)
+
+
+def test_step_across_a_run_change_does_not_carry_held_samples(fleet, store):
+    other = "00000000-0000-4000-8000-0000000000f2"
+    fleet.simulator = Simulator(fleet.sim_client, realism=True)
+    fleet.simulator.imperfect.late = 1.0
+    fleet.start("healthy", seed=5)
+    fleet.simulator.step(T0)
+    assert fleet.simulator.imperfect.held  # everything of run 1 is held back
+    fleet.simulator.imperfect.late = 0.0
+    run = store.runs.find_one()
+    store.runs.delete_many({})
+    store.runs.insert_one({**run, "_id": other})
+    fleet.simulator.step(T0 + timedelta(seconds=5))
+    assert store.telemetry.count_documents({"meta.run_id": RUN}) == 0
+    assert store.telemetry.count_documents({"meta.run_id": other}) == len(CONNECTORS)
+    assert fleet.simulator.imperfect.held == []
+
+
+def test_delivered_energy_starts_at_the_first_soc_reading(fleet, store):
+    from chargeops.vehicles import SOC_PROFILES
+
+    assert any(p.soc_start_minute > 0 for p in SOC_PROFILES.values())
+    seed, plan = next(
+        (seed, plan)
+        for seed in range(40)
+        for plan in [fleet_plan(seed, "healthy")]
+        if any(SOC_PROFILES[p.profile_id].soc_start_minute > 0 for p in plan.values())
+    )
+    cid = next(c for c, p in plan.items() if SOC_PROFILES[p.profile_id].soc_start_minute > 0)
+    offset = SOC_PROFILES[plan[cid].profile_id].soc_start_minute * 60
+    fleet.start("healthy", seed)
+
+    def energy():
+        return store.vehicle_states.find_one({"_id": f"{RUN}:{cid}"})["energy_kwh"]
+
+    fleet.run_until(offset)  # up to and including the reading itself: nothing counted yet
+    assert energy() == 0.0
+    fleet.run_until(offset + 120)
+    assert energy() > 0.0

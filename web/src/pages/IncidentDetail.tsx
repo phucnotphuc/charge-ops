@@ -5,6 +5,7 @@ import { api, ApiError, newIdempotencyKey } from "../api/client";
 import { useAuth } from "../api/auth";
 import { usePolling } from "../api/hooks";
 import { idOf, type Command, type CommandType, type Incident } from "../api/types";
+import { markIncidentSeen, trackCommand } from "../rum";
 import { Async, ErrorBox } from "../components/Async";
 import { SourceBadge, StateBadge, StateStepper } from "../components/Badges";
 import {
@@ -32,10 +33,32 @@ const COMMANDS: { type: CommandType; allowed: (i: Incident) => boolean; hint: st
   },
   {
     type: "verify_recovery",
-    allowed: (i) => i.state === "mitigated",
+    // The worker rejects verify_recovery with maintenance_not_applied until maintenance has been applied.
+    allowed: (i) => i.state === "mitigated" && !!i.maintenance_applied_at,
     hint: "Khôi phục giới hạn tải gốc và kiểm tra 120 giây",
   },
 ];
+
+/** The gate for one command, from COMMANDS above (single source mirroring lifecycle.handle_command). */
+export function commandAllowed(incident: Incident, type: CommandType): boolean {
+  return COMMANDS.find((c) => c.type === type)?.allowed(incident) ?? false;
+}
+
+export const REDUCTION_REASON_LABEL: Record<string, string> = {
+  residual_not_recovered: "Đã giảm dòng nhưng nhiệt chưa phục hồi sau 120 s",
+  load_not_reduced: "Dòng chưa giảm",
+  insufficient_data: "Thiếu dữ liệu để xác nhận",
+};
+
+/** Vietnamese reason for a recorded reduction check; null when the worker recorded none. */
+export function reductionCheckText(incident: Incident): string | null {
+  if (!incident.reduction_check) return null;
+  const reason = incident.reduction_check_reason;
+  if (reason && REDUCTION_REASON_LABEL[reason]) return REDUCTION_REASON_LABEL[reason];
+  return incident.reduction_check === "load_reduction_unverified"
+    ? REDUCTION_REASON_LABEL.insufficient_data
+    : REDUCTION_REASON_LABEL.load_not_reduced;
+}
 
 const TERMINAL = ["applied", "failed", "timed_out"];
 
@@ -58,6 +81,10 @@ export function IncidentView({ incident, onChanged }: { incident: Incident; onCh
   const ack = latestAppliedReduction(incident);
   const verifiedAt = incident.load_reduction_verified_at ?? null;
 
+  useEffect(() => {
+    markIncidentSeen(incidentId);
+  }, [incidentId]);
+
   return (
     <div className="stack">
       <div className="page-head">
@@ -69,6 +96,21 @@ export function IncidentView({ incident, onChanged }: { incident: Incident; onCh
         Mã: {incidentId} · Run: {incident.run_id} · Mở lúc {fmtTime(incident.opened_at)} · Trạng thái từ{" "}
         {fmtTime(incident.state_since)}
       </p>
+      {(incident.datadog_incident_url || incident.datadog_notebook_url) && (
+        <p className="small" data-testid="datadog-links">
+          {incident.datadog_incident_url && (
+            <a href={incident.datadog_incident_url} target="_blank" rel="noreferrer">
+              Mở trên Datadog
+            </a>
+          )}
+          {incident.datadog_incident_url && incident.datadog_notebook_url && " · "}
+          {incident.datadog_notebook_url && (
+            <a href={incident.datadog_notebook_url} target="_blank" rel="noreferrer">
+              Notebook điều tra
+            </a>
+          )}
+        </p>
+      )}
       <StateStepper state={incident.state} />
 
       <div className="grid two">
@@ -89,14 +131,18 @@ export function IncidentView({ incident, onChanged }: { incident: Incident; onCh
               detail={
                 verifiedAt
                   ? `Cửa sổ 60 giây đạt điều kiện lúc ${fmtTime(verifiedAt)}`
-                  : incident.reduction_check === "load_reduction_ineffective"
-                    ? "Sau 120 giây dòng vẫn chưa giảm: lệnh chưa hiệu quả"
-                    : incident.reduction_check === "load_reduction_unverified"
-                      ? "Sau 120 giây dữ liệu chưa đủ để kết luận"
-                      : "Chưa có bằng chứng giảm dòng"
+                  : (reductionCheckText(incident) ?? "Chưa có bằng chứng giảm dòng")
               }
               warn={!!incident.reduction_check && !verifiedAt}
             />
+            {verifiedAt && incident.reduction_check_reason === "residual_not_recovered" && (
+              <ProofRow
+                ok={false}
+                warn
+                title="Giảm tải chưa hiệu quả"
+                detail={`${REDUCTION_REASON_LABEL.residual_not_recovered}: được phép bảo trì ngay`}
+              />
+            )}
           </div>
         </div>
 
@@ -203,6 +249,7 @@ function CommandPanel({
     setError(null);
     try {
       const accepted = await api.sendCommand(incidentId, type, newIdempotencyKey());
+      trackCommand(type, { incident_id: incidentId, command_id: accepted.command_id });
       setSent((s) => [{ commandId: accepted.command_id, type }, ...s]);
       onChanged?.();
     } catch (e) {
@@ -254,6 +301,7 @@ function CommandPanel({
           <thead>
             <tr>
               <th>Lệnh</th>
+              <th>Nguồn</th>
               <th>Trạng thái</th>
               <th>Tạo lúc</th>
               <th>Ghi chú</th>
@@ -263,6 +311,7 @@ function CommandPanel({
             {history.map((c) => (
               <tr key={idOf(c)}>
                 <td>{COMMAND_LABEL[c.type] ?? c.type}</td>
+                <td data-testid="command-actor">{actorLabel(c.actor)}</td>
                 <td>{COMMAND_STATUS_LABEL[c.status] ?? c.status}</td>
                 <td>{fmtTime(c.created_at)}</td>
                 <td>{c.error ?? ""}</td>
@@ -273,6 +322,13 @@ function CommandPanel({
       )}
     </div>
   );
+}
+
+/** Who requested a command, for the command list. */
+export function actorLabel(actor?: string | null): string {
+  if (actor === "datadog-app") return "Datadog App";
+  if (actor === "operator") return "Operator";
+  return actor ?? "";
 }
 
 /** Polls GET /commands/{id} every 5 s until the command is applied, failed or timed out. */
@@ -311,6 +367,7 @@ function TrackedCommand({ sent, onSettled }: { sent: Sent; onSettled?: () => voi
   return (
     <li data-testid="tracked-command">
       <strong>{COMMAND_LABEL[sent.type]}</strong>: {COMMAND_STATUS_LABEL[status] ?? status}
+      {command?.actor && <span className="muted small"> · {actorLabel(command.actor)}</span>}
       {status === "applied" && sent.type === "reduce_load" && (
         <span className="muted small"> · ACK chưa phải bằng chứng đã giảm dòng, chờ telemetry xác nhận</span>
       )}

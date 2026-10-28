@@ -116,6 +116,23 @@ export const REASON_LABEL: Record<string, string> = {
   demo_ended_unresolved: "Run demo đã kết thúc khi sự cố chưa giải quyết.",
 };
 
+export const STATION_NAMES: Record<string, string> = { "station-1": "Trạm sạc số 1", "station-2": "Trạm sạc số 2" };
+
+export const PUBLIC_STATUS_LABEL: Record<string, string> = {
+  idle: "Trống",
+  charging: "Đang sạc",
+  limited: "Đang sạc chậm để bảo vệ đầu sạc",
+  checking: "Đang kiểm tra sau bảo trì",
+  offline: "Tạm mất kết nối",
+};
+
+export function fmtEta(minutes: number | null | undefined): string {
+  if (minutes === null || minutes === undefined || !Number.isFinite(minutes)) return "—";
+  if (minutes <= 0) return "Đã đầy";
+  const m = Math.round(minutes);
+  return m >= 60 ? `khoảng ${Math.floor(m / 60)} giờ ${m % 60} phút` : `khoảng ${m} phút`;
+}
+
 export const COMPOSITION_LABEL: Record<string, string> = {
   synthetic: "Tổng hợp",
   public_replay: "Phát lại dữ liệu công khai",

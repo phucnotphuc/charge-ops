@@ -9,8 +9,9 @@ import { IncidentDetail } from "../pages/IncidentDetail";
 import { Overview } from "../pages/Overview";
 import { api, MAX_TELEMETRY_PAGES } from "../api/client";
 import { downsample } from "../lib/format";
-import { latestAppliedReduction } from "../pages/IncidentDetail";
-import { connector, incident } from "./fixtures";
+import { commandAllowed, latestAppliedReduction, reductionCheckText } from "../pages/IncidentDetail";
+import type { Incident } from "../api/types";
+import { connector, evaluation, incident } from "./fixtures";
 
 type Handler = (url: string, init?: RequestInit) => { status?: number; body?: unknown };
 
@@ -68,6 +69,39 @@ describe("incident screen", () => {
     await waitFor(() => expect(screen.queryByTestId("readonly-note")).not.toBeInTheDocument());
     if (allowed) expect(button).toBeEnabled();
     else expect(button).toBeDisabled();
+  });
+
+  it("shows Datadog links only when present", async () => {
+    const withLinks = {
+      ...incident(),
+      datadog_incident_url: "https://app.datadoghq.com/incidents/7",
+      datadog_notebook_url: "https://app.datadoghq.com/notebook/12",
+    };
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) return unauthenticated;
+      if (url.endsWith("/incidents/inc-1")) return { body: withLinks };
+      return { status: 404 };
+    });
+    const first = renderAt("/incidents/inc-1", <IncidentDetail />, "/incidents/:id");
+    const open = await screen.findByRole("link", { name: "Mở trên Datadog" });
+    expect(open).toHaveAttribute("href", withLinks.datadog_incident_url);
+    expect(open).toHaveAttribute("target", "_blank");
+    expect(open).toHaveAttribute("rel", "noreferrer");
+    expect(screen.getByRole("link", { name: "Notebook điều tra" })).toHaveAttribute(
+      "href",
+      withLinks.datadog_notebook_url,
+    );
+    first.unmount();
+
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) return unauthenticated;
+      if (url.endsWith("/incidents/inc-1")) return { body: incident() };
+      return { status: 404 };
+    });
+    renderAt("/incidents/inc-1", <IncidentDetail />, "/incidents/:id");
+    await screen.findByTestId("state-badge");
+    expect(screen.queryByRole("link", { name: "Mở trên Datadog" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Notebook điều tra" })).not.toBeInTheDocument();
   });
 
   it("renders state, source and the two-step proof, and disables commands for a viewer", async () => {
@@ -231,6 +265,30 @@ describe("demo control and evaluations", () => {
     renderAt("/evaluations", <Evaluations />);
     expect(await screen.findByTestId("empty")).toHaveTextContent("Chưa có kết quả đánh giá");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByTestId("sim-disclaimer")).toHaveTextContent("Chỉ là mô phỏng");
+  });
+
+  it("renders arms, detectors and targets from the committed summary shape", async () => {
+    const ev = evaluation();
+    const { summary_markdown: _md, healthy_connector_hours: _h, arms: _a, detectors: _d, ...item } = ev;
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) return unauthenticated;
+      if (url.endsWith("/evaluations")) return { body: { items: [item], next_cursor: null } };
+      if (url.endsWith("/evaluations/b1-eval-v3.1")) return { body: ev };
+      return { status: 404 };
+    });
+    renderAt("/evaluations", <Evaluations />);
+    const arms = await screen.findByTestId("arms");
+    expect(screen.getByTestId("sim-disclaimer")).toHaveTextContent("không phải kết quả chạy thật");
+    expect(arms).toHaveTextContent("C: ChargeOps");
+    expect(arms).toHaveTextContent("155 [100–455] (n=20)");
+    expect(arms).toHaveTextContent("— (n=0)"); // B has no mitigation: missing, never 0
+    expect(arms).toHaveTextContent("-22.54");
+    const detectors = screen.getByTestId("detectors");
+    expect(detectors).toHaveTextContent("Residual theo tải");
+    expect(detectors).toHaveTextContent("415 [230–740] (n=10)");
+    expect(screen.getByTestId("targets")).toHaveTextContent("C phát hiện ≥18/20 lỗi trước khi B trip: đạt");
+    expect(screen.getByRole("button", { name: "b1-eval-v3.1" })).toBeInTheDocument();
   });
 });
 
@@ -328,5 +386,88 @@ describe("ACK selection", () => {
       timeline: [{ at: "2026-10-20T05:00:00Z", event: "recurrence" }],
     });
     expect(latestAppliedReduction(old)).toBeUndefined();
+  });
+});
+
+describe("command gates", () => {
+  const operatorView = (over: Partial<Incident>) => {
+    mockFetch((url) => {
+      if (url.endsWith("/auth/me")) return me("operator");
+      if (url.endsWith("/incidents/inc-1")) return { body: incident(over) };
+      return { status: 404 };
+    });
+    renderAt("/incidents/inc-1", <IncidentDetail />, "/incidents/:id");
+  };
+  const verified = "2026-10-20T03:05:00Z";
+
+  it("shows who requested each command (Operator / Datadog App)", async () => {
+    operatorView({
+      commands: [
+        { id: "c1", type: "acknowledge", status: "applied", actor: "operator" },
+        { id: "c2", type: "reduce_load", status: "applied", actor: "datadog-app" },
+        { id: "c3", type: "maintenance", status: "failed" },
+      ],
+    });
+    const cells = await screen.findAllByTestId("command-actor");
+    expect(cells.map((c) => c.textContent)).toEqual(["Operator", "Datadog App", ""]);
+  });
+
+  it("unlocks maintenance while mitigating only for residual_not_recovered", () => {
+    const check = (reason: Incident["reduction_check_reason"]) =>
+      commandAllowed(
+        incident({ state: "mitigating", reduction_check: "load_reduction_ineffective", reduction_check_reason: reason }),
+        "maintenance",
+      );
+    expect(check("residual_not_recovered")).toBe(true);
+    expect(check("load_not_reduced")).toBe(false);
+    expect(check("insufficient_data")).toBe(false);
+    expect(commandAllowed(incident({ state: "mitigating" }), "maintenance")).toBe(false);
+    expect(commandAllowed(incident({ state: "mitigated" }), "maintenance")).toBe(true);
+    expect(commandAllowed(incident({ state: "acknowledged" }), "maintenance")).toBe(false);
+  });
+
+  it("blocks verify_recovery until maintenance is applied", () => {
+    expect(commandAllowed(incident({ state: "mitigated" }), "verify_recovery")).toBe(false);
+    expect(commandAllowed(incident({ state: "mitigated", maintenance_applied_at: verified }), "verify_recovery")).toBe(true);
+    expect(commandAllowed(incident({ state: "verifying", maintenance_applied_at: verified }), "verify_recovery")).toBe(false);
+  });
+
+  it("blocks reduce_load once the reduction is verified", () => {
+    expect(commandAllowed(incident({ state: "mitigating" }), "reduce_load")).toBe(true);
+    expect(commandAllowed(incident({ state: "acknowledged" }), "reduce_load")).toBe(true);
+    expect(commandAllowed(incident({ state: "mitigating", load_reduction_verified_at: verified }), "reduce_load")).toBe(false);
+    expect(commandAllowed(incident({ state: "open" }), "reduce_load")).toBe(false);
+  });
+
+  it("enables maintenance and shows the reason for residual_not_recovered", async () => {
+    operatorView({
+      state: "mitigating",
+      load_reduction_verified_at: verified,
+      reduction_check: "load_reduction_ineffective",
+      reduction_check_reason: "residual_not_recovered",
+    });
+    const maintenance = await screen.findByRole("button", { name: "Bảo trì" });
+    await waitFor(() => expect(maintenance).toBeEnabled());
+    expect(screen.getByRole("button", { name: "Giảm tải" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Kiểm tra phục hồi" })).toBeDisabled();
+    expect(screen.getByText(/Đã giảm dòng nhưng nhiệt chưa phục hồi sau 120 s/)).toBeInTheDocument();
+  });
+
+  it("keeps maintenance disabled and shows load_not_reduced in Vietnamese", async () => {
+    operatorView({ state: "mitigating", reduction_check: "load_reduction_ineffective", reduction_check_reason: "load_not_reduced" });
+    expect(await screen.findByText("Dòng chưa giảm")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Giảm tải" })).toBeEnabled());
+    expect(screen.getByRole("button", { name: "Bảo trì" })).toBeDisabled();
+    expect(
+      reductionCheckText(incident({ reduction_check: "load_reduction_unverified", reduction_check_reason: "insufficient_data" })),
+    ).toBe("Thiếu dữ liệu để xác nhận");
+    expect(reductionCheckText(incident({ reduction_check: "load_reduction_unverified" }))).toBe("Thiếu dữ liệu để xác nhận");
+    expect(reductionCheckText(incident())).toBeNull();
+  });
+
+  it("enables verify_recovery for an operator only after maintenance", async () => {
+    operatorView({ state: "mitigated", maintenance_applied_at: "2026-10-20T03:20:00Z" });
+    const verify = await screen.findByRole("button", { name: "Kiểm tra phục hồi" });
+    await waitFor(() => expect(verify).toBeEnabled());
   });
 });

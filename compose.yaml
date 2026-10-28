@@ -11,6 +11,7 @@ x-env: &env
   OPERATOR_PASSWORD_HASH: ${OPERATOR_PASSWORD_HASH:-}
   ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8080,http://127.0.0.1:8080,http://localhost:5173}
   DD_TRACE_ENABLED: ${DD_TRACE_ENABLED:-false}
+  DD_METRICS_ENABLED: ${DD_METRICS_ENABLED:-false}
   DD_INSTRUMENTATION_TELEMETRY_ENABLED: ${DD_INSTRUMENTATION_TELEMETRY_ENABLED:-false}
   DD_AGENT_HOST: datadog
   DD_ENV: hackathon
@@ -47,7 +48,7 @@ services:
       retries: 20
   api:
     <<: *app
-    environment: {<<: *env, DD_SERVICE: chargeops-api}
+    environment: {<<: *env, DD_SERVICE: chargeops-api, DATADOG_ACTION_SECRET: "${DATADOG_ACTION_SECRET:-}"}
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/ready')"]
       interval: 5s
@@ -56,6 +57,12 @@ services:
   web:
     build:
       context: ./web
+      args:
+        VITE_DD_RUM_APPLICATION_ID: "${DD_RUM_APPLICATION_ID:-}"
+        VITE_DD_RUM_CLIENT_TOKEN: "${DD_RUM_CLIENT_TOKEN:-}"
+        VITE_DD_SITE: "${DD_SITE:-datadoghq.com}"
+        VITE_DD_ENV: hackathon
+        VITE_DD_VERSION: "${APP_VERSION:-0.1.0}"
     ports: ["127.0.0.1:8080:8080"]
     volumes:
       - ./infra/Caddyfile.web:/etc/caddy/Caddyfile:ro
@@ -69,7 +76,7 @@ services:
     command: [python, -m, chargeops.worker]
   simulator:
     <<: *app
-    environment: {<<: *env, DD_SERVICE: chargeops-simulator}
+    environment: {<<: *env, DD_SERVICE: chargeops-simulator, SIM_REALISM: "${SIM_REALISM:-true}"}
     command: [python, -m, chargeops.simulator]
     depends_on:
       api:
@@ -88,6 +95,11 @@ services:
     volumes:
       - app-logs:/logs:ro
       - ./infra/datadog-logs.yaml:/etc/datadog-agent/conf.d/chargeops.d/conf.yaml:ro
+  datadog-sync:
+    <<: *app
+    profiles: [observability]
+    environment: {<<: *env, DD_SERVICE: chargeops-datadog-sync, DD_API_KEY: "${DD_API_KEY:-}", DD_APP_KEY: "${DD_APP_KEY:-}", DD_SITE: "${DD_SITE:-datadoghq.com}"}
+    command: [python, -m, chargeops.datadog_sync]
   webhook-gateway:
     image: caddy:2.9.1-alpine
     profiles: [observability]

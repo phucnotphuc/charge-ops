@@ -1,9 +1,10 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Activity, FlaskConical, Gauge, LogIn, LogOut, Siren, SlidersHorizontal } from "lucide-react";
+import { Activity, Building2, FlaskConical, Gauge, LogIn, LogOut, Siren, SlidersHorizontal } from "lucide-react";
 import { useAuth } from "../api/auth";
 
 const links = [
   { to: "/", label: "Tổng quan", icon: Gauge, end: true },
+  { to: "/stations/station-1/operator", label: "Trạm", icon: Building2, end: false },
   { to: "/incidents", label: "Sự cố", icon: Siren, end: false },
   { to: "/demo", label: "Điều khiển demo", icon: SlidersHorizontal, end: false },
   { to: "/evaluations", label: "Đánh giá", icon: FlaskConical, end: false },

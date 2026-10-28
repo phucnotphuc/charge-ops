@@ -123,6 +123,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/connectors/{connector_id}/trend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Connector Trend */
+        get: operations["connector_trend_api_v1_connectors__connector_id__trend_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/demo-runs": {
         parameters: {
             query?: never;
@@ -209,6 +226,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/evaluations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Evaluations
+         * @description Committed offline evaluation summaries (simulated clock), read-only and anonymous like other GETs.
+         */
+        get: operations["evaluations_api_v1_evaluations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/evaluations/{evaluation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Evaluation */
+        get: operations["evaluation_api_v1_evaluations__evaluation_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -271,6 +325,40 @@ export interface paths {
         put?: never;
         /** Create Command */
         post: operations["create_command_api_v1_incidents__incident_id__commands_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/fleet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fleet Insights */
+        get: operations["fleet_insights_api_v1_insights_fleet_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/insights/incidents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Incident Insights */
+        get: operations["incident_insights_api_v1_insights_incidents_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -387,6 +475,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/simulator/vehicles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ingest Vehicles */
+        post: operations["ingest_vehicles_api_v1_simulator_vehicles_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stations/{station_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Station Display
+         * @description Anonymous, read-only: the driver-facing screen. Reuses the connector latest-state pipeline.
+         */
+        get: operations["station_display_api_v1_stations__station_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/telemetry/batch": {
         parameters: {
             query?: never;
@@ -432,6 +557,71 @@ export interface components {
             /** State */
             state: string;
         };
+        /** Arm */
+        Arm: {
+            /** Commands */
+            commands: number;
+            /** Duplicate Commands */
+            duplicate_commands: number;
+            fault: components["schemas"]["ArmFault"];
+            healthy: components["schemas"]["ArmHealthy"];
+            /** Rejected Commands */
+            rejected_commands: number;
+        };
+        /** ArmFault */
+        ArmFault: {
+            /** Detected Any */
+            detected_any: number;
+            /** Detected Before Trip Among B Tripped */
+            detected_before_trip_among_b_tripped: number;
+            effective_mitigation_s: components["schemas"]["Stats"];
+            /** Final States */
+            final_states: {
+                [key: string]: number;
+            };
+            /** Interruption Min */
+            interruption_min: number;
+            /** Kwh */
+            kwh: number;
+            /** Kwh Delta Vs B */
+            kwh_delta_vs_b: number;
+            /** Kwh Delta While Derated */
+            kwh_delta_while_derated: number;
+            latency_s: components["schemas"]["Stats"];
+            lead_time_s: components["schemas"]["Stats"];
+            /** Maintenance Applied */
+            maintenance_applied: number;
+            mitigated_s: components["schemas"]["Stats"];
+            /** Pre Onset False */
+            pre_onset_false: number;
+            /** Recall Before Trip */
+            recall_before_trip: number;
+            /** Resolved */
+            resolved: number;
+            /** Seeds Tripped */
+            seeds_tripped: number;
+            /** Trips */
+            trips: number;
+        };
+        /** ArmHealthy */
+        ArmHealthy: {
+            /** By Scenario */
+            by_scenario: {
+                [key: string]: number;
+            };
+            /** False Alerts Per Connector Hour */
+            false_alerts_per_connector_hour: number | null;
+            /** Incidents */
+            incidents: number;
+            /** Kwh */
+            kwh: number;
+            /** Kwh Delta Vs B */
+            kwh_delta_vs_b: number;
+            /** Runs With Incident */
+            runs_with_incident: number;
+            /** Trips */
+            trips: number;
+        };
         /** Batch */
         Batch: {
             /** Samples */
@@ -457,6 +647,15 @@ export interface components {
              * @enum {string}
              */
             status: "applied" | "failed";
+        };
+        /** ConnectorCount */
+        ConnectorCount: {
+            /** Connector Id */
+            connector_id: string;
+            /** Count */
+            count: number;
+            /** Open */
+            open: number;
         };
         /** ConnectorList */
         ConnectorList: {
@@ -542,6 +741,100 @@ export interface components {
             /** Stopped At */
             stopped_at?: string | null;
         };
+        /** Detector */
+        Detector: {
+            /** Detected Any */
+            detected_any: number;
+            /** Detected Before Trip Among B Tripped */
+            detected_before_trip_among_b_tripped: number;
+            /** Healthy Alert Episodes Per Connector Hour */
+            healthy_alert_episodes_per_connector_hour: number | null;
+            /** Healthy By Scenario */
+            healthy_by_scenario: {
+                [key: string]: number;
+            };
+            /** Healthy Runs Alerting */
+            healthy_runs_alerting: number;
+            latency_s: components["schemas"]["Stats"];
+            lead_time_s: components["schemas"]["Stats"];
+            /** Pre Onset False */
+            pre_onset_false: number;
+            /** Recall Before Trip */
+            recall_before_trip: number;
+        };
+        /** EvaluationItem */
+        EvaluationItem: {
+            /** B Tripped Seeds */
+            b_tripped_seeds: number;
+            /** Fault Seeds */
+            fault_seeds: number;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Healthy Seeds */
+            healthy_seeds: number;
+            /** Id */
+            id: string;
+            locked: components["schemas"]["Locked"];
+            /** Protocol Version */
+            protocol_version: string;
+            /** Runs */
+            runs: number;
+            /** Runtime S */
+            runtime_s: number;
+            /**
+             * Simulation Only
+             * @default true
+             * @constant
+             */
+            simulation_only: true;
+            targets: components["schemas"]["Targets"];
+        };
+        /** EvaluationList */
+        EvaluationList: {
+            /** Items */
+            items: components["schemas"]["EvaluationItem"][];
+            /** Next Cursor */
+            next_cursor?: null;
+        };
+        /** EvaluationOut */
+        EvaluationOut: {
+            /** Arms */
+            arms: {
+                [key: string]: components["schemas"]["Arm"];
+            };
+            /** B Tripped Seeds */
+            b_tripped_seeds: number;
+            /** Detectors */
+            detectors: {
+                [key: string]: components["schemas"]["Detector"];
+            };
+            /** Fault Seeds */
+            fault_seeds: number;
+            /** Fingerprint */
+            fingerprint: string;
+            /** Healthy Connector Hours */
+            healthy_connector_hours: number;
+            /** Healthy Seeds */
+            healthy_seeds: number;
+            /** Id */
+            id: string;
+            locked: components["schemas"]["Locked"];
+            /** Protocol Version */
+            protocol_version: string;
+            /** Runs */
+            runs: number;
+            /** Runtime S */
+            runtime_s: number;
+            /**
+             * Simulation Only
+             * @default true
+             * @constant
+             */
+            simulation_only: true;
+            /** Summary Markdown */
+            summary_markdown: string | null;
+            targets: components["schemas"]["Targets"];
+        };
         /** FaultEventOut */
         FaultEventOut: {
             /** Connector Id */
@@ -566,10 +859,57 @@ export interface components {
              */
             connector_id: "connector-1" | "connector-2" | "connector-3" | "connector-4" | "connector-5" | "connector-6";
         };
+        /** FleetOut */
+        FleetOut: {
+            /** Run Id */
+            run_id: string;
+            /** Windows */
+            windows: components["schemas"]["FleetWindow"][];
+        };
+        /** FleetWindow */
+        FleetWindow: {
+            /** Connector Id */
+            connector_id: string;
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /** Quality */
+            quality: boolean;
+            /** Residual Mean */
+            residual_mean: number | null;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** IncidentSummary */
+        IncidentSummary: {
+            /** By Connector */
+            by_connector: components["schemas"]["ConnectorCount"][];
+            /** By State */
+            by_state: components["schemas"]["StateCount"][];
+            /** Mtta S */
+            mtta_s: number | null;
+            /** Mttm S */
+            mttm_s: number | null;
+            /** Mttr S */
+            mttr_s: number | null;
+            /** Total */
+            total: number;
+        };
+        /** Locked */
+        Locked: {
+            /** A Threshold C */
+            a_threshold_c: number;
+            /** C Alert C */
+            c_alert_c: number;
+            /** C Recovered C */
+            c_recovered_c: number;
+            /** Locked At */
+            locked_at: string;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -653,6 +993,64 @@ export interface components {
             /** Voltage V */
             voltage_v?: number | null;
         };
+        /** StateCount */
+        StateCount: {
+            /** Count */
+            count: number;
+            /** State */
+            state: string;
+        };
+        /** StationConnector */
+        StationConnector: {
+            /** Connector Id */
+            connector_id: string;
+            /** Connector Temperature C */
+            connector_temperature_c: number | null;
+            /** Current A */
+            current_a: number | null;
+            /** Energy Kwh */
+            energy_kwh: number | null;
+            /** Measured At */
+            measured_at: string | null;
+            /** Minutes To Full */
+            minutes_to_full: number | null;
+            /** Power Kw */
+            power_kw: number | null;
+            /** Soc Percent */
+            soc_percent: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "offline" | "idle" | "charging" | "limited" | "checking";
+        };
+        /** StationOut */
+        StationOut: {
+            /** Connectors */
+            connectors: components["schemas"]["StationConnector"][];
+            /** Station Id */
+            station_id: string;
+        };
+        /** Stats */
+        Stats: {
+            /** Max */
+            max: number | null;
+            /** Median */
+            median: number | null;
+            /** Min */
+            min: number | null;
+            /** N */
+            n: number;
+        };
+        /** Targets */
+        Targets: {
+            /** C Healthy Runs With Incident Le 1 */
+            c_healthy_runs_with_incident_le_1: boolean;
+            /** C Recall Before Trip Ge 18 Of 20 */
+            c_recall_before_trip_ge_18_of_20: boolean;
+            /** Duplicate Commands Zero */
+            duplicate_commands_zero: boolean;
+        };
         /** TelemetryItem */
         TelemetryItem: {
             /** Ambient Temperature C */
@@ -702,6 +1100,31 @@ export interface components {
             /** Next Cursor */
             next_cursor?: string | null;
         };
+        /** TrendOut */
+        TrendOut: {
+            /** Connector Id */
+            connector_id: string;
+            /** Points */
+            points: components["schemas"]["TrendPoint"][];
+            /** Run Id */
+            run_id: string;
+        };
+        /** TrendPoint */
+        TrendPoint: {
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /** Residual Avg 5M */
+            residual_avg_5m: number | null;
+            /** Residual Max 15M */
+            residual_max_15m: number | null;
+            /** Residual Mean */
+            residual_mean: number | null;
+            /** Residual Slope C Per Min */
+            residual_slope_c_per_min: number | null;
+        };
         /** UserOut */
         UserOut: {
             /**
@@ -724,6 +1147,37 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** VehicleBatch */
+        VehicleBatch: {
+            /** Vehicles */
+            vehicles: components["schemas"]["VehicleState"][];
+        };
+        /** VehicleState */
+        VehicleState: {
+            /**
+             * Capacity Source
+             * @enum {string}
+             */
+            capacity_source: "autosun" | "default";
+            /**
+             * Connector Id
+             * @enum {string}
+             */
+            connector_id: "connector-1" | "connector-2" | "connector-3" | "connector-4" | "connector-5" | "connector-6";
+            /** Energy Kwh */
+            energy_kwh: number;
+            /**
+             * Measured At
+             * Format: date-time
+             */
+            measured_at: string;
+            /** Minutes To Full */
+            minutes_to_full?: number | null;
+            /** Run Id */
+            run_id: string;
+            /** Soc Percent */
+            soc_percent: number;
         };
     };
     responses: never;
@@ -911,6 +1365,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TelemetryPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    connector_trend_api_v1_connectors__connector_id__trend_get: {
+        parameters: {
+            query: {
+                run_id: string;
+            };
+            header?: never;
+            path: {
+                connector_id: "connector-1" | "connector-2" | "connector-3" | "connector-4" | "connector-5" | "connector-6";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrendOut"];
                 };
             };
             /** @description Validation Error */
@@ -1113,6 +1600,57 @@ export interface operations {
             };
         };
     };
+    evaluations_api_v1_evaluations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationList"];
+                };
+            };
+        };
+    };
+    evaluation_api_v1_evaluations__evaluation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                evaluation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvaluationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_api_v1_health_get: {
         parameters: {
             query?: never;
@@ -1209,6 +1747,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    fleet_insights_api_v1_insights_fleet_get: {
+        parameters: {
+            query: {
+                run_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FleetOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    incident_insights_api_v1_insights_incidents_get: {
+        parameters: {
+            query?: {
+                run_id?: string | null;
+                station_id?: ("station-1" | "station-2") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncidentSummary"];
                 };
             };
             /** @description Validation Error */
@@ -1394,6 +1995,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    ingest_vehicles_api_v1_simulator_vehicles_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "x-simulator-secret"?: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VehicleBatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    station_display_api_v1_stations__station_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                station_id: "station-1" | "station-2";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StationOut"];
                 };
             };
             /** @description Validation Error */

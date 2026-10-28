@@ -35,6 +35,7 @@ def initialize(db):
     db.commands.create_index("idempotency_key", unique=True)
     db.commands.create_index([("incident_id", 1), ("type", 1), ("applied_at", -1)])
     db.windows.create_index([("run_id", 1), ("connector_id", 1), ("end", -1)])
+    db.vehicle_states.create_index("run_id")
     db.sources.update_one(
         {"_id": MANIFEST},
         {
@@ -65,6 +66,28 @@ def initialize(db):
             }
         },
         upsert=True,
+    )
+    db.sources.update_one(
+        {"_id": MANIFEST},
+        {
+            "$set": {
+                "fields.ambient_temperature_c": (
+                    "synthetic: HCMC diurnal profile per station (SIM_REALISM=true) or constant 25 °C"
+                ),
+                "fields.connector_temperature_c": (
+                    "synthetic: thermal lag model with injected fault, "
+                    "Gaussian sensor noise σ 0.2 °C when SIM_REALISM=true"
+                ),
+                "fields.current_a": (
+                    "replayed Autosun current; Gaussian noise σ 0.5 % of current, floored at 0, "
+                    "when SIM_REALISM=true"
+                ),
+                "fields.power_kw": (
+                    "voltage × reported current / 1000; Gaussian noise σ 0.5 % of current, floored at 0, "
+                    "when SIM_REALISM=true"
+                ),
+            }
+        },
     )
 
 

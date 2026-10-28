@@ -1,0 +1,94 @@
+"""Datadog-mode incident signals (open count, time in state, one event per timeline entry) and a worker
+heartbeat. The per-connector measurement gauges live in worker.evaluate_window (GAUGE_FIELDS).
+
+Metric tags stay within run/connector/station/env (+ incident state on the age gauge); events may carry
+incident_id because events are not custom-metric series."""
+
+from chargeops.domain import CONNECTORS, LOCATION
+
+ALERT_TYPE = {"opened": "error", "recurrence": "error", "mitigated": "warning", "resolved": "success"}
+
+
+def connector_tags(run_id, connector_id):
+    return [
+        f"run_id:{run_id}",
+        f"connector_id:{connector_id}",
+        f"station_id:{LOCATION[connector_id][0]}",
+        "env:hackathon",
+    ]
+
+
+def emit_heartbeat(stats):
+    stats.increment("chargeops.worker.tick", tags=["env:hackathon"])
+
+
+# Runs on every worker tick: skip evidence.samples and other heavy incident fields.
+SIGNAL_FIELDS = {"connector_id": 1, "unresolved": 1, "state": 1, "state_since": 1, "timeline": 1}
+
+
+def emit_run_signals(db, stats, run, at):
+    open_by_connector = dict.fromkeys(CONNECTORS, 0)
+    incidents = list(db.incidents.find({"run_id": run["_id"]}, SIGNAL_FIELDS))
+    sent = {c["_id"]: c["sent"] for c in db.dd_event_cursor.find({"_id": {"$in": [i["_id"] for i in incidents]}})}
+    for incident in incidents:
+        tags = connector_tags(run["_id"], incident["connector_id"])
+        if incident.get("unresolved"):
+            open_by_connector[incident["connector_id"]] += 1
+            age = (at - incident["state_since"]).total_seconds()
+            stats.gauge("chargeops.incident.state_age_s", age, tags=[*tags, f"state:{incident['state']}"])
+        emit_timeline_events(db, stats, incident, tags, sent.get(incident["_id"], 0))
+    for connector_id, count in open_by_connector.items():
+        stats.gauge("chargeops.incident.open", count, tags=connector_tags(run["_id"], connector_id))
+
+
+def emit_timeline_events(db, stats, incident, tags, sent):
+    """At-least-once: the cursor advances after the events are handed to DogStatsD."""
+    cursor = {"sent": sent}
+    cursor_before = sent
+    timeline = incident.get("timeline", [])
+    if len(timeline) < cursor["sent"]:  # timeline shrank (retest reset): restart rather than skip new entries
+        cursor["sent"] = 0
+    for entry in timeline[cursor["sent"] :]:
+        stats.event(
+            f"ChargeOps {entry['event']} · {incident['connector_id']}",
+            f"Incident {incident['_id']} {entry['event']} at {entry['at'].isoformat()}; reason {entry.get('reason') or '-'}",
+            alert_type=ALERT_TYPE.get(entry["event"], "info"),
+            aggregation_key=incident["_id"],
+            source_type_name="chargeops",
+            tags=[*tags, f"incident_id:{incident['_id']}", f"event:{entry['event']}", "source:chargeops"],
+        )
+    if len(timeline) != cursor_before:
+        db.dd_event_cursor.update_one({"_id": incident["_id"]}, {"$set": {"sent": len(timeline)}}, upsert=True)
+
+
+def emit_charging_slo(stats, run_id, connector_id, latest, silent=False):
+    """One 15-second block = 0.25 charging minutes. Total: charging was requested; good: current was delivered.
+    A silent block (no samples; `latest` is the last one in the 60 s window) of a connector that was charging
+    counts as total, never good: an outage must burn the SLO, not vanish from it."""
+    if not latest or latest.get("requested_current_a", 0) <= 0:
+        return
+    tags = connector_tags(run_id, connector_id)
+    stats.increment("chargeops.slo.charging_minutes.total", 0.25, tags=tags)
+    if not silent and latest.get("current_a", 0) > 0:
+        stats.increment("chargeops.slo.charging_minutes.good", 0.25, tags=tags)
+
+
+MITIGATION_TARGET_S = 300
+
+
+def emit_incident_outcome(stats, report):
+    """Once per incident, tagged like the other SLO series. It counts when derating was attempted (reduce_load
+    reached, mitigated or measured); it is good only when the reduction was verified within the target."""
+    seconds = report.get("seconds_to_effective_reduction")
+    reached = (
+        report.get("reached_reduce_load")
+        or seconds is not None
+        or report.get("seconds_to_mitigated") is not None
+        or report.get("energy_kwh_while_derated") is not None
+    )
+    if not reached:
+        return
+    tags = connector_tags(report["run_id"], report["connector_id"])
+    stats.increment("chargeops.slo.mitigation.total", 1, tags=tags)
+    if seconds is not None and seconds <= MITIGATION_TARGET_S:
+        stats.increment("chargeops.slo.mitigation.good", 1, tags=tags)

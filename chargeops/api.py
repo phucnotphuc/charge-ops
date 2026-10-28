@@ -2,8 +2,8 @@ import base64
 import hmac
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
-from typing import Annotated
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Literal
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
@@ -14,6 +14,7 @@ from pydantic import AwareDatetime, ValidationError
 from pymongo.errors import DuplicateKeyError, PyMongoError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from chargeops import insights, results, station
 from chargeops.auth import SESSION_COOKIE, SESSION_TTL_S, new_token, token_digest, verify_password
 from chargeops.config import settings
 from chargeops.domain import (
@@ -24,6 +25,7 @@ from chargeops.domain import (
     Batch,
     CommandRequest,
     CommandResult,
+    ConnectorId,
     ConnectorList,
     ConnectorOut,
     DemoRunCreate,
@@ -56,6 +58,28 @@ app = FastAPI(title="ChargeOps minimal loop", lifespan=lifespan)
 
 def db(request: Request):
     return request.app.state.db
+
+
+def utc_z(moment):
+    """CONTRACT: UTC ISO 8601 with `Z`; Mongo returns aware UTC (naive is treated as UTC)."""
+    aware = moment.replace(tzinfo=UTC) if moment.tzinfo is None else moment.astimezone(UTC)
+    return aware.isoformat().replace("+00:00", "Z")
+
+
+def encode(document):
+    """JSON-ready raw Mongo documents (endpoints without a response model), datetimes as `...Z`."""
+    return jsonable_encoder(document, custom_encoder={datetime: utc_z})
+
+
+def allowed_origins():
+    return [o.strip() for o in settings().allowed_origins.split(",") if o.strip()]
+
+
+def login_origin(request: Request):
+    """Browsers always send Origin on POST: a foreign one is refused. No Origin (curl, cli.py) is allowed."""
+    origin = request.headers.get("origin")
+    if origin is not None and origin not in allowed_origins():
+        raise ApiError(403, "forbidden", "Origin not allowed")
 
 
 def simulator_auth(x_simulator_secret: str = Header(default="")):
@@ -117,8 +141,7 @@ def operator_auth(request: Request, x_operator_secret: str = Header(default=""),
     session = session_for(request, store)
     if not session:
         raise ApiError(401, "unauthorized", "Operator login required")
-    origins = [o.strip() for o in settings().allowed_origins.split(",") if o.strip()]
-    if request.headers.get("origin") not in origins:
+    if request.headers.get("origin") not in allowed_origins():
         raise ApiError(403, "forbidden", "Origin not allowed")
     return session["username"]
 
@@ -156,7 +179,11 @@ def active_run(resume: bool = False, store=Depends(db)):
             }
             for row in store.telemetry.aggregate(pipeline)
         }
-    return jsonable_encoder(run)
+        # ... and each connector's delivered energy, so the vehicle SoC continues instead of restarting.
+        run["last_vehicles"] = {
+            doc["connector_id"]: doc for doc in store.vehicle_states.find({"run_id": run["_id"]}, {"_id": 0})
+        }
+    return encode(run)
 
 
 @app.get("/api/v1/simulator/events", dependencies=[Depends(simulator_auth)])
@@ -166,7 +193,7 @@ def simulator_events(store=Depends(db)):
     if not run:
         return []
     query = {"run_id": run["_id"], "type": "inject_fault", "consumed_at": None}
-    return jsonable_encoder(list(store.run_events.find(query).sort("requested_at", 1)))
+    return encode(list(store.run_events.find(query).sort("requested_at", 1)))
 
 
 @app.post(
@@ -262,7 +289,7 @@ async def webhook(request: Request, x_webhook_secret: str = Header(default=""), 
 
 @app.get("/api/v1/incidents")
 def incidents(store=Depends(db)):
-    return jsonable_encoder(
+    return encode(
         {"items": list(store.incidents.find().sort("opened_at", -1).limit(100)), "next_cursor": None}
     )
 
@@ -273,16 +300,14 @@ def incident(incident_id: str, store=Depends(db)):
     if not found:
         raise HTTPException(404, "Incident not found")
     found["commands"] = list(store.commands.find({"incident_id": incident_id}).sort("created_at", 1))
-    return jsonable_encoder(found)
+    sync = store.datadog_sync.find_one({"_id": incident_id}, {"dd_incident_url": 1, "notebook_url": 1}) or {}
+    found["datadog_incident_url"] = sync.get("dd_incident_url")
+    found["datadog_notebook_url"] = sync.get("notebook_url")
+    return encode(found)
 
 
-@app.post("/api/v1/incidents/{incident_id}/commands", status_code=202, dependencies=[Depends(operator_auth)])
-def create_command(
-    incident_id: str,
-    body: CommandRequest,
-    idempotency_key: str = Header(min_length=1, max_length=200),
-    store=Depends(db),
-):
+def create_command_doc(store, incident_id, type, idempotency_key, actor):
+    """Insert a pending, unvalidated command; the worker validates it. Shared by the operator and App routes."""
     found = store.incidents.find_one({"_id": incident_id}, {"run_id": 1, "connector_id": 1})
     if not found:
         raise HTTPException(404, "Incident not found")
@@ -292,7 +317,8 @@ def create_command(
         "incident_id": incident_id,
         "run_id": found["run_id"],
         "connector_id": found["connector_id"],
-        "type": body.type,
+        "type": type,
+        "actor": actor,
         "status": "pending",
         "validated": False,
         "created_at": now(),
@@ -301,13 +327,21 @@ def create_command(
         store.commands.insert_one(command)
     except DuplicateKeyError:
         command = store.commands.find_one({"idempotency_key": idempotency_key})
-        if (command["incident_id"], command["type"]) != (incident_id, body.type):
+        if (command["incident_id"], command["type"]) != (incident_id, type):
             raise HTTPException(409, "Idempotency-Key reused with a different request") from None
-    event(
-        logger("api"), "command_requested", incident_id=incident_id, command_id=command["_id"], type=body.type
-    )
+    event(logger("api"), "command_requested", incident_id=incident_id, command_id=command["_id"], type=type)
     # Accepted is not "load reduced": the worker validates, the simulator applies, telemetry verifies.
     return {"command_id": command["_id"], "status": command["status"]}
+
+
+@app.post("/api/v1/incidents/{incident_id}/commands", status_code=202, dependencies=[Depends(operator_auth)])
+def create_command(
+    incident_id: str,
+    body: CommandRequest,
+    idempotency_key: str = Header(min_length=1, max_length=200),
+    store=Depends(db),
+):
+    return create_command_doc(store, incident_id, body.type, idempotency_key, "operator")
 
 
 @app.get("/api/v1/commands/{command_id}")
@@ -315,7 +349,7 @@ def command(command_id: str, store=Depends(db)):
     found = store.commands.find_one({"_id": command_id})
     if not found:
         raise HTTPException(404, "Command not found")
-    return jsonable_encoder(found)
+    return encode(found)
 
 
 @app.get("/api/v1/simulator/commands", dependencies=[Depends(simulator_auth)])
@@ -365,9 +399,7 @@ def command_result(command_id: str, body: CommandResult, store=Depends(db)):
 
 @app.get("/api/v1/demo-runs")
 def runs(store=Depends(db)):
-    return jsonable_encoder(
-        {"items": list(store.runs.find().sort("created_at", -1).limit(100)), "next_cursor": None}
-    )
+    return encode({"items": list(store.runs.find().sort("created_at", -1).limit(100)), "next_cursor": None})
 
 
 def run_out(run):
@@ -511,7 +543,7 @@ def inject_fault(run_id: str, body: FaultRequest, store=Depends(db)):
     )
 
 
-@app.post("/api/v1/auth/login", response_model=UserOut)
+@app.post("/api/v1/auth/login", response_model=UserOut, dependencies=[Depends(login_origin)])
 def login(body: LoginRequest, response: Response, store=Depends(db)):
     config = settings()
     encoded = config.operator_password_hash.get_secret_value()
@@ -533,7 +565,7 @@ def login(body: LoginRequest, response: Response, store=Depends(db)):
     return UserOut(username=config.operator_username, role="operator")
 
 
-@app.post("/api/v1/auth/logout", status_code=204)
+@app.post("/api/v1/auth/logout", status_code=204, dependencies=[Depends(login_origin)])
 def logout(request: Request, store=Depends(db)):
     token = request.cookies.get(SESSION_COOKIE)
     if token:
@@ -608,6 +640,48 @@ def connectors(store=Depends(db)):
     return ConnectorList(items=connector_views(store))
 
 
+@app.post("/api/v1/simulator/vehicles", status_code=202, dependencies=[Depends(simulator_auth)])
+def ingest_vehicles(batch: station.VehicleBatch, store=Depends(db)):
+    for v in batch.vehicles:
+        store.vehicle_states.update_one(
+            {"_id": f"{v.run_id}:{v.connector_id}"},
+            {"$set": {**v.model_dump(), "received_at": now()}},
+            upsert=True,
+        )
+    return {"accepted": len(batch.vehicles)}
+
+
+@app.get("/api/v1/stations/{station_id}", response_model=station.StationOut)
+def station_display(station_id: Literal["station-1", "station-2"], store=Depends(db)):
+    """Anonymous, read-only: the driver-facing screen. Reuses the connector latest-state pipeline."""
+    ids = [cid for cid in CONNECTORS if LOCATION[cid][0] == station_id]
+    views = [v.model_dump() for v in connector_views(store, ids)] or [
+        {"connector_id": cid, "stale": True} for cid in ids  # no run yet
+    ]
+    out = []
+    for c in views:
+        run_id = c.get("run_id")
+        vehicle = store.vehicle_states.find_one({"_id": f"{run_id}:{c['connector_id']}"}) if run_id else None
+        latest = c.get("latest") or {}
+        status = station.public_status(c, vehicle)
+        if status == "offline":  # a stale vehicle state is not shown for an unreachable connector
+            vehicle = None
+        out.append(
+            station.StationConnector(
+                connector_id=c["connector_id"],
+                status=status,
+                soc_percent=vehicle["soc_percent"] if vehicle else None,
+                power_kw=latest.get("power_kw"),
+                current_a=latest.get("current_a"),
+                connector_temperature_c=latest.get("connector_temperature_c"),
+                energy_kwh=vehicle["energy_kwh"] if vehicle else None,
+                minutes_to_full=vehicle.get("minutes_to_full") if vehicle else None,
+                measured_at=latest.get("measured_at"),
+            )
+        )
+    return station.StationOut(station_id=station_id, connectors=out)
+
+
 @app.get("/api/v1/connectors/{connector_id}", response_model=ConnectorOut)
 def connector(connector_id: str, store=Depends(db)):
     if connector_id not in CONNECTORS:
@@ -674,3 +748,48 @@ def connector_telemetry(
         items=[sample_dict(r) for r in page],
         next_cursor=encode_cursor(page[-1]) if len(rows) > limit else None,
     )
+
+
+@app.get("/api/v1/connectors/{connector_id}/trend", response_model=insights.TrendOut)
+def connector_trend(connector_id: ConnectorId, run_id: str, store=Depends(db)):
+    rows = store.windows.aggregate(insights.trend_pipeline(run_id, connector_id))
+    return insights.TrendOut(
+        run_id=run_id, connector_id=connector_id, points=[insights.TrendPoint(**r) for r in rows]
+    )
+
+
+@app.get("/api/v1/insights/fleet", response_model=insights.FleetOut)
+def fleet_insights(run_id: str, store=Depends(db)):
+    rows = store.windows.aggregate(insights.fleet_pipeline(run_id))
+    return insights.FleetOut(run_id=run_id, windows=[insights.FleetWindow(**r) for r in rows])
+
+
+@app.get("/api/v1/insights/incidents", response_model=insights.IncidentSummary)
+def incident_insights(
+    run_id: str | None = None,
+    station_id: Literal["station-1", "station-2"] | None = None,
+    store=Depends(db),
+):
+    connector_ids = [c for c, (s, _) in LOCATION.items() if s == station_id] if station_id else None
+    docs = list(store.incidents.aggregate(insights.incident_summary_pipeline(run_id, connector_ids)))
+    return insights.shape_summary(docs[0] if docs else {})
+
+
+@app.get("/api/v1/evaluations", response_model=results.EvaluationList)
+def evaluations():
+    """Committed offline evaluation summaries (simulated clock), read-only and anonymous like other GETs."""
+    return results.EvaluationList(items=results.list_all())
+
+
+@app.get("/api/v1/evaluations/{evaluation_id}", response_model=results.EvaluationOut)
+def evaluation(evaluation_id: str):
+    found = results.load(evaluation_id)
+    if not found:
+        raise ApiError(404, "not_found", "Evaluation not found")
+    return found
+
+
+# Datadog App action surface: X-Action-Secret only, never the operator credentials.
+from chargeops.actions import router as datadog_actions  # noqa: E402
+
+app.include_router(datadog_actions)

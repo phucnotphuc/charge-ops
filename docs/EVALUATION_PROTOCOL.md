@@ -114,7 +114,7 @@ Worker xác thực lệnh ngay khi nhận; simulator áp dụng lệnh ở lư�
 
 ## Mục tiêu nội bộ (PLAN) và cách báo
 
-C phát hiện ≥ 18/20 lỗi trước trip của B; ≤ 1 incident giả/20 lượt khỏe; 0 command trùng. Báo kết quả thực kể cả không đạt; không đổi seed, protocol hay ngưỡng sau khi xem kết quả đánh giá. Các tham số kịch bản được chọn trước khi chạy `tune`; trong lúc phát triển chỉ chạy thử vài seed tuning để kiểm tra code, không chạy seed đánh giá trước khi khóa.
+C phát hiện ≥ 18/20 lỗi trước trip của B; ≤ 1 incident giả/20 lượt khỏe; 0 command trùng. Báo kết quả thực kể cả không đạt; không đổi seed hay ngưỡng sau khi xem kết quả đánh giá. **Lưu ý về tiền đăng ký:** các thay đổi quy tắc sản phẩm của v2 và v3 (quyết định của nhóm ngày 21/10: bảo trì từ `mitigating`, trip không xác nhận giảm tải, chỉ `residual_not_recovered` mở khóa) được đưa ra **sau khi đã xem kết quả seed đánh giá của v1 (và của v2 đối với v3)**. Vì vậy v3/v3.1 **không phải tiền đăng ký sạch**: protocol đã đổi sau khi thấy kết quả, dù seed tuning/đánh giá và ngưỡng (A theo quy tắc `tune`, C là hằng số 8/3 °C) không đổi. Đọc kết quả v3.1 như đánh giá có thông tin từ các lượt trước, không như kiểm định độc lập. Các tham số kịch bản được chọn trước khi chạy `tune`; trong lúc phát triển chỉ chạy thử vài seed tuning để kiểm tra code, không chạy seed đánh giá trước khi khóa.
 
 ## Giới hạn
 

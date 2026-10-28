@@ -1,0 +1,3088 @@
+{
+  "protocol_version": "b1-eval-v3.1",
+  "fingerprint": "f54276de8d5584c85dfff12f98a90ed083a176543aed842a6f5b1a3a26fe0ab9",
+  "locked": {
+    "a_threshold_c": 74.0,
+    "c_alert_c": 8.0,
+    "c_recovered_c": 3.0,
+    "locked_at": "2026-10-21T08:21:51.979853Z"
+  },
+  "fault_seeds": 20,
+  "healthy_seeds": 20,
+  "healthy_connector_hours": 10.0,
+  "b_tripped_seeds": 7,
+  "arms": {
+    "A": {
+      "fault": {
+        "recall_before_trip": 8,
+        "detected_any": 9,
+        "detected_before_trip_among_b_tripped": 5,
+        "latency_s": {
+          "n": 9,
+          "median": 340.0,
+          "min": 230.0,
+          "max": 740.0
+        },
+        "lead_time_s": {
+          "n": 5,
+          "median": 435.0,
+          "min": 230.0,
+          "max": 600.0
+        },
+        "pre_onset_false": 2,
+        "effective_mitigation_s": {
+          "n": 9,
+          "median": 135.0,
+          "min": 135.0,
+          "max": 135.0
+        },
+        "mitigated_s": {
+          "n": 7,
+          "median": 735.0,
+          "min": 135.0,
+          "max": 750.0
+        },
+        "maintenance_applied": 9,
+        "resolved": 1,
+        "final_states": {
+          "undetected": 11,
+          "verifying": 5,
+          "resolved": 1,
+          "mitigated": 1,
+          "mitigating": 2
+        },
+        "trips": 0,
+        "seeds_tripped": 0,
+        "interruption_min": 0.0,
+        "kwh": 355.38480147750533,
+        "kwh_delta_vs_b": 5.872558926859096,
+        "kwh_delta_while_derated": -8.680413500600407
+      },
+      "healthy": {
+        "runs_with_incident": 5,
+        "incidents": 9,
+        "false_alerts_per_connector_hour": 0.9,
+        "trips": 0,
+        "kwh": 376.3925641012859,
+        "kwh_delta_vs_b": -40.56808605488424,
+        "by_scenario": {
+          "healthy": 2,
+          "load_increase": 2,
+          "demand_drop": 1
+        }
+      },
+      "duplicate_commands": 0,
+      "rejected_commands": 0,
+      "commands": 78
+    },
+    "B": {
+      "fault": {
+        "recall_before_trip": 20,
+        "detected_any": 20,
+        "detected_before_trip_among_b_tripped": 7,
+        "latency_s": {
+          "n": 20,
+          "median": 155.0,
+          "min": 100.0,
+          "max": 455.0
+        },
+        "lead_time_s": {
+          "n": 7,
+          "median": 575.0,
+          "min": 40.0,
+          "max": 885.0
+        },
+        "pre_onset_false": 0,
+        "effective_mitigation_s": {
+          "n": 0,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "mitigated_s": {
+          "n": 0,
+          "median": null,
+          "min": null,
+          "max": null
+        },
+        "maintenance_applied": 0,
+        "resolved": 0,
+        "final_states": {
+          "open": 20
+        },
+        "trips": 14,
+        "seeds_tripped": 7,
+        "interruption_min": 59.75,
+        "kwh": 349.5122425506462,
+        "kwh_delta_vs_b": 0.0,
+        "kwh_delta_while_derated": 0.0
+      },
+      "healthy": {
+        "runs_with_incident": 0,
+        "incidents": 0,
+        "false_alerts_per_connector_hour": 0.0,
+        "trips": 0,
+        "kwh": 416.9606501561702,
+        "kwh_delta_vs_b": 0.0,
+        "by_scenario": {}
+      },
+      "duplicate_commands": 0,
+      "rejected_commands": 0,
+      "commands": 0
+    },
+    "C": {
+      "fault": {
+        "recall_before_trip": 20,
+        "detected_any": 20,
+        "detected_before_trip_among_b_tripped": 7,
+        "latency_s": {
+          "n": 20,
+          "median": 155.0,
+          "min": 100.0,
+          "max": 455.0
+        },
+        "lead_time_s": {
+          "n": 7,
+          "median": 575.0,
+          "min": 40.0,
+          "max": 885.0
+        },
+        "pre_onset_false": 0,
+        "effective_mitigation_s": {
+          "n": 20,
+          "median": 135.0,
+          "min": 135.0,
+          "max": 405.0
+        },
+        "mitigated_s": {
+          "n": 19,
+          "median": 705.0,
+          "min": 660.0,
+          "max": 750.0
+        },
+        "maintenance_applied": 19,
+        "resolved": 13,
+        "final_states": {
+          "verifying": 6,
+          "resolved": 13,
+          "mitigating": 1
+        },
+        "trips": 1,
+        "seeds_tripped": 1,
+        "interruption_min": 4.916666666666667,
+        "kwh": 326.9743473252279,
+        "kwh_delta_vs_b": -22.53789522541834,
+        "kwh_delta_while_derated": -47.25204024800709
+      },
+      "healthy": {
+        "runs_with_incident": 0,
+        "incidents": 0,
+        "false_alerts_per_connector_hour": 0.0,
+        "trips": 0,
+        "kwh": 416.9606501561702,
+        "kwh_delta_vs_b": 0.0,
+        "by_scenario": {}
+      },
+      "duplicate_commands": 0,
+      "rejected_commands": 0,
+      "commands": 78
+    }
+  },
+  "detectors": {
+    "fixed": {
+      "recall_before_trip": 8,
+      "detected_any": 10,
+      "detected_before_trip_among_b_tripped": 5,
+      "latency_s": {
+        "n": 10,
+        "median": 415.0,
+        "min": 230.0,
+        "max": 740.0
+      },
+      "lead_time_s": {
+        "n": 5,
+        "median": 435.0,
+        "min": 230.0,
+        "max": 600.0
+      },
+      "pre_onset_false": 2,
+      "healthy_runs_alerting": 5,
+      "healthy_alert_episodes_per_connector_hour": 0.5,
+      "healthy_by_scenario": {
+        "healthy": 2,
+        "load_increase": 2,
+        "demand_drop": 1
+      }
+    },
+    "residual": {
+      "recall_before_trip": 20,
+      "detected_any": 20,
+      "detected_before_trip_among_b_tripped": 7,
+      "latency_s": {
+        "n": 20,
+        "median": 155.0,
+        "min": 100.0,
+        "max": 455.0
+      },
+      "lead_time_s": {
+        "n": 7,
+        "median": 575.0,
+        "min": 40.0,
+        "max": 885.0
+      },
+      "pre_onset_false": 0,
+      "healthy_runs_alerting": 0,
+      "healthy_alert_episodes_per_connector_hour": 0.0,
+      "healthy_by_scenario": {}
+    }
+  },
+  "targets": {
+    "c_recall_before_trip_ge_18_of_20": true,
+    "c_healthy_runs_with_incident_le_1": true,
+    "duplicate_commands_zero": true
+  },
+  "runtime_s": 2.376330800001597,
+  "runs": 120,
+  "seeds": [
+    {
+      "seed": 2000,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 20.721539811265433,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": null
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 20.721539811265433,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 1020.0,
+          "detected_before_trip": true,
+          "latency_s": 315.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 17.58914517067901,
+          "kwh_delta_vs_b": -3.1323946405864227,
+          "kwh_delta_while_derated": -3.13239464058642,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 1020.0,
+          "detected_before_trip": true,
+          "latency_s": 315.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 660.0,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "verifying"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false,
+          "pre_onset_alert": false,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 1020.0,
+          "detected_before_trip": true,
+          "latency_s": 315.0,
+          "lead_time_s": null
+        }
+      }
+    },
+    {
+      "seed": 2001,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 11.038218714544755,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": null
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 11.038218714544755,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 840.0,
+          "detected_before_trip": true,
+          "latency_s": 140.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 9.122591778472222,
+          "kwh_delta_vs_b": -1.9156269360725329,
+          "kwh_delta_while_derated": -1.9156269360725309,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 840.0,
+          "detected_before_trip": true,
+          "latency_s": 140.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 675.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 810.0,
+          "final_state": "resolved"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false,
+          "pre_onset_alert": false,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 840.0,
+          "detected_before_trip": true,
+          "latency_s": 140.0,
+          "lead_time_s": null
+        }
+      }
+    },
+    {
+      "seed": 2002,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": 1355,
+      "arms": {
+        "A": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 9.180502898688273,
+          "kwh_delta_vs_b": -0.39554232185570903,
+          "kwh_delta_while_derated": -0.9570907780092593,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 810.0,
+          "detected_before_trip": true,
+          "latency_s": 340.0,
+          "lead_time_s": 545.0,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 750.0,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "verifying"
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 1,
+          "interruption_min": 4.916666666666667,
+          "kwh": 9.576045220543982,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 570.0,
+          "detected_before_trip": true,
+          "latency_s": 100.0,
+          "lead_time_s": 785.0,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 9.206881202334106,
+          "kwh_delta_vs_b": -0.3691640182098759,
+          "kwh_delta_while_derated": -2.371058664409723,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 570.0,
+          "detected_before_trip": true,
+          "latency_s": 100.0,
+          "lead_time_s": 785.0,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 750.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 885.0,
+          "final_state": "resolved"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 810.0,
+          "detected_before_trip": true,
+          "latency_s": 340.0,
+          "lead_time_s": 545.0
+        },
+        "residual": {
+          "episodes": 2,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 570.0,
+          "detected_before_trip": true,
+          "latency_s": 100.0,
+          "lead_time_s": 785.0
+        }
+      }
+    },
+    {
+      "seed": 2003,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": 505,
+      "arms": {
+        "A": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 21.45534267884717,
+          "kwh_delta_vs_b": 9.379891232763066,
+          "kwh_delta_while_derated": 3.007587733746864,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 8,
+          "pre_onset_incidents": 1,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": null
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 4,
+          "interruption_min": 18.416666666666668,
+          "kwh": 12.075451446084104,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 465.0,
+          "detected_before_trip": true,
+          "latency_s": 125.0,
+          "lead_time_s": 40.0,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 1,
+          "interruption_min": 4.916666666666667,
+          "kwh": 22.483237125342402,
+          "kwh_delta_vs_b": 10.407785679258298,
+          "kwh_delta_while_derated": 1.123378121387924,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 465.0,
+          "detected_before_trip": true,
+          "latency_s": 125.0,
+          "lead_time_s": 40.0,
+          "effective_mitigation_s": 405.0,
+          "mitigated_s": 705.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 840.0,
+          "final_state": "resolved"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 4,
+          "any_alert": true,
+          "pre_onset_alert": true,
+          "first_s": 870.0,
+          "detected_before_trip": false,
+          "latency_s": 530.0,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 4,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 465.0,
+          "detected_before_trip": true,
+          "latency_s": 125.0,
+          "lead_time_s": 40.0
+        }
+      }
+    },
+    {
+      "seed": 2004,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 20.26370981882716,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": null
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 20.26370981882716,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 555.0,
+          "detected_before_trip": true,
+          "latency_s": 155.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 16.808151052941746,
+          "kwh_delta_vs_b": -3.4555587658854137,
+          "kwh_delta_while_derated": -3.455558765885417,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 555.0,
+          "detected_before_trip": true,
+          "latency_s": 155.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 675.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 810.0,
+          "final_state": "resolved"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false,
+          "pre_onset_alert": false,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 555.0,
+          "detected_before_trip": true,
+          "latency_s": 155.0,
+          "lead_time_s": null
+        }
+      }
+    },
+    {
+      "seed": 2005,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 20.721539811265433,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": null
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 20.721539811265433,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 630.0,
+          "detected_before_trip": true,
+          "latency_s": 260.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 16.941744248372398,
+          "kwh_delta_vs_b": -3.7797955628930353,
+          "kwh_delta_while_derated": -3.779795562893036,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 630.0,
+          "detected_before_trip": true,
+          "latency_s": 260.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 675.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 810.0,
+          "final_state": "resolved"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false,
+          "pre_onset_alert": false,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 630.0,
+          "detected_before_trip": true,
+          "latency_s": 260.0,
+          "lead_time_s": null
+        }
+      }
+    },
+    {
+      "seed": 2006,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 25.694711391898146,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": null
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 25.694711391898146,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 750.0,
+          "detected_before_trip": true,
+          "latency_s": 330.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 21.930320109025367,
+          "kwh_delta_vs_b": -3.7643912828727792,
+          "kwh_delta_while_derated": -3.7643912828727815,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 750.0,
+          "detected_before_trip": true,
+          "latency_s": 330.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 675.0,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "verifying"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false,
+          "pre_onset_alert": false,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 750.0,
+          "detected_before_trip": true,
+          "latency_s": 330.0,
+          "lead_time_s": null
+        }
+      }
+    },
+    {
+      "seed": 2007,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 15.452278386419755,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": null
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 15.452278386419755,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 1110.0,
+          "detected_before_trip": true,
+          "latency_s": 355.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 13.097325159575137,
+          "kwh_delta_vs_b": -2.354953226844618,
+          "kwh_delta_while_derated": -2.3549532268446183,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 1110.0,
+          "detected_before_trip": true,
+          "latency_s": 355.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 675.0,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "verifying"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false,
+          "pre_onset_alert": false,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 1110.0,
+          "detected_before_trip": true,
+          "latency_s": 355.0,
+          "lead_time_s": null
+        }
+      }
+    },
+    {
+      "seed": 2008,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 29.808743375347216,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": null
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 29.808743375347216,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 840.0,
+          "detected_before_trip": true,
+          "latency_s": 250.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 24.707826170317322,
+          "kwh_delta_vs_b": -5.100917205029894,
+          "kwh_delta_while_derated": -5.1009172050299,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 840.0,
+          "detected_before_trip": true,
+          "latency_s": 250.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 675.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 810.0,
+          "final_state": "resolved"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false,
+          "pre_onset_alert": false,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 840.0,
+          "detected_before_trip": true,
+          "latency_s": 250.0,
+          "lead_time_s": null
+        }
+      }
+    },
+    {
+      "seed": 2009,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 21.952640380034723,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": null
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 21.952640380034723,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 915.0,
+          "detected_before_trip": true,
+          "latency_s": 220.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 18.285971899266976,
+          "kwh_delta_vs_b": -3.666668480767747,
+          "kwh_delta_while_derated": -3.6666684807677474,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 915.0,
+          "detected_before_trip": true,
+          "latency_s": 220.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 660.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 795.0,
+          "final_state": "resolved"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false,
+          "pre_onset_alert": false,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 915.0,
+          "detected_before_trip": true,
+          "latency_s": 220.0,
+          "lead_time_s": null
+        }
+      }
+    },
+    {
+      "seed": 2010,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": 1085,
+      "arms": {
+        "A": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 14.662281002035108,
+          "kwh_delta_vs_b": 1.407760245090662,
+          "kwh_delta_while_derated": 0.38886035520833323,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 855.0,
+          "detected_before_trip": true,
+          "latency_s": 230.0,
+          "lead_time_s": 230.0,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 750.0,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "verifying"
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 2,
+          "interruption_min": 9.5,
+          "kwh": 13.254520756944446,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 735.0,
+          "detected_before_trip": true,
+          "latency_s": 110.0,
+          "lead_time_s": 350.0,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 14.572738314679786,
+          "kwh_delta_vs_b": 1.3182175577353394,
+          "kwh_delta_while_derated": -0.5506482298611112,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 735.0,
+          "detected_before_trip": true,
+          "latency_s": 110.0,
+          "lead_time_s": 350.0,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 750.0,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "verifying"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 2,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 855.0,
+          "detected_before_trip": true,
+          "latency_s": 230.0,
+          "lead_time_s": 230.0
+        },
+        "residual": {
+          "episodes": 2,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 735.0,
+          "detected_before_trip": true,
+          "latency_s": 110.0,
+          "lead_time_s": 350.0
+        }
+      }
+    },
+    {
+      "seed": 2011,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": 1160,
+      "arms": {
+        "A": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 16.46542696114487,
+          "kwh_delta_vs_b": 1.7905899761718747,
+          "kwh_delta_while_derated": -0.4739672538049771,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 765.0,
+          "detected_before_trip": true,
+          "latency_s": 330.0,
+          "lead_time_s": 395.0,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 735.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 870.0,
+          "final_state": "resolved"
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 2,
+          "interruption_min": 8.25,
+          "kwh": 14.674836984972996,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 585.0,
+          "detected_before_trip": true,
+          "latency_s": 150.0,
+          "lead_time_s": 575.0,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 16.46985960146605,
+          "kwh_delta_vs_b": 1.7950226164930552,
+          "kwh_delta_while_derated": -1.9922470975115742,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 585.0,
+          "detected_before_trip": true,
+          "latency_s": 150.0,
+          "lead_time_s": 575.0,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 735.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 870.0,
+          "final_state": "resolved"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 2,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 765.0,
+          "detected_before_trip": true,
+          "latency_s": 330.0,
+          "lead_time_s": 395.0
+        },
+        "residual": {
+          "episodes": 2,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 585.0,
+          "detected_before_trip": true,
+          "latency_s": 150.0,
+          "lead_time_s": 575.0
+        }
+      }
+    },
+    {
+      "seed": 2012,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": 860,
+      "arms": {
+        "A": {
+          "incidents": 2,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 21.28058151269652,
+          "kwh_delta_vs_b": 3.491295758896367,
+          "kwh_delta_while_derated": -0.8443675935341913,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 7,
+          "pre_onset_incidents": 1,
+          "first_s": 1170.0,
+          "detected_before_trip": false,
+          "latency_s": 605.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 135.0,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "mitigated"
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 3,
+          "interruption_min": 12.833333333333334,
+          "kwh": 17.789285753800154,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 720.0,
+          "detected_before_trip": true,
+          "latency_s": 155.0,
+          "lead_time_s": 140.0,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 25.316927775501544,
+          "kwh_delta_vs_b": 7.527642021701389,
+          "kwh_delta_while_derated": 2.9071576182291676,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 720.0,
+          "detected_before_trip": true,
+          "latency_s": 155.0,
+          "lead_time_s": 140.0,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 735.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 870.0,
+          "final_state": "resolved"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 3,
+          "any_alert": true,
+          "pre_onset_alert": true,
+          "first_s": 1245.0,
+          "detected_before_trip": false,
+          "latency_s": 680.0,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 3,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 720.0,
+          "detected_before_trip": true,
+          "latency_s": 155.0,
+          "lead_time_s": 140.0
+        }
+      }
+    },
+    {
+      "seed": 2013,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": 1740,
+      "arms": {
+        "A": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 21.18963803963156,
+          "kwh_delta_vs_b": -2.662907478462575,
+          "kwh_delta_while_derated": -2.6629074784625777,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 3,
+          "pre_onset_incidents": 0,
+          "first_s": 1140.0,
+          "detected_before_trip": true,
+          "latency_s": 490.0,
+          "lead_time_s": 600.0,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": null,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "mitigating"
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 1,
+          "interruption_min": 0.9166666666666666,
+          "kwh": 23.852545518094136,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 855.0,
+          "detected_before_trip": true,
+          "latency_s": 205.0,
+          "lead_time_s": 885.0,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 20.322979193447388,
+          "kwh_delta_vs_b": -3.5295663246467477,
+          "kwh_delta_while_derated": -4.399080404681472,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 855.0,
+          "detected_before_trip": true,
+          "latency_s": 205.0,
+          "lead_time_s": 885.0,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 735.0,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "verifying"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 1140.0,
+          "detected_before_trip": true,
+          "latency_s": 490.0,
+          "lead_time_s": 600.0
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 855.0,
+          "detected_before_trip": true,
+          "latency_s": 205.0,
+          "lead_time_s": 885.0
+        }
+      }
+    },
+    {
+      "seed": 2014,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 10.178375397897376,
+          "kwh_delta_vs_b": -2.405617876909721,
+          "kwh_delta_while_derated": -2.405617876909722,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 870.0,
+          "detected_before_trip": true,
+          "latency_s": 490.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 735.0,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "verifying"
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 12.583993274807098,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 525.0,
+          "detected_before_trip": true,
+          "latency_s": 145.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 10.185701687827931,
+          "kwh_delta_vs_b": -2.398291586979166,
+          "kwh_delta_while_derated": -2.398291586979167,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 525.0,
+          "detected_before_trip": true,
+          "latency_s": 145.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 735.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 870.0,
+          "final_state": "resolved"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 870.0,
+          "detected_before_trip": true,
+          "latency_s": 490.0,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 525.0,
+          "detected_before_trip": true,
+          "latency_s": 145.0,
+          "lead_time_s": null
+        }
+      }
+    },
+    {
+      "seed": 2015,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 9.941936957581019,
+          "kwh_delta_vs_b": -1.6360029091628085,
+          "kwh_delta_while_derated": -1.6360029091628085,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 3,
+          "pre_onset_incidents": 0,
+          "first_s": 1125.0,
+          "detected_before_trip": true,
+          "latency_s": 740.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": null,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "mitigating"
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 11.577939866743828,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 525.0,
+          "detected_before_trip": true,
+          "latency_s": 140.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 9.264142739313272,
+          "kwh_delta_vs_b": -2.313797127430556,
+          "kwh_delta_while_derated": -2.313797127430556,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 525.0,
+          "detected_before_trip": true,
+          "latency_s": 140.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 735.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 870.0,
+          "final_state": "resolved"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 1125.0,
+          "detected_before_trip": true,
+          "latency_s": 740.0,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 525.0,
+          "detected_before_trip": true,
+          "latency_s": 140.0,
+          "lead_time_s": null
+        }
+      }
+    },
+    {
+      "seed": 2016,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 14.650324977671682,
+          "kwh_delta_vs_b": -2.419646963088349,
+          "kwh_delta_while_derated": -2.419646963088349,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 660.0,
+          "detected_before_trip": true,
+          "latency_s": 315.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 735.0,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "verifying"
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 17.06997194076003,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 495.0,
+          "detected_before_trip": true,
+          "latency_s": 150.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 14.096380219779611,
+          "kwh_delta_vs_b": -2.9735917209804192,
+          "kwh_delta_while_derated": -2.97359172098042,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 495.0,
+          "detected_before_trip": true,
+          "latency_s": 150.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 735.0,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "verifying"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 660.0,
+          "detected_before_trip": true,
+          "latency_s": 315.0,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 495.0,
+          "detected_before_trip": true,
+          "latency_s": 150.0,
+          "lead_time_s": null
+        }
+      }
+    },
+    {
+      "seed": 2017,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 15.452278386419755,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": null
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 15.452278386419755,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 615.0,
+          "detected_before_trip": true,
+          "latency_s": 245.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 12.738915123900462,
+          "kwh_delta_vs_b": -2.7133632625192927,
+          "kwh_delta_while_derated": -2.71336326251929,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 615.0,
+          "detected_before_trip": true,
+          "latency_s": 245.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 675.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 810.0,
+          "final_state": "resolved"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false,
+          "pre_onset_alert": false,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 615.0,
+          "detected_before_trip": true,
+          "latency_s": 245.0,
+          "lead_time_s": null
+        }
+      }
+    },
+    {
+      "seed": 2018,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 10.922078766994598,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": null
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 10.922078766994598,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 1305.0,
+          "detected_before_trip": true,
+          "latency_s": 455.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 9.618526191391783,
+          "kwh_delta_vs_b": -1.303552575602815,
+          "kwh_delta_while_derated": -1.3035525756028161,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 2,
+          "pre_onset_incidents": 0,
+          "first_s": 1305.0,
+          "detected_before_trip": true,
+          "latency_s": 455.0,
+          "lead_time_s": null,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "mitigating"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false,
+          "pre_onset_alert": false,
+          "first_s": null,
+          "detected_before_trip": false,
+          "latency_s": null,
+          "lead_time_s": null
+        },
+        "residual": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 1305.0,
+          "detected_before_trip": true,
+          "latency_s": 455.0,
+          "lead_time_s": null
+        }
+      }
+    },
+    {
+      "seed": 2019,
+      "scenario": "thermal_fault",
+      "kind": "fault",
+      "b_trip_s": 1425,
+      "arms": {
+        "A": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 24.352652208294757,
+          "kwh_delta_vs_b": -0.6772607365837118,
+          "kwh_delta_while_derated": -0.6772607365837188,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 990.0,
+          "detected_before_trip": true,
+          "latency_s": 285.0,
+          "lead_time_s": 435.0,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 735.0,
+          "maintenance_s": 605.0,
+          "resolved_s": null,
+          "final_state": "verifying"
+        },
+        "B": {
+          "incidents": 1,
+          "trips": 1,
+          "interruption_min": 4.916666666666667,
+          "kwh": 25.02991294487847,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0,
+          "pre_onset_incidents": 0,
+          "first_s": 840.0,
+          "detected_before_trip": true,
+          "latency_s": 135.0,
+          "lead_time_s": 585.0,
+          "effective_mitigation_s": null,
+          "mitigated_s": null,
+          "maintenance_s": null,
+          "resolved_s": null,
+          "final_state": "open"
+        },
+        "C": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 24.214982561593363,
+          "kwh_delta_vs_b": -0.8149303832851054,
+          "kwh_delta_while_derated": -3.0966392166956016,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4,
+          "pre_onset_incidents": 0,
+          "first_s": 840.0,
+          "detected_before_trip": true,
+          "latency_s": 135.0,
+          "lead_time_s": 585.0,
+          "effective_mitigation_s": 135.0,
+          "mitigated_s": 735.0,
+          "maintenance_s": 605.0,
+          "resolved_s": 870.0,
+          "final_state": "resolved"
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 1,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 990.0,
+          "detected_before_trip": true,
+          "latency_s": 285.0,
+          "lead_time_s": 435.0
+        },
+        "residual": {
+          "episodes": 2,
+          "any_alert": true,
+          "pre_onset_alert": false,
+          "first_s": 840.0,
+          "detected_before_trip": true,
+          "latency_s": 135.0,
+          "lead_time_s": 585.0
+        }
+      }
+    },
+    {
+      "seed": 2020,
+      "scenario": "healthy",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 23.281109796277008,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 23.281109796277008,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 23.281109796277008,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2021,
+      "scenario": "healthy",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 26.084662003645832,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 26.084662003645832,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 26.084662003645832,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2022,
+      "scenario": "healthy",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 10.922078766994598,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 10.922078766994598,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 10.922078766994598,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2023,
+      "scenario": "healthy",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 23.078705406327163,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 23.078705406327163,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 23.078705406327163,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2024,
+      "scenario": "healthy",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 19.674109869405864,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 19.674109869405864,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 19.674109869405864,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2025,
+      "scenario": "healthy",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 25.694711391898146,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 25.694711391898146,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 25.694711391898146,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2026,
+      "scenario": "healthy",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 2,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 21.764212175578706,
+          "kwh_delta_vs_b": -10.1399461513696,
+          "kwh_delta_while_derated": -10.139946151369598,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 7
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 31.904158326948306,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 31.904158326948306,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 1,
+          "any_alert": true
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2027,
+      "scenario": "healthy",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 2,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 20.863051065675638,
+          "kwh_delta_vs_b": -10.312439147152293,
+          "kwh_delta_while_derated": -10.312439147152295,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 10
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 31.17549021282793,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 31.17549021282793,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 1,
+          "any_alert": true
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2028,
+      "scenario": "load_increase",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 3,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 21.600693500836705,
+          "kwh_delta_vs_b": -10.143124815419242,
+          "kwh_delta_while_derated": -10.143124815419238,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 8
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 31.743818316255947,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 31.743818316255947,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 1,
+          "any_alert": true
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2029,
+      "scenario": "load_increase",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 14.056661929365493,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 14.056661929365493,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 14.056661929365493,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2030,
+      "scenario": "load_increase",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 24.71544811836098,
+          "kwh_delta_vs_b": -4.991505787037038,
+          "kwh_delta_while_derated": -4.991505787037037,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 29.70695390539802,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 29.70695390539802,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 1,
+          "any_alert": true
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2031,
+      "scenario": "load_increase",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 30.24106786429153,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 30.24106786429153,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 30.24106786429153,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2032,
+      "scenario": "load_increase",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 23.658474744829316,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 23.658474744829316,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 23.658474744829316,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2033,
+      "scenario": "load_increase",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 22.360423975047315,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 22.360423975047315,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 22.360423975047315,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2034,
+      "scenario": "demand_drop",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 6.727444557437821,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 6.727444557437821,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 6.727444557437821,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2035,
+      "scenario": "demand_drop",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 5.103759274647942,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 5.103759274647942,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 5.103759274647942,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2036,
+      "scenario": "demand_drop",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 14.248953085942347,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 14.248953085942347,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 14.248953085942347,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2037,
+      "scenario": "demand_drop",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 1,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 13.46504253629447,
+          "kwh_delta_vs_b": -4.981070153906066,
+          "kwh_delta_while_derated": -4.981070153906064,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 4
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 18.446112690200536,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 18.446112690200536,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 1,
+          "any_alert": true
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2038,
+      "scenario": "demand_drop",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 9.72449623306083,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 9.72449623306083,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 9.72449623306083,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    },
+    {
+      "seed": 2039,
+      "scenario": "demand_drop",
+      "kind": "healthy",
+      "b_trip_s": null,
+      "arms": {
+        "A": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 19.12745780536822,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "B": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 19.12745780536822,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        },
+        "C": {
+          "incidents": 0,
+          "trips": 0,
+          "interruption_min": 0.0,
+          "kwh": 19.12745780536822,
+          "kwh_delta_vs_b": 0.0,
+          "kwh_delta_while_derated": 0.0,
+          "duplicate_commands": 0,
+          "rejected_commands": 0,
+          "commands": 0
+        }
+      },
+      "detectors": {
+        "fixed": {
+          "episodes": 0,
+          "any_alert": false
+        },
+        "residual": {
+          "episodes": 0,
+          "any_alert": false
+        }
+      }
+    }
+  ]
+}

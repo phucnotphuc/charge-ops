@@ -79,6 +79,8 @@ export interface Incident {
   source: "local" | "datadog";
   opened_at: string;
   resolved_at?: string | null;
+  datadog_incident_url?: string | null;
+  datadog_notebook_url?: string | null;
   evidence?: {
     residual_mean?: number | null;
     start?: string;
@@ -93,6 +95,7 @@ export interface Incident {
   target_current_a?: number | null;
   load_reduction_verified_at?: string | null;
   reduction_check?: "load_reduction_ineffective" | "load_reduction_unverified" | null;
+  /** Only residual_not_recovered unlocks maintenance while still mitigating. */
   reduction_check_reason?: "load_not_reduced" | "insufficient_data" | "residual_not_recovered" | null;
   maintenance_applied_at?: string | null;
   mitigated_at?: string | null;
@@ -107,6 +110,8 @@ export interface Command {
   _id?: string;
   incident_id?: string;
   type: CommandType;
+  /** Who requested it: "operator" (UI/CLI) or "datadog-app"; absent on older commands. */
+  actor?: string | null;
   status: CommandStatus;
   created_at?: string;
   applied_at?: string | null;
@@ -129,18 +134,20 @@ export type DemoRunOut = Schemas["DemoRunOut"];
  */
 export type DemoRun = Omit<DemoRunOut, "id" | "created_at"> & { id?: string; _id?: string; created_at?: string };
 
-/** HAND-WRITTEN: no evaluations endpoint in the OpenAPI schema. */
-export interface Evaluation {
-  id?: string;
-  _id?: string;
-  created_at?: string;
-  seed?: number | null;
-  baseline_version?: string | null;
-  config_version?: string | null;
-  summary?: string | null;
-  metrics?: Record<string, number | string | null> | null;
-}
+/** GET /evaluations: committed offline summaries (simulated clock, never live). */
+export type EvaluationItem = Schemas["EvaluationItem"];
+export type EvaluationList = Schemas["EvaluationList"];
+/** GET /evaluations/{id}: A/B/C arms, detector-only view and internal targets. */
+export type Evaluation = Schemas["EvaluationOut"];
+export type EvaluationStats = Schemas["Stats"];
 
 export type CreateRunBody = Schemas["DemoRunCreate"];
+
+/** GET /stations/{id}: public, anonymous driver view. */
+export type StationOut = Schemas["StationOut"];
+export type StationConnector = Schemas["StationConnector"];
+export type FleetOut = Schemas["FleetOut"];
+export type TrendOut = Schemas["TrendOut"];
+export type IncidentSummary = Schemas["IncidentSummary"];
 
 export const idOf = (x: { id?: string; _id?: string }): string => x.id ?? x._id ?? "";

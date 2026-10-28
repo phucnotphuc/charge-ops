@@ -19,6 +19,182 @@
         "title": "ActiveIncident",
         "type": "object"
       },
+      "Arm": {
+        "properties": {
+          "commands": {
+            "title": "Commands",
+            "type": "integer"
+          },
+          "duplicate_commands": {
+            "title": "Duplicate Commands",
+            "type": "integer"
+          },
+          "fault": {
+            "$ref": "#/components/schemas/ArmFault"
+          },
+          "healthy": {
+            "$ref": "#/components/schemas/ArmHealthy"
+          },
+          "rejected_commands": {
+            "title": "Rejected Commands",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "fault",
+          "healthy",
+          "duplicate_commands",
+          "rejected_commands",
+          "commands"
+        ],
+        "title": "Arm",
+        "type": "object"
+      },
+      "ArmFault": {
+        "properties": {
+          "detected_any": {
+            "title": "Detected Any",
+            "type": "integer"
+          },
+          "detected_before_trip_among_b_tripped": {
+            "title": "Detected Before Trip Among B Tripped",
+            "type": "integer"
+          },
+          "effective_mitigation_s": {
+            "$ref": "#/components/schemas/Stats"
+          },
+          "final_states": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Final States",
+            "type": "object"
+          },
+          "interruption_min": {
+            "title": "Interruption Min",
+            "type": "number"
+          },
+          "kwh": {
+            "title": "Kwh",
+            "type": "number"
+          },
+          "kwh_delta_vs_b": {
+            "title": "Kwh Delta Vs B",
+            "type": "number"
+          },
+          "kwh_delta_while_derated": {
+            "title": "Kwh Delta While Derated",
+            "type": "number"
+          },
+          "latency_s": {
+            "$ref": "#/components/schemas/Stats"
+          },
+          "lead_time_s": {
+            "$ref": "#/components/schemas/Stats"
+          },
+          "maintenance_applied": {
+            "title": "Maintenance Applied",
+            "type": "integer"
+          },
+          "mitigated_s": {
+            "$ref": "#/components/schemas/Stats"
+          },
+          "pre_onset_false": {
+            "title": "Pre Onset False",
+            "type": "integer"
+          },
+          "recall_before_trip": {
+            "title": "Recall Before Trip",
+            "type": "integer"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "integer"
+          },
+          "seeds_tripped": {
+            "title": "Seeds Tripped",
+            "type": "integer"
+          },
+          "trips": {
+            "title": "Trips",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "recall_before_trip",
+          "detected_any",
+          "detected_before_trip_among_b_tripped",
+          "latency_s",
+          "lead_time_s",
+          "pre_onset_false",
+          "effective_mitigation_s",
+          "mitigated_s",
+          "maintenance_applied",
+          "resolved",
+          "final_states",
+          "trips",
+          "seeds_tripped",
+          "interruption_min",
+          "kwh",
+          "kwh_delta_vs_b",
+          "kwh_delta_while_derated"
+        ],
+        "title": "ArmFault",
+        "type": "object"
+      },
+      "ArmHealthy": {
+        "properties": {
+          "by_scenario": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "By Scenario",
+            "type": "object"
+          },
+          "false_alerts_per_connector_hour": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "False Alerts Per Connector Hour"
+          },
+          "incidents": {
+            "title": "Incidents",
+            "type": "integer"
+          },
+          "kwh": {
+            "title": "Kwh",
+            "type": "number"
+          },
+          "kwh_delta_vs_b": {
+            "title": "Kwh Delta Vs B",
+            "type": "number"
+          },
+          "runs_with_incident": {
+            "title": "Runs With Incident",
+            "type": "integer"
+          },
+          "trips": {
+            "title": "Trips",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "runs_with_incident",
+          "incidents",
+          "false_alerts_per_connector_hour",
+          "trips",
+          "kwh",
+          "kwh_delta_vs_b",
+          "by_scenario"
+        ],
+        "title": "ArmHealthy",
+        "type": "object"
+      },
       "Batch": {
         "properties": {
           "samples": {
@@ -79,6 +255,29 @@
           "status"
         ],
         "title": "CommandResult",
+        "type": "object"
+      },
+      "ConnectorCount": {
+        "properties": {
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "open": {
+            "title": "Open",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connector_id",
+          "count",
+          "open"
+        ],
+        "title": "ConnectorCount",
         "type": "object"
       },
       "ConnectorList": {
@@ -384,6 +583,257 @@
         "title": "DemoRunOut",
         "type": "object"
       },
+      "Detector": {
+        "properties": {
+          "detected_any": {
+            "title": "Detected Any",
+            "type": "integer"
+          },
+          "detected_before_trip_among_b_tripped": {
+            "title": "Detected Before Trip Among B Tripped",
+            "type": "integer"
+          },
+          "healthy_alert_episodes_per_connector_hour": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Healthy Alert Episodes Per Connector Hour"
+          },
+          "healthy_by_scenario": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Healthy By Scenario",
+            "type": "object"
+          },
+          "healthy_runs_alerting": {
+            "title": "Healthy Runs Alerting",
+            "type": "integer"
+          },
+          "latency_s": {
+            "$ref": "#/components/schemas/Stats"
+          },
+          "lead_time_s": {
+            "$ref": "#/components/schemas/Stats"
+          },
+          "pre_onset_false": {
+            "title": "Pre Onset False",
+            "type": "integer"
+          },
+          "recall_before_trip": {
+            "title": "Recall Before Trip",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "recall_before_trip",
+          "detected_any",
+          "detected_before_trip_among_b_tripped",
+          "latency_s",
+          "lead_time_s",
+          "pre_onset_false",
+          "healthy_runs_alerting",
+          "healthy_alert_episodes_per_connector_hour",
+          "healthy_by_scenario"
+        ],
+        "title": "Detector",
+        "type": "object"
+      },
+      "EvaluationItem": {
+        "properties": {
+          "b_tripped_seeds": {
+            "title": "B Tripped Seeds",
+            "type": "integer"
+          },
+          "fault_seeds": {
+            "title": "Fault Seeds",
+            "type": "integer"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "healthy_seeds": {
+            "title": "Healthy Seeds",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "locked": {
+            "$ref": "#/components/schemas/Locked"
+          },
+          "protocol_version": {
+            "title": "Protocol Version",
+            "type": "string"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "runtime_s": {
+            "title": "Runtime S",
+            "type": "number"
+          },
+          "simulation_only": {
+            "const": true,
+            "default": true,
+            "title": "Simulation Only",
+            "type": "boolean"
+          },
+          "targets": {
+            "$ref": "#/components/schemas/Targets"
+          }
+        },
+        "required": [
+          "id",
+          "protocol_version",
+          "fingerprint",
+          "locked",
+          "fault_seeds",
+          "healthy_seeds",
+          "b_tripped_seeds",
+          "runs",
+          "runtime_s",
+          "targets"
+        ],
+        "title": "EvaluationItem",
+        "type": "object"
+      },
+      "EvaluationList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvaluationItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "title": "Next Cursor",
+            "type": "null"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "EvaluationList",
+        "type": "object"
+      },
+      "EvaluationOut": {
+        "properties": {
+          "arms": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Arm"
+            },
+            "propertyNames": {
+              "enum": [
+                "A",
+                "B",
+                "C"
+              ]
+            },
+            "title": "Arms",
+            "type": "object"
+          },
+          "b_tripped_seeds": {
+            "title": "B Tripped Seeds",
+            "type": "integer"
+          },
+          "detectors": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Detector"
+            },
+            "propertyNames": {
+              "enum": [
+                "fixed",
+                "residual"
+              ]
+            },
+            "title": "Detectors",
+            "type": "object"
+          },
+          "fault_seeds": {
+            "title": "Fault Seeds",
+            "type": "integer"
+          },
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "healthy_connector_hours": {
+            "title": "Healthy Connector Hours",
+            "type": "number"
+          },
+          "healthy_seeds": {
+            "title": "Healthy Seeds",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "locked": {
+            "$ref": "#/components/schemas/Locked"
+          },
+          "protocol_version": {
+            "title": "Protocol Version",
+            "type": "string"
+          },
+          "runs": {
+            "title": "Runs",
+            "type": "integer"
+          },
+          "runtime_s": {
+            "title": "Runtime S",
+            "type": "number"
+          },
+          "simulation_only": {
+            "const": true,
+            "default": true,
+            "title": "Simulation Only",
+            "type": "boolean"
+          },
+          "summary_markdown": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary Markdown"
+          },
+          "targets": {
+            "$ref": "#/components/schemas/Targets"
+          }
+        },
+        "required": [
+          "id",
+          "protocol_version",
+          "fingerprint",
+          "locked",
+          "fault_seeds",
+          "healthy_seeds",
+          "b_tripped_seeds",
+          "runs",
+          "runtime_s",
+          "targets",
+          "healthy_connector_hours",
+          "arms",
+          "detectors",
+          "summary_markdown"
+        ],
+        "title": "EvaluationOut",
+        "type": "object"
+      },
       "FaultEventOut": {
         "properties": {
           "connector_id": {
@@ -440,6 +890,63 @@
         "title": "FaultRequest",
         "type": "object"
       },
+      "FleetOut": {
+        "properties": {
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "windows": {
+            "items": {
+              "$ref": "#/components/schemas/FleetWindow"
+            },
+            "title": "Windows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "windows"
+        ],
+        "title": "FleetOut",
+        "type": "object"
+      },
+      "FleetWindow": {
+        "properties": {
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "quality": {
+            "title": "Quality",
+            "type": "boolean"
+          },
+          "residual_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Mean"
+          }
+        },
+        "required": [
+          "connector_id",
+          "end",
+          "quality",
+          "residual_mean"
+        ],
+        "title": "FleetWindow",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -451,6 +958,99 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IncidentSummary": {
+        "properties": {
+          "by_connector": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectorCount"
+            },
+            "title": "By Connector",
+            "type": "array"
+          },
+          "by_state": {
+            "items": {
+              "$ref": "#/components/schemas/StateCount"
+            },
+            "title": "By State",
+            "type": "array"
+          },
+          "mtta_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mtta S"
+          },
+          "mttm_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mttm S"
+          },
+          "mttr_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mttr S"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "by_state",
+          "by_connector",
+          "mtta_s",
+          "mttm_s",
+          "mttr_s"
+        ],
+        "title": "IncidentSummary",
+        "type": "object"
+      },
+      "Locked": {
+        "properties": {
+          "a_threshold_c": {
+            "title": "A Threshold C",
+            "type": "number"
+          },
+          "c_alert_c": {
+            "title": "C Alert C",
+            "type": "number"
+          },
+          "c_recovered_c": {
+            "title": "C Recovered C",
+            "type": "number"
+          },
+          "locked_at": {
+            "title": "Locked At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "a_threshold_c",
+          "c_alert_c",
+          "c_recovered_c",
+          "locked_at"
+        ],
+        "title": "Locked",
         "type": "object"
       },
       "LoginRequest": {
@@ -708,6 +1308,227 @@
         "title": "SampleOut",
         "type": "object"
       },
+      "StateCount": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "count"
+        ],
+        "title": "StateCount",
+        "type": "object"
+      },
+      "StationConnector": {
+        "properties": {
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "connector_temperature_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connector Temperature C"
+          },
+          "current_a": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current A"
+          },
+          "energy_kwh": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Energy Kwh"
+          },
+          "measured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measured At"
+          },
+          "minutes_to_full": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes To Full"
+          },
+          "power_kw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Kw"
+          },
+          "soc_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soc Percent"
+          },
+          "status": {
+            "enum": [
+              "offline",
+              "idle",
+              "charging",
+              "limited",
+              "checking"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connector_id",
+          "status",
+          "soc_percent",
+          "power_kw",
+          "current_a",
+          "connector_temperature_c",
+          "energy_kwh",
+          "minutes_to_full",
+          "measured_at"
+        ],
+        "title": "StationConnector",
+        "type": "object"
+      },
+      "StationOut": {
+        "properties": {
+          "connectors": {
+            "items": {
+              "$ref": "#/components/schemas/StationConnector"
+            },
+            "title": "Connectors",
+            "type": "array"
+          },
+          "station_id": {
+            "title": "Station Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "station_id",
+          "connectors"
+        ],
+        "title": "StationOut",
+        "type": "object"
+      },
+      "Stats": {
+        "properties": {
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "median": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "n": {
+            "title": "N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n",
+          "median",
+          "min",
+          "max"
+        ],
+        "title": "Stats",
+        "type": "object"
+      },
+      "Targets": {
+        "properties": {
+          "c_healthy_runs_with_incident_le_1": {
+            "title": "C Healthy Runs With Incident Le 1",
+            "type": "boolean"
+          },
+          "c_recall_before_trip_ge_18_of_20": {
+            "title": "C Recall Before Trip Ge 18 Of 20",
+            "type": "boolean"
+          },
+          "duplicate_commands_zero": {
+            "title": "Duplicate Commands Zero",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "c_recall_before_trip_ge_18_of_20",
+          "c_healthy_runs_with_incident_le_1",
+          "duplicate_commands_zero"
+        ],
+        "title": "Targets",
+        "type": "object"
+      },
       "TelemetryItem": {
         "properties": {
           "ambient_temperature_c": {
@@ -909,6 +1730,94 @@
         "title": "TelemetryPage",
         "type": "object"
       },
+      "TrendOut": {
+        "properties": {
+          "connector_id": {
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/TrendPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "connector_id",
+          "points"
+        ],
+        "title": "TrendOut",
+        "type": "object"
+      },
+      "TrendPoint": {
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "residual_avg_5m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Avg 5M"
+          },
+          "residual_max_15m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Max 15M"
+          },
+          "residual_mean": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Mean"
+          },
+          "residual_slope_c_per_min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Residual Slope C Per Min"
+          }
+        },
+        "required": [
+          "end",
+          "residual_mean",
+          "residual_avg_5m",
+          "residual_slope_c_per_min",
+          "residual_max_15m"
+        ],
+        "title": "TrendPoint",
+        "type": "object"
+      },
       "UserOut": {
         "properties": {
           "role": {
@@ -966,6 +1875,91 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "VehicleBatch": {
+        "properties": {
+          "vehicles": {
+            "items": {
+              "$ref": "#/components/schemas/VehicleState"
+            },
+            "maxItems": 6,
+            "minItems": 1,
+            "title": "Vehicles",
+            "type": "array"
+          }
+        },
+        "required": [
+          "vehicles"
+        ],
+        "title": "VehicleBatch",
+        "type": "object"
+      },
+      "VehicleState": {
+        "additionalProperties": false,
+        "properties": {
+          "capacity_source": {
+            "enum": [
+              "autosun",
+              "default"
+            ],
+            "title": "Capacity Source",
+            "type": "string"
+          },
+          "connector_id": {
+            "enum": [
+              "connector-1",
+              "connector-2",
+              "connector-3",
+              "connector-4",
+              "connector-5",
+              "connector-6"
+            ],
+            "title": "Connector Id",
+            "type": "string"
+          },
+          "energy_kwh": {
+            "minimum": 0.0,
+            "title": "Energy Kwh",
+            "type": "number"
+          },
+          "measured_at": {
+            "format": "date-time",
+            "title": "Measured At",
+            "type": "string"
+          },
+          "minutes_to_full": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes To Full"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "soc_percent": {
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Soc Percent",
+            "type": "number"
+          }
+        },
+        "required": [
+          "run_id",
+          "connector_id",
+          "measured_at",
+          "soc_percent",
+          "energy_kwh",
+          "capacity_source"
+        ],
+        "title": "VehicleState",
         "type": "object"
       }
     }
@@ -1240,6 +2234,62 @@
         "summary": "Connector Telemetry"
       }
     },
+    "/api/v1/connectors/{connector_id}/trend": {
+      "get": {
+        "operationId": "connector_trend_api_v1_connectors__connector_id__trend_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "enum": [
+                "connector-1",
+                "connector-2",
+                "connector-3",
+                "connector-4",
+                "connector-5",
+                "connector-6"
+              ],
+              "title": "Connector Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrendOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Connector Trend"
+      }
+    },
     "/api/v1/demo-runs": {
       "get": {
         "operationId": "runs_api_v1_demo_runs_get",
@@ -1500,6 +2550,64 @@
         "summary": "Stop Run"
       }
     },
+    "/api/v1/evaluations": {
+      "get": {
+        "description": "Committed offline evaluation summaries (simulated clock), read-only and anonymous like other GETs.",
+        "operationId": "evaluations_api_v1_evaluations_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Evaluations"
+      }
+    },
+    "/api/v1/evaluations/{evaluation_id}": {
+      "get": {
+        "operationId": "evaluation_api_v1_evaluations__evaluation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "evaluation_id",
+            "required": true,
+            "schema": {
+              "title": "Evaluation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvaluationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Evaluation"
+      }
+    },
     "/api/v1/health": {
       "get": {
         "operationId": "health_api_v1_health_get",
@@ -1635,6 +2743,111 @@
           }
         },
         "summary": "Create Command"
+      }
+    },
+    "/api/v1/insights/fleet": {
+      "get": {
+        "operationId": "fleet_insights_api_v1_insights_fleet_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FleetOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fleet Insights"
+      }
+    },
+    "/api/v1/insights/incidents": {
+      "get": {
+        "operationId": "incident_insights_api_v1_insights_incidents_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Run Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "station_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "station-1",
+                    "station-2"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Station Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IncidentSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Incident Insights"
       }
     },
     "/api/v1/ready": {
@@ -1881,6 +3094,98 @@
           }
         },
         "summary": "Active Run"
+      }
+    },
+    "/api/v1/simulator/vehicles": {
+      "post": {
+        "operationId": "ingest_vehicles_api_v1_simulator_vehicles_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "x-simulator-secret",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "X-Simulator-Secret",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VehicleBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Ingest Vehicles"
+      }
+    },
+    "/api/v1/stations/{station_id}": {
+      "get": {
+        "description": "Anonymous, read-only: the driver-facing screen. Reuses the connector latest-state pipeline.",
+        "operationId": "station_display_api_v1_stations__station_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "station_id",
+            "required": true,
+            "schema": {
+              "enum": [
+                "station-1",
+                "station-2"
+              ],
+              "title": "Station Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Station Display"
       }
     },
     "/api/v1/telemetry/batch": {
