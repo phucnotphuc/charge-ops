@@ -54,5 +54,21 @@ def test_resolved_incident_time_ends_at_resolution():
     assert end == datetime(2026, 10, 28, 3, 25, tzinfo=UTC)
 
 
+def test_exact_queries_and_log_columns():
+    defs = cells(investigation_notebook(INCIDENT, "ap1.datadoghq.com", now=T))
+    scope = "{env:hackathon,run_id:r1,connector_id:connector-4}"
+    queries = [r["q"] for d in defs if d["type"] == "timeseries" for r in d["requests"]]
+    assert queries == [
+        f"(sum:chargeops.residual_positive{scope}.as_count()-sum:chargeops.residual_negative{scope}.as_count())"
+        f"/sum:chargeops.samples{scope}.as_count()",
+        f"avg:chargeops.connector_temperature_c{scope}",
+        f"avg:chargeops.expected_temperature_c{scope}",
+        f"avg:chargeops.current_a{scope}",
+        f"avg:chargeops.current_limit_a{scope}",
+        f"max:chargeops.incident.state_age_s{scope}",
+    ]
+    assert all(d["columns"] == ["host", "service"] for d in defs if d["type"] == "log_stream")
+
+
 def test_url():
     assert notebook_url("ap1.datadoghq.com", 12) == "https://app.ap1.datadoghq.com/notebook/12"

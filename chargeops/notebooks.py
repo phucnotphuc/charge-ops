@@ -36,7 +36,7 @@ def _markdown(text):
 def _logs(title, query):
     return {
         "attributes": {
-            "definition": {"type": "log_stream", "title": title, "query": query, "indexes": [], "columns": []},
+            "definition": {"type": "log_stream", "title": title, "query": query, "indexes": [], "columns": ["host", "service"]},
             "graph_size": "l",
         },
         "type": "notebook_cells",

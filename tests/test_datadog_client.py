@@ -188,3 +188,15 @@ def test_incident_note_uses_step_time():
     seen, handler = capture(201, {"data": {}})
     client(handler).incident_note("dd-1", "x", at=datetime(2026, 10, 28, 3, 0, tzinfo=UTC))
     assert seen["body"]["data"]["attributes"]["completed"].startswith("2026-10-28T03:00:00")
+
+
+def test_find_notebook_matches_name_exactly():
+    seen, handler = capture(body={"data": [
+        {"id": 5, "attributes": {"name": "Điều tra connector-4 [inc-10]"}},
+        {"id": 6, "attributes": {"name": "Điều tra connector-4 [inc-1]"}},
+    ]})
+    assert client(handler).find_notebook("inc-1", "Điều tra connector-4 [inc-1]") == 6
+    assert seen["method"] == "GET" and seen["path"] == "/api/v1/notebooks"
+    assert seen["query"]["query"] == "[inc-1]" and seen["query"]["include_cells"] == "false"
+    seen2, handler2 = capture(body={"data": []})
+    assert client(handler2).find_notebook("inc-1", "x") is None

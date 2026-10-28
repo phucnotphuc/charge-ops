@@ -59,7 +59,7 @@ class DatadogSync:
 
     @staticmethod
     def is_done(incident, state):
-        if not state.get("dd_incident_id") or state.get("last_error"):
+        if not state.get("dd_incident_id") or state.get("last_error") or not state.get("notebook_attached"):
             return False
         caught_up = state.get("synced_events", 0) >= len(incident.get("timeline", []))
         return caught_up and (incident["state"] != "resolved" or state.get("dd_resolved", False))
@@ -78,19 +78,53 @@ class DatadogSync:
                 dd_public_id=found["public_id"],
                 dd_incident_url=self.client.incident_url(found["public_id"]),
             )
-        if not state.get("notebook_id"):
-            payload = investigation_notebook(incident, self.site, now=at)
-            notebook_id = self.client.create_notebook(payload["data"]["attributes"])
-            self.put(state, notebook_id=notebook_id, notebook_url=notebook_url(self.site, notebook_id))
-        if not state.get("notebook_attached"):
-            self.client.attach_link(state["dd_incident_id"], state["notebook_url"], "Notebook điều tra")
-            self.put(state, notebook_attached=True)
+        self.sync_notebook(incident, state, at)
         for entry in incident.get("timeline", [])[state.get("synced_events", 0):]:
             self.client.incident_note(state["dd_incident_id"], note_text(incident, entry), at=entry["at"])
             self.put(state, synced_events=state.get("synced_events", 0) + 1)
         if incident["state"] == "resolved" and not state.get("dd_resolved"):
             self.client.resolve_incident(state["dd_incident_id"])
             self.put(state, dd_resolved=True)
+
+    def sync_notebook(self, incident, state, at):
+        """Notebook create + attach. A Datadog failure here is recorded and retried later; it never blocks the
+        timeline or resolve mirroring."""
+        retry_at = state.get("notebook_next_attempt_at")
+        if retry_at and retry_at.replace(tzinfo=at.tzinfo) > at:
+            return
+        try:
+            if not state.get("notebook_id"):
+                payload = investigation_notebook(incident, self.site, now=at)
+                attrs = payload["data"]["attributes"]
+                # A crash or lost response after the POST must not create a second notebook.
+                found = (
+                    self.client.find_notebook(incident["_id"], attrs["name"])
+                    if state.get("notebook_create_attempted_at")
+                    else None
+                )
+                if found is None:
+                    self.put(state, notebook_create_attempted_at=at)
+                    found = self.client.create_notebook(attrs)
+                self.put(state, notebook_id=found, notebook_url=notebook_url(self.site, found))
+            if not state.get("notebook_attached"):
+                if state.get("notebook_attach_attempted_at"):
+                    # attach_link is a POST that may have landed; prefer a missing link over a duplicate one.
+                    event(self.log, "datadog_notebook_attach_skipped", incident_id=incident["_id"])
+                else:
+                    self.put(state, notebook_attach_attempted_at=at)
+                    self.client.attach_link(state["dd_incident_id"], state["notebook_url"], "Notebook điều tra")
+                self.put(state, notebook_attached=True)
+            self.put(state, notebook_error=None, notebook_attempts=0, notebook_next_attempt_at=None)
+        except DatadogError as error:
+            attempts = state.get("notebook_attempts", 0) + 1
+            delay = BACKOFF_S[min(attempts, len(BACKOFF_S)) - 1]
+            self.put(
+                state,
+                notebook_error=f"HTTP {error.status}",
+                notebook_attempts=attempts,
+                notebook_next_attempt_at=at + timedelta(seconds=delay),
+            )
+            event(self.log, "datadog_notebook_failed", incident_id=incident["_id"], status=error.status)
 
     def run_forever(self, interval=5):
         while True:

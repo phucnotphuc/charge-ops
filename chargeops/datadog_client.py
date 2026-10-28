@@ -136,3 +136,19 @@ class DatadogClient:
 
     def update_notebook(self, notebook_id, payload):
         self.call("PUT", f"/api/v1/notebooks/{notebook_id}", {"data": {"type": "notebooks", "attributes": payload}})
+
+    def find_notebook(self, incident_id, name):
+        """Id of the notebook whose name is exactly `name` (it embeds [incident_id]), or None."""
+
+        def pick(result):
+            for item in result["data"]:
+                if item["attributes"]["name"] == name:
+                    return item["id"]
+            return None
+
+        return self.call(
+            "GET",
+            "/api/v1/notebooks",
+            params={"query": f"[{incident_id}]", "include_cells": "false", "count": 20},
+            extract=pick,
+        )
