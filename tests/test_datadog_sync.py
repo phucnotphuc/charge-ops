@@ -80,6 +80,30 @@ def test_restart_after_create_without_saved_id_reuses_existing_incident():
     assert db.datadog_sync.find_one({"_id": "inc-1"})["dd_incident_id"] == "dd-old"
 
 
+def test_note_failure_midway_resumes_without_resending_sent_steps():
+    steps = [{"at": T, "event": e} for e in ("opened", "acknowledge", "resolved_step")]
+    db, client, sync = setup(timeline=steps)
+    client.incident_note.side_effect = [None, DatadogError("POST", "/todos", 503), None, None]
+    sync.sync_once(T)
+    assert db.datadog_sync.find_one({"_id": "inc-1"})["synced_events"] == 1
+    sync.sync_once(T + timedelta(minutes=2))
+    events = [c.args[1].split(" · ")[1] for c in client.incident_note.call_args_list]
+    assert events == ["opened", "acknowledge", "acknowledge", "resolved_step"]
+    assert db.datadog_sync.find_one({"_id": "inc-1"})["synced_events"] == 3
+
+
+def test_malformed_response_is_recorded_and_next_incident_still_syncs():
+    db, client, sync = setup()
+    db.incidents.insert_one(
+        {"_id": "inc-2", "run_id": RUN, "connector_id": "connector-5", "state": "open", "opened_at": T,
+         "unresolved": True, "timeline": [{"at": T, "event": "opened"}]}
+    )
+    client.create_incident.side_effect = [DatadogError("POST", "/api/v2/incidents", 201), {"id": "dd-2", "public_id": 8}]
+    sync.sync_once(T)
+    assert "201" in db.datadog_sync.find_one({"_id": "inc-1"})["last_error"]
+    assert db.datadog_sync.find_one({"_id": "inc-2"})["dd_incident_id"] == "dd-2"
+
+
 def test_incident_api_exposes_datadog_links(store):
     store.incidents.insert_one({"_id": "inc-9", "run_id": RUN, "connector_id": "connector-4", "state": "open"})
     http = TestClient(app)

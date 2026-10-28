@@ -21,6 +21,8 @@ class DatadogError(Exception):
 
 class DatadogClient:
     def __init__(self, api_key, app_key, site, transport=None, retries=3):
+        if retries < 1:
+            raise ValueError("retries must be >= 1")
         self.site = site
         self.retries = retries
         self.http = httpx.Client(
@@ -30,23 +32,31 @@ class DatadogClient:
             transport=transport,
         )
 
-    def call(self, method, path, payload=None, params=None):
+    def call(self, method, path, payload=None, params=None, extract=None):
+        """Send a request. POST is not idempotent, so it retries only when the request provably never reached
+        Datadog (429, connect errors); any other POST failure raises so the caller can look the object up first."""
+        post = method == "POST"
         for attempt in range(self.retries):
+            last = attempt == self.retries - 1
             try:
                 response = self.http.request(method, path, json=payload, params=params)
-            except httpx.HTTPError:
+            except httpx.HTTPError as error:
                 # Transport errors can embed the request; surface status 0 only.
-                if attempt < self.retries - 1:
+                if not last and (not post or isinstance(error, httpx.ConnectError | httpx.ConnectTimeout)):
                     time.sleep(2**attempt)
                     continue
                 raise DatadogError(method, path, 0) from None
-            if response.status_code in RETRY_STATUS and attempt < self.retries - 1:
+            retryable = response.status_code == 429 if post else response.status_code in RETRY_STATUS
+            if retryable and not last:
                 time.sleep(float(response.headers.get("Retry-After", 2**attempt)))
                 continue
             if response.is_error:
                 raise DatadogError(method, path, response.status_code)
-            return response.json() if response.content else {}
-        raise DatadogError(method, path, 0)
+            try:
+                body = response.json() if response.content else {}
+                return extract(body) if extract else body
+            except (ValueError, KeyError, TypeError):
+                raise DatadogError(method, path, response.status_code) from None
 
     def incident_url(self, public_id):
         return f"https://app.{self.site}/incidents/{public_id}"
@@ -63,17 +73,21 @@ class DatadogClient:
                 },
             }
         }
-        data = self.call("POST", "/api/v2/incidents", body)["data"]
-        return {"id": data["id"], "public_id": data["attributes"]["public_id"]}
+        return self.call(
+            "POST",
+            "/api/v2/incidents",
+            body,
+            extract=lambda r: {"id": r["data"]["id"], "public_id": r["data"]["attributes"]["public_id"]},
+        )
 
-    def incident_note(self, dd_incident_id, text):
+    def incident_note(self, dd_incident_id, text, at=None):
         body = {
             "data": {
                 "type": "incident_todos",
                 "attributes": {
                     "assignees": [],
                     "content": text,
-                    "completed": datetime.now(UTC).isoformat(),
+                    "completed": (at or datetime.now(UTC)).isoformat(),
                 },
             }
         }
@@ -90,11 +104,18 @@ class DatadogClient:
         self.call("PATCH", f"/api/v2/incidents/{dd_incident_id}", body)
 
     def find_incident(self, chargeops_incident_id):
-        result = self.call("GET", "/api/v2/incidents/search", params={"query": f'"{chargeops_incident_id}"'})
-        for item in result.get("data", {}).get("attributes", {}).get("incidents", []):
-            data = item["data"]
-            return {"id": data["id"], "public_id": data["attributes"]["public_id"]}
-        return None
+        suffix = f"[{chargeops_incident_id}]"
+
+        def pick(result):
+            for item in result["data"]["attributes"]["incidents"]:
+                data = item["data"]
+                if data["attributes"]["title"].endswith(suffix):
+                    return {"id": data["id"], "public_id": data["attributes"]["public_id"]}
+            return None
+
+        return self.call(
+            "GET", "/api/v2/incidents/search", params={"query": f'"{chargeops_incident_id}"'}, extract=pick
+        )
 
     def attach_link(self, dd_incident_id, url, title):
         body = {
@@ -106,8 +127,12 @@ class DatadogClient:
         self.call("POST", f"/api/v2/incidents/{dd_incident_id}/attachments", body)
 
     def create_notebook(self, payload):
-        result = self.call("POST", "/api/v1/notebooks", {"data": {"type": "notebooks", "attributes": payload}})
-        return result["data"]["id"]
+        return self.call(
+            "POST",
+            "/api/v1/notebooks",
+            {"data": {"type": "notebooks", "attributes": payload}},
+            extract=lambda r: r["data"]["id"],
+        )
 
     def update_notebook(self, notebook_id, payload):
         self.call("PUT", f"/api/v1/notebooks/{notebook_id}", {"data": {"type": "notebooks", "attributes": payload}})

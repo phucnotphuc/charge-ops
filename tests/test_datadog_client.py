@@ -87,7 +87,7 @@ def test_resolve_incident_patches_state():
 
 
 def test_find_incident_searches_by_chargeops_id():
-    body = {"data": {"attributes": {"incidents": [{"data": {"id": "dd-9", "attributes": {"public_id": 5}}}]}}}
+    body = {"data": {"attributes": {"incidents": [{"data": {"id": "dd-9", "attributes": {"public_id": 5, "title": "X [inc-1]"}}}]}}}
     seen, handler = capture(200, body)
     assert client(handler).find_incident("inc-1") == {"id": "dd-9", "public_id": 5}
     assert seen["path"] == "/api/v2/incidents/search" and "inc-1" in seen["query"]["query"]
@@ -119,3 +119,72 @@ def test_update_notebook_puts_payload():
     client(handler).update_notebook(77, {"name": "PM inc-1 v2", "cells": []})
     assert (seen["method"], seen["path"]) == ("PUT", "/api/v1/notebooks/77")
     assert "PM inc-1 v2" in json.dumps(seen["body"])
+
+
+def test_find_incident_ignores_non_matching_titles():
+    body = {"data": {"attributes": {"incidents": [{"data": {"id": "o", "attributes": {"public_id": 1, "title": "X [inc-10]"}}}]}}}
+    seen, handler = capture(200, body)
+    assert client(handler).find_incident("inc-1") is None
+
+
+def test_post_is_not_retried_on_5xx_or_read_timeout():
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        return httpx.Response(503)
+
+    with pytest.raises(DatadogError) as info:
+        client(handler).create_incident("t", "inc-1")
+    assert info.value.status == 503 and len(calls) == 1
+
+    def timeout(request):
+        calls.append(1)
+        raise httpx.ReadTimeout("slow")
+
+    with pytest.raises(DatadogError):
+        client(timeout).create_incident("t", "inc-1")
+    assert len(calls) == 2
+
+
+def test_post_retries_connect_errors_and_get_retries_5xx():
+    calls = []
+
+    def handler(request):
+        calls.append(request.method)
+        if len(calls) < 2:
+            raise httpx.ConnectError("down")
+        return httpx.Response(201, json={"data": {"id": "x", "attributes": {"public_id": 1}}})
+
+    assert client(handler).create_incident("t", "inc-1")["id"] == "x"
+    assert len(calls) == 2
+    gets = []
+
+    def flaky(request):
+        gets.append(1)
+        if len(gets) < 2:
+            return httpx.Response(503, headers={"Retry-After": "0"})
+        return httpx.Response(200, json={"data": {"attributes": {"incidents": []}}})
+
+    assert client(flaky).find_incident("inc-1") is None
+    assert len(gets) == 2
+
+
+@pytest.mark.parametrize("response", [httpx.Response(201, content=b"<html>"), httpx.Response(201, json={"oops": 1})])
+def test_malformed_success_response_becomes_datadog_error(response):
+    with pytest.raises(DatadogError) as info:
+        client(lambda r: response).create_incident("t", "inc-1")
+    assert info.value.status == 201
+
+
+def test_retries_must_be_positive():
+    with pytest.raises(ValueError):
+        DatadogClient("a", "b", "datadoghq.com", retries=0)
+
+
+def test_incident_note_uses_step_time():
+    from datetime import UTC, datetime
+
+    seen, handler = capture(201, {"data": {}})
+    client(handler).incident_note("dd-1", "x", at=datetime(2026, 10, 28, 3, 0, tzinfo=UTC))
+    assert seen["body"]["data"]["attributes"]["completed"].startswith("2026-10-28T03:00:00")

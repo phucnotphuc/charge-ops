@@ -26,16 +26,20 @@ class DatadogSync:
     def __init__(self, db, client, stats, log, site):
         self.db, self.client, self.stats, self.log, self.site = db, client, stats, log, site
 
-    def save(self, state):
-        self.db.datadog_sync.replace_one({"_id": state["_id"]}, state, upsert=True)
+    def put(self, state, **fields):
+        """Persist only the changed fields ($set), so a concurrent writer of other fields is never overwritten."""
+        state.update(fields)
+        self.db.datadog_sync.update_one(
+            {"_id": state["_id"]}, {"$set": fields, "$setOnInsert": {"run_id": state["run_id"]}}, upsert=True
+        )
 
     def sync_once(self, at):
         touched = 0
         runs = [r["_id"] for r in self.db.runs.find({"mode": "datadog"}, {"_id": 1})]
-        for incident in self.db.incidents.find({"run_id": {"$in": runs}}):
-            state = self.db.datadog_sync.find_one({"_id": incident["_id"]}) or {
-                "_id": incident["_id"], "run_id": incident["run_id"], "synced_events": 0, "attempts": 0,
-            }
+        incidents = list(self.db.incidents.find({"run_id": {"$in": runs}}))
+        states = {d["_id"]: d for d in self.db.datadog_sync.find({"_id": {"$in": [i["_id"] for i in incidents]}})}
+        for incident in incidents:
+            state = states.get(incident["_id"]) or {"_id": incident["_id"], "run_id": incident["run_id"]}
             next_at = state.get("next_attempt_at")
             if next_at and next_at.replace(tzinfo=at.tzinfo) > at:
                 continue
@@ -43,14 +47,12 @@ class DatadogSync:
                 continue
             try:
                 self.sync_incident(incident, state, at)
-                state.update(attempts=0, last_error=None, next_attempt_at=None)
+                self.put(state, attempts=0, last_error=None, next_attempt_at=None)
             except DatadogError as error:
-                state["attempts"] = state.get("attempts", 0) + 1
-                state["last_error"] = str(error)
-                delay = BACKOFF_S[min(state["attempts"], len(BACKOFF_S)) - 1]
-                state["next_attempt_at"] = at + timedelta(seconds=delay)
+                attempts = state.get("attempts", 0) + 1
+                delay = BACKOFF_S[min(attempts, len(BACKOFF_S)) - 1]
+                self.put(state, attempts=attempts, last_error=str(error), next_attempt_at=at + timedelta(seconds=delay))
                 event(self.log, "datadog_sync_failed", incident_id=incident["_id"], status=error.status)
-            self.save(state)
             touched += 1
         return touched
 
@@ -66,23 +68,21 @@ class DatadogSync:
             # A crash between "create attempted" and "id saved" must not duplicate the Datadog incident.
             found = self.client.find_incident(incident["_id"]) if state.get("create_attempted_at") else None
             if not found:
-                state["create_attempted_at"] = at
-                self.save(state)
+                self.put(state, create_attempted_at=at)
                 title = f"ChargeOps {incident['connector_id']} quá nhiệt"
                 found = self.client.create_incident(title, incident["_id"])
-            state.update(
+            self.put(
+                state,
                 dd_incident_id=found["id"],
                 dd_public_id=found["public_id"],
                 dd_incident_url=self.client.incident_url(found["public_id"]),
             )
-            self.save(state)
         for entry in incident.get("timeline", [])[state.get("synced_events", 0):]:
-            self.client.incident_note(state["dd_incident_id"], note_text(incident, entry))
-            state["synced_events"] = state.get("synced_events", 0) + 1
-            self.save(state)
+            self.client.incident_note(state["dd_incident_id"], note_text(incident, entry), at=entry["at"])
+            self.put(state, synced_events=state.get("synced_events", 0) + 1)
         if incident["state"] == "resolved" and not state.get("dd_resolved"):
             self.client.resolve_incident(state["dd_incident_id"])
-            state["dd_resolved"] = True
+            self.put(state, dd_resolved=True)
 
     def run_forever(self, interval=5):
         while True:
