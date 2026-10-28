@@ -140,6 +140,7 @@ Các test này dùng MongoDB giả lập (mongomock), chỉ chứng minh logic, 
    - dashboard IT/SRE có "Worker heartbeat";
    - từ một dòng log mở được trace APM.
 7. (Tùy chọn) Kiểm tra RUM: điền `DD_RUM_APPLICATION_ID` và `DD_RUM_CLIENT_TOKEN` vào `.env`, build lại web (`docker compose --profile observability up --build -d web`), mở một sự cố, gửi một lệnh, rồi trên Datadog RUM Explorer tìm action `command_sent` của service `chargeops-web`.
+8. (Tùy chọn) Datadog App (B8): đặt `DATADOG_ACTION_SECRET` (đã có nếu `.env` tạo bằng `init_env.py`; thêm vào `.env` cũ, tối thiểu 24 ký tự), tạo lại api (`docker compose --profile observability up -d api`), rồi chạy lại bước 4 với thêm `--with-app`. Nếu script in hướng dẫn "Import JSON", làm theo từng bước. Trong Datadog App Builder mở app "ChargeOps - xu ly su co", chọn một sự cố `open`, bấm Xác nhận. Kỳ vọng: sự cố chuyển `acknowledged` trong ChargeOps, danh sách lệnh của sự cố trong giao diện ChargeOps hiện nguồn "Datadog App" (cột Nguồn; `actor: datadog-app` trong dữ liệu), các nút không hợp lệ bị tắt. Kiểm tra gateway: `curl -i https://YOUR-TUNNEL.trycloudflare.com/api/v1/incidents` trả 404.
 
 Lưu ý:
 

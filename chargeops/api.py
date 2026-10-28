@@ -306,13 +306,8 @@ def incident(incident_id: str, store=Depends(db)):
     return encode(found)
 
 
-@app.post("/api/v1/incidents/{incident_id}/commands", status_code=202, dependencies=[Depends(operator_auth)])
-def create_command(
-    incident_id: str,
-    body: CommandRequest,
-    idempotency_key: str = Header(min_length=1, max_length=200),
-    store=Depends(db),
-):
+def create_command_doc(store, incident_id, type, idempotency_key, actor):
+    """Insert a pending, unvalidated command; the worker validates it. Shared by the operator and App routes."""
     found = store.incidents.find_one({"_id": incident_id}, {"run_id": 1, "connector_id": 1})
     if not found:
         raise HTTPException(404, "Incident not found")
@@ -322,7 +317,8 @@ def create_command(
         "incident_id": incident_id,
         "run_id": found["run_id"],
         "connector_id": found["connector_id"],
-        "type": body.type,
+        "type": type,
+        "actor": actor,
         "status": "pending",
         "validated": False,
         "created_at": now(),
@@ -331,13 +327,21 @@ def create_command(
         store.commands.insert_one(command)
     except DuplicateKeyError:
         command = store.commands.find_one({"idempotency_key": idempotency_key})
-        if (command["incident_id"], command["type"]) != (incident_id, body.type):
+        if (command["incident_id"], command["type"]) != (incident_id, type):
             raise HTTPException(409, "Idempotency-Key reused with a different request") from None
-    event(
-        logger("api"), "command_requested", incident_id=incident_id, command_id=command["_id"], type=body.type
-    )
+    event(logger("api"), "command_requested", incident_id=incident_id, command_id=command["_id"], type=type)
     # Accepted is not "load reduced": the worker validates, the simulator applies, telemetry verifies.
     return {"command_id": command["_id"], "status": command["status"]}
+
+
+@app.post("/api/v1/incidents/{incident_id}/commands", status_code=202, dependencies=[Depends(operator_auth)])
+def create_command(
+    incident_id: str,
+    body: CommandRequest,
+    idempotency_key: str = Header(min_length=1, max_length=200),
+    store=Depends(db),
+):
+    return create_command_doc(store, incident_id, body.type, idempotency_key, "operator")
 
 
 @app.get("/api/v1/commands/{command_id}")
@@ -783,3 +787,9 @@ def evaluation(evaluation_id: str):
     if not found:
         raise ApiError(404, "not_found", "Evaluation not found")
     return found
+
+
+# Datadog App action surface: X-Action-Secret only, never the operator credentials.
+from chargeops.actions import router as datadog_actions  # noqa: E402
+
+app.include_router(datadog_actions)

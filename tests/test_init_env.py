@@ -69,3 +69,13 @@ def test_stdin_flag_requires_user(tmp_path):
 def test_env_quote_rejects_quotes():
     with pytest.raises(ValueError):
         init_env.env_quote("a'b")
+
+
+def test_action_secret_generated_distinct_and_never_printed(tmp_path, capsys):
+    target = tmp_path / ".env"
+    init_env.main([], target=target)
+    env = read_env(target)
+    assert len(env["DATADOG_ACTION_SECRET"]) >= 24
+    assert env["DATADOG_ACTION_SECRET"] not in {env["OPERATOR_SECRET"], env["WEBHOOK_SECRET"], env["SIMULATOR_SECRET"]}
+    assert env["DATADOG_ACTION_SECRET"] not in capsys.readouterr().out
+

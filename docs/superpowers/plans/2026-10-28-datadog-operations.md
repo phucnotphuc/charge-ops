@@ -526,7 +526,7 @@ def test_url():
 Stop here and hand over:
 1. `.env`: Datadog keys/site, `DD_TRACE_ENABLED=true`, `DD_METRICS_ENABLED=true`, `DD_RUM_APPLICATION_ID`/`DD_RUM_CLIENT_TOKEN`, `DATADOG_ACTION_SECRET`; `docker compose --profile observability up --build -d`.
 2. `python scripts/setup_datadog.py --webhook-url https://…/api/v1/webhooks/datadog --with-app`; set `DD_MONITOR_ID`; restart worker.
-3. One datadog-mode thermal_fault run: Datadog Incident created with each step mirrored; Notebook linked from Incident and UI; postmortem filled after resolve; SLO values move; RUM session shows `command_sent`; one command sent from the Datadog App and visible in the ChargeOps timeline with `actor: datadog-app`.
+3. One datadog-mode thermal_fault run: Datadog Incident created with each step mirrored; Notebook linked from Incident and UI; postmortem filled after resolve; SLO values move; RUM session shows `command_sent`; one command sent from the Datadog App and visible in the ChargeOps incident command list as "Datadog App" (`actor: datadog-app`).
 4. `docker compose exec api python -m chargeops.check_mongo` prints `$setWindowFields ok` and `postmortem $merge ok`.
 
 ## Self-review notes

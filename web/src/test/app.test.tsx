@@ -400,6 +400,18 @@ describe("command gates", () => {
   };
   const verified = "2026-10-20T03:05:00Z";
 
+  it("shows who requested each command (Operator / Datadog App)", async () => {
+    operatorView({
+      commands: [
+        { id: "c1", type: "acknowledge", status: "applied", actor: "operator" },
+        { id: "c2", type: "reduce_load", status: "applied", actor: "datadog-app" },
+        { id: "c3", type: "maintenance", status: "failed" },
+      ],
+    });
+    const cells = await screen.findAllByTestId("command-actor");
+    expect(cells.map((c) => c.textContent)).toEqual(["Operator", "Datadog App", ""]);
+  });
+
   it("unlocks maintenance while mitigating only for residual_not_recovered", () => {
     const check = (reason: Incident["reduction_check_reason"]) =>
       commandAllowed(

@@ -1,11 +1,24 @@
 :8081 {
-    @webhook {
-        method POST
-        path /api/v1/webhooks/datadog
-    }
+    # Exact, case-sensitive method + path (the `path` matcher is case-insensitive and normalises `//`).
+    @webhook expression `{method} == 'POST' && {http.request.uri.path} == '/api/v1/webhooks/datadog'`
     handle @webhook {
         request_body {
             max_size 16KB
+        }
+        reverse_proxy api:8000
+    }
+    # Datadog App (App Builder): exactly these two routes; the API requires X-Action-Secret on both.
+    @actions expression `{method} == 'POST' && {http.request.uri.path} == '/api/v1/integrations/datadog/actions'`
+    @incidents expression `{method} == 'GET' && {http.request.uri.path} == '/api/v1/integrations/datadog/incidents'`
+    handle @actions {
+        request_body {
+            max_size 4KB
+        }
+        reverse_proxy api:8000
+    }
+    handle @incidents {
+        request_body {
+            max_size 4KB
         }
         reverse_proxy api:8000
     }
