@@ -395,15 +395,30 @@ def app_definition(tunnel, connection_id):
 
 
 def provision_app(client, state, tunnel, action_secret, save, site):
-    """Create/update the HTTP connection and the App via the v2 API. Returns False (after printing the
-    manual Import JSON steps) when App Builder or Action Connections are not reachable (403/404).
-    `client` is rooted at https://api.<site>; the action secret only ever goes into the connection body."""
+    """Create/update the HTTP connection and the App via the v2 API. Any 4xx from either endpoint prints
+    the status and the manual Import JSON steps and returns False (the caller continues). A 404 for a stored
+    id means it was deleted in Datadog: the id is cleared and the resource recreated once.
+    `client` is rooted at https://api.<site>; the action secret only ever goes into the connection body and
+    response bodies are never printed."""
 
     def fall_back(step, response):
-        # Never print the response body: it could echo the connection payload.
         print(f"{step}: HTTP {response.status_code}.")
         print(MANUAL_APP_STEPS.format(tunnel=tunnel, name=CONNECTION_NAME))
         return False
+
+    def upsert(key, create_path, update_path, make_body):
+        for attempt in range(2):
+            stored = state.get(key)
+            if stored:
+                response = client.patch(update_path.format(stored), json=make_body(stored))
+            else:
+                response = client.post(create_path, json=make_body(None))
+            if response.status_code == 404 and stored and attempt == 0:
+                del state[key]
+                save()
+                continue
+            return response
+        return response
 
     connection = {
         "data": {
@@ -422,23 +437,24 @@ def provision_app(client, state, tunnel, action_secret, save, site):
             },
         }
     }
-    if "app_connection" in state:
-        response = client.patch(f"/api/v2/actions/connections/{state['app_connection']}", json=connection)
-    else:
-        response = client.post("/api/v2/actions/connections", json=connection)
-    if response.status_code in (403, 404):
+    response = upsert(
+        "app_connection", "/api/v2/actions/connections", "/api/v2/actions/connections/{}", lambda _id: connection
+    )
+    if 400 <= response.status_code < 500:
         return fall_back("Action connection", response)
     if response.is_error:
         raise SystemExit(f"Action connection: HTTP {response.status_code}")
     state["app_connection"] = state.get("app_connection") or response.json()["data"]["id"]
     save()
-    attributes = app_definition(tunnel, state["app_connection"])
-    if "app" in state:
-        body = {"data": {"type": "appDefinitions", "id": state["app"], "attributes": attributes}}
-        response = client.patch(f"/api/v2/app-builder/apps/{state['app']}", json=body)
-    else:
-        response = client.post("/api/v2/app-builder/apps", json={"data": {"type": "appDefinitions", "attributes": attributes}})
-    if response.status_code in (403, 404):
+
+    def app_body(app_id):
+        data = {"type": "appDefinitions", "attributes": app_definition(tunnel, state["app_connection"])}
+        if app_id:
+            data["id"] = app_id
+        return {"data": data}
+
+    response = upsert("app", "/api/v2/app-builder/apps", "/api/v2/app-builder/apps/{}", app_body)
+    if 400 <= response.status_code < 500:
         return fall_back("App Builder", response)
     if response.is_error:
         raise SystemExit(f"App Builder: HTTP {response.status_code}")
@@ -447,7 +463,7 @@ def provision_app(client, state, tunnel, action_secret, save, site):
     published = client.post(f"/api/v2/app-builder/apps/{state['app']}/deployment")
     if published.is_error:
         print(f"App saved but not published (HTTP {published.status_code}); publish it in App Builder.")
-    print(f"App: https://app.{site}/app-builder/apps/{state['app']}")
+    print(f"App: https://app.{site}/app-builder/apps/{state['app']} (also under Datadog > Apps)")
     return True
 
 
@@ -586,6 +602,10 @@ def main():
         )
         state["composite"] = result["id"]
         save()
+    print("Extra monitors: stale, worker heartbeat, derating not resolving (no webhook).")
+    print(f"Set DD_MONITOR_ID={state['composite']} in .env, then recreate worker.")
+    for key in DASHBOARDS:
+        print(f"Dashboard: https://app.{site}/dashboard/{state[key]}")
     if args.with_app:
         tunnel = f"{parsed.scheme}://{parsed.netloc}"
         with httpx.Client(
@@ -594,10 +614,6 @@ def main():
             timeout=30,
         ) as app_client:
             provision_app(app_client, state, tunnel, os.environ["DATADOG_ACTION_SECRET"], save, site)
-    print("Extra monitors: stale, worker heartbeat, derating not resolving (no webhook).")
-    print(f"Set DD_MONITOR_ID={state['composite']} in .env, then recreate worker.")
-    for key in DASHBOARDS:
-        print(f"Dashboard: https://app.{site}/dashboard/{state[key]}")
 
 
 if __name__ == "__main__":

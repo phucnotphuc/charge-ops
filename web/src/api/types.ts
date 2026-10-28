@@ -110,6 +110,8 @@ export interface Command {
   _id?: string;
   incident_id?: string;
   type: CommandType;
+  /** Who requested it: "operator" (UI/CLI) or "datadog-app"; absent on older commands. */
+  actor?: string | null;
   status: CommandStatus;
   created_at?: string;
   applied_at?: string | null;

@@ -73,7 +73,6 @@ def incidents(store=Depends(db)):
                 "station_id": row.get("station_id"),
                 "state": row["state"],
                 "allowed_commands": allowed_commands(row),
-                "ui_url": f"/incidents/{row['_id']}",
             }
             for row in rows
         ]

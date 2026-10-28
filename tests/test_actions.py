@@ -141,8 +141,7 @@ def test_incidents_list_only_unresolved_of_active_run(client, store):
     assert [i["incident_id"] for i in items] == ["a"]
     assert items[0]["allowed_commands"] == ["reduce_load"]
     assert items[0]["connector_id"] == "connector-1" and items[0]["station_id"] == "station-1"
-    assert items[0]["ui_url"] == "/incidents/a"
-    assert set(items[0]) == {"incident_id", "connector_id", "station_id", "state", "allowed_commands", "ui_url"}
+    assert set(items[0]) == {"incident_id", "connector_id", "station_id", "state", "allowed_commands"}
 
 
 def test_incidents_empty_without_active_run(store, monkeypatch):

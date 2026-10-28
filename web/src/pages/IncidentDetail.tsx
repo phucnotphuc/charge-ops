@@ -301,6 +301,7 @@ function CommandPanel({
           <thead>
             <tr>
               <th>Lệnh</th>
+              <th>Nguồn</th>
               <th>Trạng thái</th>
               <th>Tạo lúc</th>
               <th>Ghi chú</th>
@@ -310,6 +311,7 @@ function CommandPanel({
             {history.map((c) => (
               <tr key={idOf(c)}>
                 <td>{COMMAND_LABEL[c.type] ?? c.type}</td>
+                <td data-testid="command-actor">{actorLabel(c.actor)}</td>
                 <td>{COMMAND_STATUS_LABEL[c.status] ?? c.status}</td>
                 <td>{fmtTime(c.created_at)}</td>
                 <td>{c.error ?? ""}</td>
@@ -320,6 +322,13 @@ function CommandPanel({
       )}
     </div>
   );
+}
+
+/** Who requested a command, for the command list. */
+export function actorLabel(actor?: string | null): string {
+  if (actor === "datadog-app") return "Datadog App";
+  if (actor === "operator") return "Operator";
+  return actor ?? "";
 }
 
 /** Polls GET /commands/{id} every 5 s until the command is applied, failed or timed out. */
@@ -358,6 +367,7 @@ function TrackedCommand({ sent, onSettled }: { sent: Sent; onSettled?: () => voi
   return (
     <li data-testid="tracked-command">
       <strong>{COMMAND_LABEL[sent.type]}</strong>: {COMMAND_STATUS_LABEL[status] ?? status}
+      {command?.actor && <span className="muted small"> · {actorLabel(command.actor)}</span>}
       {status === "applied" && sent.type === "reduce_load" && (
         <span className="muted small"> · ACK chưa phải bằng chứng đã giảm dòng, chờ telemetry xác nhận</span>
       )}

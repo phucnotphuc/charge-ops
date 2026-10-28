@@ -13,20 +13,23 @@ EXPECTED = {
 
 
 def matchers():
+    """name -> (method, exact path) from `@name expression `{method} == 'M' && {http.request.uri.path} == '/p'``."""
     found = {}
-    for name, body in re.findall(r"^    @(\w+) \{\n(.*?)\n    \}", TEXT, re.S | re.M):
-        method = re.search(r"method (\w+)", body).group(1)
-        paths = re.findall(r"path (\S+)", body)
-        found[name] = (method, paths)
+    pattern = r"^    @(\w+) expression `\{method\} == '([A-Z]+)' && \{http\.request\.uri\.path\} == '([^']+)'`$"
+    for line in TEXT.splitlines():
+        if line.strip().startswith("@"):
+            match = re.match(pattern, line)
+            assert match, f"matcher must be an exact, case-sensitive expression: {line!r}"
+            found[match.group(1)] = (match.group(2), match.group(3))
     return found
 
 
 def test_exactly_three_exact_paths_with_methods():
-    pairs = set()
-    for method, paths in matchers().values():
-        assert len(paths) == 1 and "*" not in paths[0]  # exact paths, no wildcards
-        pairs.add((method, paths[0]))
-    assert pairs == EXPECTED
+    found = matchers()
+    assert set(found) == {"webhook", "actions", "incidents"}
+    assert set(found.values()) == EXPECTED
+    assert not re.search(r"^\s*(path|path_regexp|method)\s", TEXT, re.M)  # no case-insensitive/glob matchers
+    assert all("*" not in path for _, path in found.values())
 
 
 def test_only_matcher_handles_proxy_and_the_rest_is_404():

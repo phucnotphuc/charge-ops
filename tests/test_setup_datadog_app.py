@@ -18,6 +18,42 @@ def app_client(handler):
     return httpx.Client(base_url="https://api.datadoghq.com", transport=httpx.MockTransport(handler))
 
 
+def components(app):
+    """Children of the root grid: every one must be a gridCell, whose own children are the real widgets."""
+    cells = app["components"][0]["properties"]["children"]
+    assert cells and all(c["type"] == "gridCell" for c in cells)
+    return [child for cell in cells for child in cell["properties"]["children"]]
+
+
+# Documented App Builder event names/types (Create App API reference).
+EVENT_NAMES = {
+    "pageChange", "tableRowClick", "_tableRowButtonClick", "change", "submit", "click",
+    "toggleOpen", "close", "open", "executionFinished",
+}
+EVENT_TYPES = {
+    "custom", "setComponentState", "triggerQuery", "openModal", "closeModal", "openUrl", "downloadFile",
+    "setStateVariableValue",
+}
+
+
+def test_app_json_follows_documented_schema():
+    import uuid
+
+    app = sd.app_definition(TUNNEL, "conn-1")
+    names = {q["name"] for q in app["queries"]}
+    ids = [q["id"] for q in app["queries"]]
+    assert len(set(ids)) == len(ids)
+    for query_id in ids:
+        assert str(uuid.UUID(query_id)) == query_id
+    events = [e for q in app["queries"] for e in q["events"]] + [e for c in components(app) for e in c.get("events", [])]
+    assert events
+    for e in events:
+        assert e["name"] in EVENT_NAMES and e["type"] in EVENT_TYPES
+        assert e["queryName"] in names
+    assert {e["name"] for q in app["queries"] for e in q["events"]} == {"executionFinished"}
+    assert all(c["name"] == "click" for comp in components(app) if comp["type"] == "button" for c in comp["events"])
+
+
 def provision(handler, state):
     return sd.provision_app(app_client(handler), state, TUNNEL, ACTION_SECRET, lambda: None, "datadoghq.com")
 
@@ -33,7 +69,7 @@ def test_app_definition_substitutes_and_has_four_buttons_and_no_secret():
     for q in posts:
         assert q["properties"]["onlyTriggerManually"] is True
         assert q["properties"]["spec"]["inputs"]["url"] == TUNNEL + "/api/v1/integrations/datadog/actions"
-    buttons = [c for c in app["components"][0]["properties"]["children"] if c["type"] == "button"]
+    buttons = [c for c in components(app) if c["type"] == "button"]
     assert len(buttons) == 4 and all("allowed_commands" in b["properties"]["isDisabled"] for b in buttons)
 
 
@@ -71,3 +107,49 @@ def test_provision_falls_back_to_manual_import_on_404(capsys):
     out = capsys.readouterr().out
     assert "Import JSON" in out and "datadog_app.json" in out and "X-Action-Secret" in out
     assert ACTION_SECRET not in out and "app" not in state
+
+
+def test_any_4xx_falls_back_and_continues(capsys):
+    def handler(request):
+        return httpx.Response(400, text=f"bad {ACTION_SECRET}")
+
+    state = {}
+    assert provision(handler, state) is False
+    out = capsys.readouterr().out
+    assert "HTTP 400" in out and "Import JSON" in out and ACTION_SECRET not in out
+
+
+def test_stale_stored_ids_are_cleared_and_recreated_once():
+    seen = []
+
+    def handler(request):
+        seen.append((request.method, request.url.path))
+        if request.method == "PATCH":
+            return httpx.Response(404, json={})
+        if request.url.path == "/api/v2/actions/connections":
+            return httpx.Response(201, json={"data": {"id": "conn-2"}})
+        if request.url.path == "/api/v2/app-builder/apps":
+            return httpx.Response(201, json={"data": {"id": "app-2"}})
+        return httpx.Response(200, json={})
+
+    state = {"app_connection": "conn-old", "app": "app-old"}
+    assert provision(handler, state)
+    assert state["app_connection"] == "conn-2" and state["app"] == "app-2"
+    assert seen[:4] == [
+        ("PATCH", "/api/v2/actions/connections/conn-old"),
+        ("POST", "/api/v2/actions/connections"),
+        ("PATCH", "/api/v2/app-builder/apps/app-old"),
+        ("POST", "/api/v2/app-builder/apps"),
+    ]
+
+
+def test_persistent_404_does_not_loop():
+    calls = []
+
+    def handler(request):
+        calls.append(request.method)
+        return httpx.Response(404, json={})
+
+    state = {"app_connection": "conn-old"}
+    assert provision(handler, state) is False
+    assert calls == ["PATCH", "POST"] and "app_connection" not in state
