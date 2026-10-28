@@ -22,23 +22,29 @@ def emit_heartbeat(stats):
     stats.increment("chargeops.worker.tick", tags=["env:hackathon"])
 
 
+# Runs on every worker tick: skip evidence.samples and other heavy incident fields.
+SIGNAL_FIELDS = {"connector_id": 1, "unresolved": 1, "state": 1, "state_since": 1, "timeline": 1}
+
+
 def emit_run_signals(db, stats, run, at):
     open_by_connector = dict.fromkeys(CONNECTORS, 0)
-    for incident in db.incidents.find({"run_id": run["_id"]}):
+    incidents = list(db.incidents.find({"run_id": run["_id"]}, SIGNAL_FIELDS))
+    sent = {c["_id"]: c["sent"] for c in db.dd_event_cursor.find({"_id": {"$in": [i["_id"] for i in incidents]}})}
+    for incident in incidents:
         tags = connector_tags(run["_id"], incident["connector_id"])
         if incident.get("unresolved"):
             open_by_connector[incident["connector_id"]] += 1
             age = (at - incident["state_since"]).total_seconds()
             stats.gauge("chargeops.incident.state_age_s", age, tags=[*tags, f"state:{incident['state']}"])
-        emit_timeline_events(db, stats, incident, tags)
+        emit_timeline_events(db, stats, incident, tags, sent.get(incident["_id"], 0))
     for connector_id, count in open_by_connector.items():
         stats.gauge("chargeops.incident.open", count, tags=connector_tags(run["_id"], connector_id))
 
 
-def emit_timeline_events(db, stats, incident, tags):
+def emit_timeline_events(db, stats, incident, tags, sent):
     """At-least-once: the cursor advances after the events are handed to DogStatsD."""
-    cursor = db.dd_event_cursor.find_one({"_id": incident["_id"]}) or {"sent": 0}
-    cursor_before = cursor["sent"]
+    cursor = {"sent": sent}
+    cursor_before = sent
     timeline = incident.get("timeline", [])
     if len(timeline) < cursor["sent"]:  # timeline shrank (retest reset): restart rather than skip new entries
         cursor["sent"] = 0

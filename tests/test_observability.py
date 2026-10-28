@@ -139,3 +139,13 @@ def test_heartbeat_only_when_enabled(store, monkeypatch, enabled):
     run_phases(store, stats, Mock())
     assert stats.increment.called is enabled
     settings.cache_clear()
+
+
+def test_signals_read_cursors_in_one_query_without_heavy_incident_fields(monkeypatch):
+    db = db_with(incident(_id="i1", evidence={"samples": [1] * 100}), incident(_id="i2"))
+    finds = []
+    real_find = db.incidents.find
+    monkeypatch.setattr(db.incidents, "find", lambda *a, **k: finds.append(a) or real_find(*a, **k))
+    monkeypatch.setattr(db.dd_event_cursor, "find_one", Mock(side_effect=AssertionError("one query per incident")))
+    emit_run_signals(db, Mock(), {"_id": RUN}, T)
+    assert "evidence" not in finds[0][1]
