@@ -37,6 +37,12 @@ def test_charging_minutes_idle_or_missing_emits_nothing():
     stats.increment.assert_not_called()
 
 
+def test_silent_block_of_a_charging_connector_is_total_only():
+    stats = Mock()
+    emit_charging_slo(stats, "run-1", "connector-4", {"requested_current_a": 30, "current_a": 30}, silent=True)
+    assert [c.args for c in stats.increment.call_args_list] == [("chargeops.slo.charging_minutes.total", 0.25)]
+
+
 BASE = {"run_id": "run-1", "connector_id": "connector-4"}
 
 

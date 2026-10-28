@@ -58,11 +58,11 @@ def test_dashboard_url():
     assert sd.dashboard_url("datadoghq.com", "x") == "https://app.datadoghq.com/dashboard/x"
 
 
-def test_stale_and_worker_monitors_alert_on_no_data():
+def test_worker_monitor_alerts_on_no_data_but_stale_does_not():
     specs = sd.extra_monitor_specs(URL)
-    for key in ("stale", "worker"):
-        assert specs[key]["options"]["notify_no_data"] is True
-        assert specs[key]["options"]["no_data_timeframe"] == 4
+    assert specs["worker"]["options"]["notify_no_data"] is True
+    assert specs["worker"]["options"]["no_data_timeframe"] == 4
+    assert specs["stale"]["options"]["notify_no_data"] is False  # a finished run's groups go silent by design
 
 
 def test_main_orders_resources_and_second_run_only_puts(monkeypatch, tmp_path):

@@ -331,7 +331,8 @@ def evaluate_window(db, stats, log, run, at, end, connector_id, rows):
     # Block means for the engineering dashboard only; alerting stays on the sample-weighted residual above.
     for field in GAUGE_FIELDS if block else ():
         stats.gauge(f"chargeops.{field}", sum(r[field] for r in block) / len(block), tags=tags)
-    emit_charging_slo(stats, run["_id"], connector_id, block[-1] if block else None)
+    # ponytail: silence longer than the 60 s window is not counted; the stale monitor covers that case
+    emit_charging_slo(stats, run["_id"], connector_id, (block or rows or [None])[-1], silent=not block)
     event(
         log,
         "metrics_emitted",

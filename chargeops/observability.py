@@ -55,13 +55,15 @@ def emit_timeline_events(db, stats, incident, tags):
         db.dd_event_cursor.update_one({"_id": incident["_id"]}, {"$set": {"sent": len(timeline)}}, upsert=True)
 
 
-def emit_charging_slo(stats, run_id, connector_id, latest):
-    """One 15-second block = 0.25 charging minutes. Total: charging was requested; good: current was delivered."""
+def emit_charging_slo(stats, run_id, connector_id, latest, silent=False):
+    """One 15-second block = 0.25 charging minutes. Total: charging was requested; good: current was delivered.
+    A silent block (no samples; `latest` is the last one in the 60 s window) of a connector that was charging
+    counts as total, never good: an outage must burn the SLO, not vanish from it."""
     if not latest or latest.get("requested_current_a", 0) <= 0:
         return
     tags = connector_tags(run_id, connector_id)
     stats.increment("chargeops.slo.charging_minutes.total", 0.25, tags=tags)
-    if latest.get("current_a", 0) > 0:
+    if not silent and latest.get("current_a", 0) > 0:
         stats.increment("chargeops.slo.charging_minutes.good", 0.25, tags=tags)
 
 

@@ -185,7 +185,9 @@ def extra_monitor_specs(engineering_url):
             "message": "Connector {{connector_id.name}} gửi dưới 12 mẫu trong 2 phút. " + investigate(engineering_url),
             "options": {
                 "thresholds": {"critical": 12},
-                "notify_no_data": True,
+                # The worker sends samples=0 for a silent connector, so `< 12` catches it. No data only means
+                # the run ended (or the worker died, which the heartbeat monitor covers): not an alert.
+                "notify_no_data": False,
                 "no_data_timeframe": 4,
                 "require_full_window": True,
             },
