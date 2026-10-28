@@ -24,6 +24,7 @@ def setup(mode="datadog", timeline=None, state="open"):
     client.create_incident.return_value = {"id": "dd-1", "public_id": 7}
     client.incident_url.return_value = "https://app.ap1.datadoghq.com/incidents/7"
     client.find_incident.return_value = None
+    client.create_notebook.return_value = 12
     return db, client, DatadogSync(db, client, Mock(), Mock(), "ap1.datadoghq.com")
 
 
@@ -113,3 +114,66 @@ def test_incident_api_exposes_datadog_links(store):
     )
     body = http.get("/api/v1/incidents/inc-9").json()
     assert body["datadog_incident_url"].endswith("/incidents/1") and body["datadog_notebook_url"] == "https://nb"
+
+
+def test_notebook_created_and_attached_once():
+    db, client, sync = setup()
+    sync.sync_once(T)
+    sync.sync_once(T + timedelta(seconds=5))
+    client.create_notebook.assert_called_once()
+    assert client.create_notebook.call_args.args[0]["name"].endswith("[inc-1]")
+    client.attach_link.assert_called_once_with("dd-1", "https://app.ap1.datadoghq.com/notebook/12", "Notebook điều tra")
+    doc = db.datadog_sync.find_one({"_id": "inc-1"})
+    assert doc["notebook_id"] == 12 and doc["notebook_url"].endswith("/notebook/12")
+
+
+def test_notebook_failure_is_retried_without_duplicating_the_incident():
+    db, client, sync = setup()
+    client.create_notebook.side_effect = [DatadogError("POST", "/api/v1/notebooks", 503), 12]
+    client.find_notebook.return_value = None
+    sync.sync_once(T)
+    assert db.datadog_sync.find_one({"_id": "inc-1"})["notebook_error"] == "HTTP 503"
+    sync.sync_once(T + timedelta(minutes=2))
+    client.create_incident.assert_called_once()
+    client.attach_link.assert_called_once()
+    doc = db.datadog_sync.find_one({"_id": "inc-1"})
+    assert doc["notebook_id"] == 12 and doc["notebook_error"] is None
+
+
+def test_lost_notebook_response_adopts_existing_notebook_instead_of_creating_another():
+    db, client, sync = setup()
+    client.create_notebook.side_effect = DatadogError("POST", "/api/v1/notebooks", 504)
+    client.find_notebook.return_value = 33
+    sync.sync_once(T)  # POST attempted, response lost
+    sync.sync_once(T + timedelta(minutes=2))
+    client.create_notebook.assert_called_once()
+    client.find_notebook.assert_called_once_with("inc-1", "Điều tra connector-4 [inc-1]")
+    doc = db.datadog_sync.find_one({"_id": "inc-1"})
+    assert doc["notebook_id"] == 33 and doc["notebook_url"].endswith("/notebook/33")
+    client.attach_link.assert_called_once()
+
+
+def test_notebook_api_down_does_not_block_timeline_or_resolve():
+    steps = [{"at": T, "event": "opened"}, {"at": T, "event": "resolved"}]
+    db, client, sync = setup(state="resolved", timeline=steps)
+    client.create_notebook.side_effect = DatadogError("POST", "/api/v1/notebooks", 403)
+    client.find_notebook.return_value = None
+    sync.sync_once(T)
+    assert client.incident_note.call_count == 2
+    client.resolve_incident.assert_called_once_with("dd-1")
+    doc = db.datadog_sync.find_one({"_id": "inc-1"})
+    assert doc["notebook_error"] == "HTTP 403" and doc["synced_events"] == 2 and doc["dd_resolved"]
+    assert not doc.get("last_error")
+    sync.sync_once(T + timedelta(seconds=5))  # backoff: notebook is not hammered
+    assert client.create_notebook.call_count == 1
+
+
+def test_attach_is_not_repeated_after_an_attempt():
+    db, client, sync = setup()
+    client.attach_link.side_effect = DatadogError("POST", "/attachments", 503)
+    sync.sync_once(T)
+    assert db.datadog_sync.find_one({"_id": "inc-1"})["notebook_error"] == "HTTP 503"
+    sync.sync_once(T + timedelta(minutes=2))
+    client.create_notebook.assert_called_once()
+    client.attach_link.assert_called_once()
+    assert db.datadog_sync.find_one({"_id": "inc-1"})["notebook_attached"] is True

@@ -79,6 +79,8 @@ export interface Incident {
   source: "local" | "datadog";
   opened_at: string;
   resolved_at?: string | null;
+  datadog_incident_url?: string | null;
+  datadog_notebook_url?: string | null;
   evidence?: {
     residual_mean?: number | null;
     start?: string;
