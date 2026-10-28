@@ -89,6 +89,11 @@ services:
     volumes:
       - app-logs:/logs:ro
       - ./infra/datadog-logs.yaml:/etc/datadog-agent/conf.d/chargeops.d/conf.yaml:ro
+  datadog-sync:
+    <<: *app
+    profiles: [observability]
+    environment: {<<: *env, DD_SERVICE: chargeops-datadog-sync, DD_API_KEY: "${DD_API_KEY:-}", DD_APP_KEY: "${DD_APP_KEY:-}", DD_SITE: "${DD_SITE:-datadoghq.com}"}
+    command: [python, -m, chargeops.datadog_sync]
   webhook-gateway:
     image: caddy:2.9.1-alpine
     profiles: [observability]

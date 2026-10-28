@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     allowed_origins: str = "http://localhost:8080,http://localhost:5173"
     api_url: str = "http://api:8000"
     dd_agent_host: str = "datadog"
+    dd_api_key: SecretStr = SecretStr("")
+    dd_app_key: SecretStr = SecretStr("")
+    dd_site: str = "datadoghq.com"
     dd_monitor_id: str = ""
     dd_trial_id: str = "hackathon-2026"
     dd_metrics_enabled: bool = False
