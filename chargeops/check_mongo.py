@@ -8,6 +8,7 @@ from pymongo.errors import DuplicateKeyError
 from chargeops.domain import block_end, now, window_evidence, with_residuals
 from chargeops.insights import trend_pipeline
 from chargeops.lifecycle import open_incident
+from chargeops.postmortem import postmortem_pipeline
 from chargeops.storage import database, initialize, window_rows
 
 
@@ -22,6 +23,7 @@ def main():
         assert info["options"]["expireAfterSeconds"] == 1209600
         check_loop(db)
         check_trend(db)
+        check_postmortem(db)
         print("PASS: real time-series TTL, aggregation dedup/residual, unique active run and incident")
     finally:
         client.drop_database(name)
@@ -83,6 +85,40 @@ def check_trend(db, connector_id="connector-1"):
     trend = list(db.windows.aggregate(trend_pipeline(run_id, connector_id)))
     assert len(trend) == 12 and abs(trend[-1]["residual_slope_c_per_min"] - 4.0) < 0.001
     print(f"trend points: {len(trend)}; $setWindowFields ok")
+
+
+def check_postmortem(db, connector_id="connector-1"):
+    """$lookup/$dateDiff/$merge postmortem on real MongoDB."""
+    run_id, opened = str(uuid4()), block_end(now())
+    incident_id = "pm-" + run_id
+    db.incidents.insert_one(
+        {
+            "_id": incident_id,
+            "run_id": run_id,
+            "connector_id": connector_id,
+            "opened_at": opened,
+            "timeline": [
+                {"at": opened, "event": "opened"},
+                {"at": opened + timedelta(seconds=20), "event": "acknowledge"},
+                {"at": opened + timedelta(seconds=75), "event": "resolved"},
+            ],
+        }
+    )
+    db.windows.insert_many(
+        [
+            {
+                "run_id": run_id,
+                "connector_id": connector_id,
+                "end": opened + timedelta(seconds=15 * i),
+                "residual_mean": float(i),
+            }
+            for i in range(4)
+        ]
+    )
+    list(db.incidents.aggregate(postmortem_pipeline(incident_id)))
+    report = db.incident_reports.find_one({"_id": incident_id})
+    assert report["peak_residual_c"] == 3.0 and report["seconds_to_resolved"] == 75 and report["simulated"] is True
+    print("postmortem $merge ok")
 
 
 if __name__ == "__main__":

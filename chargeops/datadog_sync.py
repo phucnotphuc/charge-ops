@@ -12,6 +12,7 @@ from chargeops.datadog_client import DatadogClient, DatadogError
 from chargeops.domain import now
 from chargeops.logging import event, logger
 from chargeops.notebooks import investigation_notebook, notebook_url
+from chargeops.postmortem import postmortem_pipeline, report_markdown, report_summary
 from chargeops.storage import database
 
 BACKOFF_S = (30, 60, 120, 300)
@@ -61,8 +62,14 @@ class DatadogSync:
     def is_done(incident, state):
         if not state.get("dd_incident_id") or state.get("last_error") or not state.get("notebook_attached"):
             return False
+        if DatadogSync.is_closed(incident) and not state.get("postmortem_done"):
+            return False
         caught_up = state.get("synced_events", 0) >= len(incident.get("timeline", []))
         return caught_up and (incident["state"] != "resolved" or state.get("dd_resolved", False))
+
+    @staticmethod
+    def is_closed(incident):
+        return incident["state"] == "resolved" or bool(incident.get("run_stopped_at"))
 
     def sync_incident(self, incident, state, at):
         if not state.get("dd_incident_id"):
@@ -85,6 +92,7 @@ class DatadogSync:
         if incident["state"] == "resolved" and not state.get("dd_resolved"):
             self.client.resolve_incident(state["dd_incident_id"])
             self.put(state, dd_resolved=True)
+        self.sync_postmortem(incident, state, at)
 
     def sync_notebook(self, incident, state, at):
         """Notebook create + attach. A Datadog failure here is recorded and retried later; it never blocks the
@@ -125,6 +133,42 @@ class DatadogSync:
                 notebook_next_attempt_at=at + timedelta(seconds=delay),
             )
             event(self.log, "datadog_notebook_failed", incident_id=incident["_id"], status=error.status)
+
+    def sync_postmortem(self, incident, state, at):
+        """Once per closed incident: MongoDB $merge report, then notebook PUT (idempotent) and one summary note.
+        A failure is recorded and retried with backoff; it never blocks the timeline or resolve mirroring."""
+        if state.get("postmortem_done") or not self.is_closed(incident) or not state.get("notebook_id"):
+            return
+        retry_at = state.get("postmortem_next_attempt_at")
+        if retry_at and retry_at.replace(tzinfo=at.tzinfo) > at:
+            return
+        try:
+            self.db.incidents.aggregate(postmortem_pipeline(incident["_id"]))
+            report = self.db.incident_reports.find_one({"_id": incident["_id"]})
+            if report is None:
+                raise LookupError("incident report missing")
+            closed = {**incident, "resolved_at": incident.get("resolved_at") or report.get("closed_at")}
+            payload = investigation_notebook(closed, self.site, postmortem_md=report_markdown(report), now=at)
+            self.client.update_notebook(state["notebook_id"], payload["data"]["attributes"])
+            if state.get("postmortem_note_attempted_at"):
+                # incident_note is a POST that may have landed; prefer a missing note over a duplicate one.
+                event(self.log, "datadog_postmortem_note_skipped", incident_id=incident["_id"])
+            else:
+                self.put(state, postmortem_note_attempted_at=at)
+                self.client.incident_note(state["dd_incident_id"], report_summary(report), at=at)
+            self.put(state, postmortem_done=True, postmortem_error=None, postmortem_attempts=0,
+                     postmortem_next_attempt_at=None)
+        except (DatadogError, PyMongoError, LookupError) as error:
+            attempts = state.get("postmortem_attempts", 0) + 1
+            delay = BACKOFF_S[min(attempts, len(BACKOFF_S)) - 1]
+            label = f"HTTP {error.status}" if isinstance(error, DatadogError) else type(error).__name__
+            self.put(
+                state,
+                postmortem_error=label,
+                postmortem_attempts=attempts,
+                postmortem_next_attempt_at=at + timedelta(seconds=delay),
+            )
+            event(self.log, "datadog_postmortem_failed", incident_id=incident["_id"], error=label)
 
     def run_forever(self, interval=5):
         while True:
