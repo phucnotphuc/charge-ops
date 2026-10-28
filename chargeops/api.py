@@ -300,6 +300,9 @@ def incident(incident_id: str, store=Depends(db)):
     if not found:
         raise HTTPException(404, "Incident not found")
     found["commands"] = list(store.commands.find({"incident_id": incident_id}).sort("created_at", 1))
+    sync = store.datadog_sync.find_one({"_id": incident_id}, {"dd_incident_url": 1, "notebook_url": 1}) or {}
+    found["datadog_incident_url"] = sync.get("dd_incident_url")
+    found["datadog_notebook_url"] = sync.get("notebook_url")
     return encode(found)
 
 
